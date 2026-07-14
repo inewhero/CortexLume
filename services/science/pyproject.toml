@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cortexlume-science"
+version = "0.1.0"
+description = "Authoritative local geometry service for CortexLume"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "numpy>=2.2,<3",
+  "pydantic>=2.11,<3",
+  "uvicorn>=0.35,<1"
+]
+
+[project.optional-dependencies]
+assets = [
+  "fast-simplification>=0.1.12,<1",
+  "nibabel>=5.3,<6",
+  "scikit-image>=0.25,<1",
+  "scipy>=1.15,<2",
+  "trimesh>=4.7,<5"
+]
+cedalion = [
+  "cedalion==26.5.1"
+]
+dev = [
+  "httpx>=0.28,<1",
+  "pyinstaller>=6.14,<7",
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["cortexlume_science"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
