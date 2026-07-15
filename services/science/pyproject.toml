@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cortexlume-science"
-version = "0.1.0"
+version = "0.1.1"
 description = "Authoritative local geometry service for CortexLume"
 requires-python = ">=3.12,<3.13"
 dependencies = [

@@ -1,7 +1,7 @@
 {
   "name": "@cortexlume/desktop",
   "productName": "CortexLume",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "fNIRS layout design and geometrical cortical projection",
   "author": "CortexLume Contributors",
   "main": ".vite/build/main.js",
