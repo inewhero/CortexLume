@@ -1,0 +1,124 @@
+name: Windows CI and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create Python environment
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv\Scripts\python.exe -m pip install -e "./services/science[dev]"
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build science sidecar
+        if: github.event_name != 'pull_request'
+        run: pnpm science:build
+
+      - name: Prepare Squirrel toolchain
+        if: github.event_name != 'pull_request'
+        run: pnpm --dir node_modules/electron-winstaller run install
+
+      - name: Build Windows packages
+        if: github.event_name != 'pull_request'
+        run: pnpm --filter @cortexlume/desktop make
+
+      - name: Collect release files
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force release | Out-Null
+
+          $setup = Get-ChildItem `
+            "apps/desktop/out/make/squirrel.windows/x64" `
+            -Filter "*Setup.exe" |
+            Select-Object -First 1
+
+          $portable = Get-ChildItem `
+            "apps/desktop/out/make/zip/win32/x64" `
+            -Filter "*.zip" |
+            Select-Object -First 1
+
+          if (-not $setup -or -not $portable) {
+            throw "Expected Windows packages were not generated."
+          }
+
+          Copy-Item $setup.FullName `
+            "release/CortexLume-$version-win-x64-Setup.exe"
+
+          Copy-Item $portable.FullName `
+            "release/CortexLume-$version-win-x64-portable.zip"
+
+      - name: Upload workflow artifacts
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: CortexLume-Windows-x64
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows packages
+        uses: actions/download-artifact@v8
+        with:
+          name: CortexLume-Windows-x64
+          path: release
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            release/* \
+            --verify-tag \
+            --generate-notes
