@@ -1,0 +1,36 @@
+{
+  "spaceId": "MNI152NLin6Asym",
+  "assetVersion": "cedalion-icbm152-26.5.1",
+  "coordinateConvention": "RAS+",
+  "units": "mm",
+  "verified": false,
+  "targetGrid": {
+    "shape": [182, 218, 182],
+    "voxelSizeMm": [1, 1, 1],
+    "originRasMm": [-91, -126, -72]
+  },
+  "sources": {
+    "templateflow": "https://github.com/templateflow/tpl-MNI152NLin6Asym",
+    "cedalion": "https://github.com/ibs-lab/cedalion/tree/v26.5.1",
+    "harvardOxfordLicense": "CC BY-SA 4.0"
+  },
+  "atlases": {
+    "cortical": "HOCPAL",
+    "subcortical": "HOSPA",
+    "backendResolutionMm": 1,
+    "previewResolutionMm": 2
+  },
+  "scienceGate": {
+    "passed": false,
+    "brainMaskDiceMinimum": 0.95,
+    "surfaceDistance95MmMaximum": 3.0,
+    "transformRoundTripMmMaximum": 0.5,
+    "notes": "Cedalion ICBM152 scalp, pial and white-matter visualization surfaces are present and checksum pinned. Atlas probability fields remain modeled estimates until the atlas science gate passes."
+  },
+  "files": {
+    "scalpGlb": { "path": "generated/scalp.glb", "sha256": "28836d0d13d22ccbd16e039e28f49b2357c15fb398a2a9e630ef484d7a95f01d" },
+    "grayMatterGlb": { "path": "generated/gray_matter.glb", "sha256": "f812611bfc215c84c1bbfecc60b604e32abaa3fa803c482aaed7785e9bf7eb79" },
+    "whiteMatterGlb": { "path": "generated/white_matter.glb", "sha256": "484cc77076651fae92056e579d073e6e0862be95ecf8d7041e99bd3cd0f6bf29" },
+    "landmarks": { "path": "generated/landmarks.json", "sha256": "e285eeaba04ce0ed6d335578f6791a8d2cb6ccb3e5be9b5ff24e98b094de0f16", "count": 73 }
+  }
+}

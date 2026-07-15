@@ -1,0 +1,26 @@
+{
+  "name": "cortexlume",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.30.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-winstaller",
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "dev": "pnpm --filter @cortexlume/desktop start",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && pnpm science:test",
+    "science:build": ".\\.venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --distpath services/science/dist --workpath services/science/build services/science/cortexlume-science.spec",
+    "package:win": "pnpm science:build && pnpm --dir node_modules/electron-winstaller run install && set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& pnpm --filter @cortexlume/desktop make",
+    "science:dev": ".\\.venv\\Scripts\\python.exe services/science/run.py",
+    "science:test": ".\\.venv\\Scripts\\python.exe -m pytest services/science/tests"
+  }
+}

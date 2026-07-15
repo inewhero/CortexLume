@@ -1,0 +1,67 @@
+{
+  "id": "Cedalion-ICBM152-v26.5.1",
+  "sourceUrl": "https://doc.ibs.tu-berlin.de/cedalion/datasets/26.5.1/hm_icbm152.zip",
+  "sourceArchiveSha256": "91bb99709b6ceadd41674acc0db6cf26d70dccb57e41797b474aa9ce6aeed3e8",
+  "coordinateConvention": "MNI/RAS+ mm; GLB vertices transformed to Three [x,z,-y]",
+  "meshes": {
+    "scalp": {
+      "file": "scalp.glb",
+      "sha256": "28836d0d13d22ccbd16e039e28f49b2357c15fb398a2a9e630ef484d7a95f01d",
+      "vertices": 10018,
+      "faces": 20040,
+      "boundsThreeMm": [
+        [
+          -88.3493,
+          -143.4855,
+          -98.3738
+        ],
+        [
+          91.1955,
+          102.439,
+          116.4632
+        ]
+      ]
+    },
+    "grayMatter": {
+      "file": "gray_matter.glb",
+      "sha256": "f812611bfc215c84c1bbfecc60b604e32abaa3fa803c482aaed7785e9bf7eb79",
+      "vertices": 75004,
+      "faces": 150000,
+      "boundsThreeMm": [
+        [
+          -71.9012,
+          -52.6287,
+          -74.822
+        ],
+        [
+          71.9215,
+          82.0106,
+          105.5043
+        ]
+      ]
+    },
+    "whiteMatter": {
+      "file": "white_matter.glb",
+      "sha256": "484cc77076651fae92056e579d073e6e0862be95ecf8d7041e99bd3cd0f6bf29",
+      "vertices": 44377,
+      "faces": 90000,
+      "boundsThreeMm": [
+        [
+          -67.6429,
+          -65.5108,
+          -69.521
+        ],
+        [
+          68.6333,
+          80.8873,
+          105.5
+        ]
+      ]
+    }
+  },
+  "landmarks": {
+    "file": "landmarks.json",
+    "sha256": "e285eeaba04ce0ed6d335578f6791a8d2cb6ccb3e5be9b5ff24e98b094de0f16",
+    "count": 73
+  }
+}

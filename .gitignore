@@ -1,0 +1,36 @@
+# Dependency environments and local package caches
+node_modules/
+/.pnpm-store/
+/.venv/
+
+# CortexLume build and release outputs
+/apps/desktop/.vite/
+/apps/desktop/dist/
+/apps/desktop/out/
+/packages/*/dist/
+/services/science/build/
+/services/science/dist/
+/release/
+/releases/
+/CortexLume-*.zip
+
+# Test, analysis, and runtime caches
+__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+/services/science/.mypy_cache/
+/services/science/pytest-cache-files-*/
+/.playwright-cli/
+/.tmp/
+
+# Local agent/runtime metadata
+/.agents/
+
+# Generated scientific intermediates; keep only the documented placeholder
+/assets/templates/**/generated/
+!/assets/templates/**/generated/.gitkeep
+
+# OS metadata
+.DS_Store
+Thumbs.db
