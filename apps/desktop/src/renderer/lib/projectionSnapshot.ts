@@ -7,10 +7,8 @@ import type {
 } from '@cortexlume/contracts';
 import {
   corticalRegionProbabilities,
-  deepStructureProbabilities,
   distance3,
   fittedOptodePositions,
-  inwardDepthTarget,
   projectScalpSphereCenter,
   projectToCorticalSurface,
 } from './geometry';
@@ -128,9 +126,6 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
 
       const scalp = midpoint(sourceScalp, detectorScalp);
       const cortex = projectToCorticalSurface(scalp, radiusMm);
-      const depthMm = project.projectionSettings.pairDepthOverridesMm[pair.id]
-        ?? project.projectionSettings.defaultDepthMm;
-      const depthTarget = depthMm == null ? null : inwardDepthTarget(cortex, depthMm);
       realizedScalpDistances.push(realizedScalp);
       nominalDistances.push(pair.nominalDistanceMm);
       projections.push({
@@ -139,15 +134,13 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         subjectId: pair.id,
         scalpRasMm: scalp,
         corticalRasMm: cortex,
-        depthTargetRasMm: depthTarget,
+        depthTargetRasMm: null,
         underlyingCorticalRegions: atlasLabels(
           'CortexLume-Cortical-Estimate',
           corticalRegionProbabilities(cortex),
         ),
-        deepTargetStructures: depthTarget
-          ? atlasLabels('CortexLume-Deep-Estimate', deepStructureProbabilities(depthTarget))
-          : [],
-        tissueAtTarget: depthTarget ? 'deep target estimate' : 'cortical gray matter',
+        deepTargetStructures: [],
+        tissueAtTarget: 'cortical gray matter',
         claimLevel: 'geometric',
         status: 'provisional',
         qcFlags: flags,

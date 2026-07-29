@@ -56,4 +56,14 @@ describe('default optode matrix', () => {
     useProjectStore.getState().loadProject(structuredClone(useProjectStore.getState().project));
     expect(useProjectStore.getState().project.layouts).toHaveLength(expectedLayouts);
   });
+
+  it('uses an ASCII-safe name for placed patch layouts', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const instance = useProjectStore.getState().project.instances[0]!;
+    const layout = useProjectStore.getState().project.layouts
+      .find((candidate) => candidate.id === instance.definitionId);
+    expect(layout?.name).toBe('default P01');
+    expect(layout?.name).not.toContain('·');
+  });
 });

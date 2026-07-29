@@ -487,7 +487,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       const instanceLayout = structuredClone({
         ...source,
         id: id(),
-        name: `${source.name} · P${String(state.project.instances.length + 1).padStart(2, '0')}`,
+        name: `${source.name} P${String(state.project.instances.length + 1).padStart(2, '0')}`,
         updatedAt: now(),
       });
       const instance: LayoutInstance = {

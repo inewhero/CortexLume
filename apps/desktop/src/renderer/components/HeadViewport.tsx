@@ -307,6 +307,7 @@ export function HeadViewport() {
     project, selectedInstanceId, selectedHeadOptodeId, instanceEditMode,
     placeLayout, selectInstance, setInstanceEditMode, updateInstanceAnchor,
     updateInstanceOverride, rotateMapping, toggleInstanceVisibility, removeInstance,
+    toast, setToast,
   } = useProjectStore();
   const selected = project.instances.find((instance) => instance.id === selectedInstanceId);
   const selectedLayout = project.layouts.find((layout) => layout.id === selected?.definitionId);
@@ -318,6 +319,12 @@ export function HeadViewport() {
   useEffect(() => {
     void fetch(anatomyUrl('landmarks.json')).then((response) => response.json()).then((data: LandmarkFile) => setLandmarks(data.points));
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [setToast, toast]);
 
   const nudge = (uMm: number, vMm: number) => {
     if (!editable) return;
@@ -374,6 +381,12 @@ export function HeadViewport() {
           <strong>LAYOUT OVERLAP</strong>
           <span>{overlaps.length} collision{overlaps.length === 1 ? '' : 's'} · minimum {Math.min(...overlaps.map((item) => item.minimumDistanceMm)).toFixed(1)} mm</span>
         </div>
+      )}
+
+      {toast && (
+        <button key={toast} className="viewport-overlay toast" onClick={() => setToast(null)}>
+          <span>{toast}</span><b>×</b>
+        </button>
       )}
 
       <div className="viewport-overlay bottom-left legend">

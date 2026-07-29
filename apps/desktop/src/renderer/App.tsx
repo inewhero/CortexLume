@@ -4,7 +4,6 @@ import { Inspector } from './components/Inspector';
 import { LayoutEditor } from './components/LayoutEditor';
 import { LayoutLibrary } from './components/LayoutLibrary';
 import { TopBar } from './components/TopBar';
-import { useProjectStore } from './store/projectStore';
 
 function PanelFrame({ title, side, collapsed = false, children }: {
   title: string;
@@ -28,7 +27,6 @@ function PanelFrame({ title, side, collapsed = false, children }: {
 export function App() {
   const [leftVisible, setLeftVisible] = useState(true);
   const [rightVisible, setRightVisible] = useState(true);
-  const { toast, setToast } = useProjectStore();
   const columns = useMemo(() => [
     leftVisible ? 'clamp(360px, 28vw, 440px)' : '0px',
     'minmax(460px, 1fr)',
@@ -51,7 +49,6 @@ export function App() {
           <div className="scroll-panel"><Inspector /></div>
         </PanelFrame>
       </main>
-      {toast && <button className="toast" onClick={() => setToast(null)}>{toast}<span>×</span></button>}
     </div>
   );
 }

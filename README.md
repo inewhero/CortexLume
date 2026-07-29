@@ -37,7 +37,7 @@ Simulate and validate your fNIRS layout design, verify channel coverage, and che
 3. **Align each patch.** Select a patch, move it across the scalp, and use the rotation controls to match the intended anatomical position. Switch to single-optode editing for local adjustments.
 4. **Choose the projection.** Use **Scalp** to position optodes on the head surface, or **Cortex** to project them to their first gray-matter contact. Set a depth when deeper target estimates are needed.
 5. **Inspect the result.** Select an optode or channel to review scalp and cortical MNI coordinates, cortical-region probabilities, channel spacing, deep structures, and QC information. Layer controls can isolate the scalp, gray matter, white matter, landmarks, and channel labels.
-6. **Save or export.** Save the complete workspace as a `.cortexlume` project for later editing. Export CSV for linked layout, optode, channel, coordinate, anatomical, and QC tables, or export BIDS-compatible geometry files for downstream workflows.
+6. **Save or export.** Save the complete workspace as a `.cortexlume` project for later editing. CSV export creates focused optode and channel result tables plus a technical JSON record; BIDS geometry export is available for downstream workflows.
 
 ## Development
 
