@@ -32,12 +32,13 @@ Simulate and validate your fNIRS layout design, verify channel coverage, and che
 
 ## How to use
 
-1. **Design an array.** Build an S/D pattern in **Optode Design**, or generate an `x × y` grid as a starting point. Adjust optode positions, reverse source and detector roles, and edit channel numbers directly.
+1. **Design an array.** Build an S/D pattern in **Optode Design**, or generate an `x × y` grid as a starting point. New and dragged optodes snap to a 10 mm editing grid with emphasized 30 mm guide lines. Adjust optode positions, reverse source and detector roles, and edit channel numbers directly.
 2. **Place it on the head.** Drag the finished layout into **3D Align**. Add multiple patches when the study requires broader or bilateral coverage.
 3. **Align each patch.** Select a patch, move it across the scalp, and use the rotation controls to match the intended anatomical position. Switch to single-optode editing for local adjustments.
 4. **Choose the projection.** Use **Scalp** to position optodes on the head surface, or **Cortex** to project them to their first gray-matter contact. Set a depth when deeper target estimates are needed.
 5. **Inspect the result.** Select an optode or channel to review scalp and cortical MNI coordinates, cortical-region probabilities, channel spacing, deep structures, and QC information. Layer controls can isolate the scalp, gray matter, white matter, landmarks, and channel labels.
-6. **Save or export.** Save the complete workspace as a `.cortexlume` project for later editing. CSV export creates focused optode and channel result tables plus a technical JSON record; BIDS geometry export is available for downstream workflows.
+6. **Configure the recording metadata.** In **Device**, set the subject, session, task, acquisition, and run entities, then confirm the instrument profile. New projects use a Shimadzu LABNIRS continuous-wave profile with 780, 805, and 830 nm wavelengths.
+7. **Save or export.** Save the complete workspace as a `.cortexlume` project for later editing. CSV export creates focused optode and channel result tables plus a technical JSON record. BIDS export creates a subject/session NIRS scaffold with optode coordinates, one channel row per source-detector-wavelength combination, device metadata, and the full CortexLume technical record in `sourcedata`.
 
 ## Development
 

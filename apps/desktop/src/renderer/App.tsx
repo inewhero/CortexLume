@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { HeadViewport } from './components/HeadViewport';
+import { BidsSettings } from './components/BidsSettings';
 import { Inspector } from './components/Inspector';
 import { LayoutEditor } from './components/LayoutEditor';
 import { LayoutLibrary } from './components/LayoutLibrary';
@@ -38,7 +39,7 @@ export function App() {
       <TopBar />
       <main className="workspace" style={{ gridTemplateColumns: columns }}>
         <PanelFrame title="Optode Design" side="left" collapsed={!leftVisible}>
-          <div className="scroll-panel"><LayoutEditor /><LayoutLibrary /></div>
+          <div className="scroll-panel"><LayoutEditor /><BidsSettings /><LayoutLibrary /></div>
         </PanelFrame>
         <PanelFrame title="3D Align">
           <HeadViewport />

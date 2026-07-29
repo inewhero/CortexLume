@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore } from './projectStore';
 
 describe('default optode matrix', () => {
@@ -65,5 +66,23 @@ describe('default optode matrix', () => {
       .find((candidate) => candidate.id === instance.definitionId);
     expect(layout?.name).toBe('default P01');
     expect(layout?.name).not.toContain('·');
+  });
+
+  it('starts with an editable Shimadzu LABNIRS BIDS profile', () => {
+    useProjectStore.getState().newProject();
+    expect(useProjectStore.getState().bidsSettingsExpanded).toBe(false);
+    expect(getMissingBidsFields(useProjectStore.getState().project).map((field) => field.key))
+      .toEqual(['samplingFrequencyHz']);
+    expect(useProjectStore.getState().project.deviceProfile).toMatchObject({
+      manufacturer: 'Shimadzu',
+      model: 'LABNIRS',
+      wavelengthsNm: [780, 805, 830],
+      measurementType: 'NIRSCWAMPLITUDE',
+    });
+    useProjectStore.getState().setBidsSettings({ subjectLabel: '007', taskLabel: 'motor' });
+    useProjectStore.getState().setDeviceProfile({ samplingFrequencyHz: 36 });
+    expect(useProjectStore.getState().project.bidsSettings.subjectLabel).toBe('007');
+    expect(useProjectStore.getState().project.deviceProfile.samplingFrequencyHz).toBe(36);
+    expect(getMissingBidsFields(useProjectStore.getState().project)).toEqual([]);
   });
 });

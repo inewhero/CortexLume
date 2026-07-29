@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type {
+  BidsSettings,
   CortexLumeProject,
+  DeviceProfile,
   LayoutDefinition,
   LayoutInstance,
   OptodeType,
@@ -8,6 +10,7 @@ import type {
   Vec2,
   Vec3,
 } from '@cortexlume/contracts';
+import type { BidsField } from '../lib/bidsValidation';
 
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
@@ -93,7 +96,23 @@ function createProject(): CortexLumeProject {
     },
     layouts: [layout],
     instances: [],
-    deviceProfile: { wavelengthsNm: [] },
+    deviceProfile: {
+      manufacturer: 'Shimadzu',
+      model: 'LABNIRS',
+      wavelengthsNm: [780, 805, 830],
+      measurementType: 'NIRSCWAMPLITUDE',
+      units: 'V',
+      sourceType: 'LASER',
+      detectorType: 'PMT',
+      samplingFrequencyHz: null,
+    },
+    bidsSettings: {
+      subjectLabel: '01',
+      sessionLabel: '',
+      taskLabel: 'layout',
+      acquisitionLabel: '',
+      runIndex: null,
+    },
     projectionSettings: {
       mode: 'scalp',
       defaultDepthMm: null,
@@ -140,11 +159,16 @@ interface ProjectStore {
   pastLayouts: LayoutDefinition[];
   futureLayouts: LayoutDefinition[];
   toast: string | null;
+  bidsSettingsExpanded: boolean;
+  bidsValidationFields: BidsField[];
   setToast(message: string | null): void;
+  setBidsSettingsExpanded(expanded: boolean, validationFields?: BidsField[]): void;
   newProject(): void;
   loadProject(project: CortexLumeProject): void;
   setProjectPath(path: string | null): void;
   setProjectName(name: string): void;
+  setDeviceProfile(profile: Partial<DeviceProfile>): void;
+  setBidsSettings(settings: Partial<BidsSettings>): void;
   renameActiveLayout(name: string): void;
   setEditorTool(tool: EditorTool): void;
   selectOptode(optodeId: string | null): void;
@@ -241,8 +265,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     pastLayouts: [],
     futureLayouts: [],
     toast: null,
+    bidsSettingsExpanded: false,
+    bidsValidationFields: [],
 
     setToast: (toast) => set({ toast }),
+    setBidsSettingsExpanded: (bidsSettingsExpanded, bidsValidationFields = []) => set({
+      bidsSettingsExpanded,
+      bidsValidationFields,
+    }),
     newProject: () => {
       const project = createProject();
       set({
@@ -258,6 +288,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         projectRevision: 0,
         pastLayouts: [],
         futureLayouts: [],
+        bidsSettingsExpanded: false,
+        bidsValidationFields: [],
       });
     },
     loadProject: (project) => set(() => {
@@ -284,11 +316,27 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         projectRevision: 0,
         pastLayouts: [],
         futureLayouts: [],
+        bidsSettingsExpanded: false,
+        bidsValidationFields: [],
       };
     }),
     setProjectPath: (projectPath) => set({ projectPath }),
     setProjectName: (name) => set((state) => ({
       project: { ...state.project, name, updatedAt: now() },
+    })),
+    setDeviceProfile: (profile) => set((state) => ({
+      project: {
+        ...state.project,
+        updatedAt: now(),
+        deviceProfile: { ...state.project.deviceProfile, ...profile },
+      },
+    })),
+    setBidsSettings: (settings) => set((state) => ({
+      project: {
+        ...state.project,
+        updatedAt: now(),
+        bidsSettings: { ...state.project.bidsSettings, ...settings },
+      },
     })),
     renameActiveLayout: (name) => {
       const normalized = name.trim();

@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Layer, Line, Rect, Stage, Text } from 'react-konva';
 import type Konva from 'konva';
-import type { Vec2 } from '@cortexlume/contracts';
+import {
+  COARSE_GRID_MM,
+  FINE_GRID_MM,
+  screenFromUv,
+  uvFromScreen,
+} from '../lib/editorGrid';
 import { useProjectStore } from '../store/projectStore';
-
-function screenFromUv([u, v]: Vec2, width: number, height: number, scale: number): Vec2 {
-  return [width / 2 + u * scale, height / 2 - v * scale];
-}
-
-function uvFromScreen([x, y]: Vec2, spacing: number, width: number, height: number, scale: number): Vec2 {
-  const u = (x - width / 2) / scale;
-  const v = (height / 2 - y) / scale;
-  return [Math.round(u / spacing) * spacing, Math.round(v / spacing) * spacing];
-}
 
 export function LayoutEditor() {
   const shellRef = useRef<HTMLDivElement>(null);
@@ -63,13 +58,27 @@ export function LayoutEditor() {
   const maxV = Math.max(45, ...layout.optodes.map((optode) => Math.abs(optode.uvMm[1]) + layout.gridSpacingMm));
   const fitScale = Math.max(1.2, Math.min(4, (width / 2 - 24) / maxU, (height / 2 - 24) / maxV));
   const scale = fitScale * zoom;
-  const gridPx = layout.gridSpacingMm * scale;
+  const fineGridPx = FINE_GRID_MM * scale;
   const gridLines = [];
-  for (let x = (width / 2) % gridPx; x <= width; x += gridPx) {
-    gridLines.push(<Line key={`x-${x}`} points={[x, 0, x, height]} stroke="#d5d9de" strokeWidth={0.55} />);
+  for (let x = (width / 2) % fineGridPx; x <= width; x += fineGridPx) {
+    const uMm = Math.round((x - width / 2) / scale);
+    const coarse = uMm % COARSE_GRID_MM === 0;
+    gridLines.push(<Line
+      key={`x-${x}`}
+      points={[x, 0, x, height]}
+      stroke={coarse ? '#c2c8c5' : '#e0e4e1'}
+      strokeWidth={coarse ? 0.8 : 0.45}
+    />);
   }
-  for (let y = (height / 2) % gridPx; y <= height; y += gridPx) {
-    gridLines.push(<Line key={`y-${y}`} points={[0, y, width, y]} stroke="#d5d9de" strokeWidth={0.55} />);
+  for (let y = (height / 2) % fineGridPx; y <= height; y += fineGridPx) {
+    const vMm = Math.round((height / 2 - y) / scale);
+    const coarse = vMm % COARSE_GRID_MM === 0;
+    gridLines.push(<Line
+      key={`y-${y}`}
+      points={[0, y, width, y]}
+      stroke={coarse ? '#c2c8c5' : '#e0e4e1'}
+      strokeWidth={coarse ? 0.8 : 0.45}
+    />);
   }
 
   const addAtPointer = (stage: Konva.Stage) => {
@@ -81,7 +90,7 @@ export function LayoutEditor() {
     if (!point) return;
     addOptode(
       editorTool === 'add-source' ? 'source' : 'detector',
-      uvFromScreen([point.x, point.y], layout.gridSpacingMm, width, height, scale),
+      uvFromScreen([point.x, point.y], width, height, scale),
     );
   };
 
@@ -201,10 +210,19 @@ export function LayoutEditor() {
                   x={x}
                   y={y}
                   draggable={editorTool === 'select'}
+                  dragBoundFunc={(position) => {
+                    const snapped = screenFromUv(
+                      uvFromScreen([position.x, position.y], width, height, scale),
+                      width,
+                      height,
+                      scale,
+                    );
+                    return { x: snapped[0], y: snapped[1] };
+                  }}
                   onMouseDown={(event) => { event.cancelBubble = true; selectOptode(optode.id); }}
                   onDragEnd={(event) => moveOptode(
                     optode.id,
-                    uvFromScreen([event.target.x(), event.target.y()], layout.gridSpacingMm, width, height, scale),
+                    uvFromScreen([event.target.x(), event.target.y()], width, height, scale),
                   )}
                 >
                   {selected && <Circle radius={16} stroke="#111718" strokeWidth={1.5} />}

@@ -174,9 +174,15 @@ function ensureProjectExtension(destination: string): string {
 
 async function writeExportBundle(directory: string, bundle: ExportBundle): Promise<string[]> {
   const files = Object.entries(bundle.files);
-  await Promise.all(files.map(([filename, content]) => (
-    atomicWrite(path.join(directory, filename), content)
-  )));
+  const exportRoot = path.resolve(directory);
+  await Promise.all(files.map(async ([filename, content]) => {
+    const destination = path.resolve(exportRoot, filename);
+    if (destination !== exportRoot && !destination.startsWith(`${exportRoot}${path.sep}`)) {
+      throw new Error(`Invalid export path: ${filename}`);
+    }
+    await mkdir(path.dirname(destination), { recursive: true });
+    await atomicWrite(destination, content);
+  }));
   return files.map(([filename]) => filename);
 }
 

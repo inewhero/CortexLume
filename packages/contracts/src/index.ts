@@ -75,11 +75,38 @@ export const LayoutInstanceSchema = z.object({
 export type LayoutInstance = z.infer<typeof LayoutInstanceSchema>;
 
 export const DeviceProfileSchema = z.object({
-  wavelengthsNm: z.array(z.number().positive()).default([]),
-  measurementType: z.string().optional(),
-  units: z.string().optional(),
+  manufacturer: z.string().min(1).default('Shimadzu'),
+  model: z.string().min(1).default('LABNIRS'),
+  wavelengthsNm: z.preprocess(
+    (value) => Array.isArray(value) && value.length === 0 ? undefined : value,
+    z.array(z.number().positive()).min(1).default([780, 805, 830]),
+  ),
+  measurementType: z.preprocess(
+    (value) => value === 'CW_AMPLITUDE' ? 'NIRSCWAMPLITUDE' : value,
+    z.enum([
+      'NIRSCWAMPLITUDE',
+      'NIRSCWOPTICALDENSITY',
+      'NIRSCWHBO',
+      'NIRSCWHBR',
+      'NIRSCWMUA',
+    ]).default('NIRSCWAMPLITUDE'),
+  ),
+  units: z.string().min(1).default('V'),
+  sourceType: z.string().min(1).default('LASER'),
+  detectorType: z.string().min(1).default('PMT'),
+  samplingFrequencyHz: z.number().positive().nullable().default(null),
 });
 export type DeviceProfile = z.infer<typeof DeviceProfileSchema>;
+
+const BidsLabelSchema = z.string().regex(/^[A-Za-z0-9]+$/);
+export const BidsSettingsSchema = z.object({
+  subjectLabel: BidsLabelSchema.default('01'),
+  sessionLabel: BidsLabelSchema.or(z.literal('')).default(''),
+  taskLabel: BidsLabelSchema.default('layout'),
+  acquisitionLabel: BidsLabelSchema.or(z.literal('')).default(''),
+  runIndex: z.number().int().positive().nullable().default(null),
+});
+export type BidsSettings = z.infer<typeof BidsSettingsSchema>;
 
 const ProjectionModeValueSchema = z.enum(['scalp', 'cortex']);
 export const ProjectionModeSchema = z.preprocess(
@@ -144,6 +171,13 @@ export const CortexLumeProjectSchema = z.object({
   layouts: z.array(LayoutDefinitionSchema),
   instances: z.array(LayoutInstanceSchema),
   deviceProfile: DeviceProfileSchema,
+  bidsSettings: BidsSettingsSchema.default({
+    subjectLabel: '01',
+    sessionLabel: '',
+    taskLabel: 'layout',
+    acquisitionLabel: '',
+    runIndex: null,
+  }),
   projectionSettings: ProjectionSettingsSchema,
   verifiedResults: z.array(ProjectionResultSchema),
 });

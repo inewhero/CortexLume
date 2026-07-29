@@ -8,6 +8,7 @@ import {
   projectScalpSphereCenter,
 } from '../lib/geometry';
 import { materializeProjectionSnapshot } from '../lib/projectionSnapshot';
+import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from '../store/projectStore';
 
 const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code: string }> = [
@@ -38,6 +39,7 @@ export function Inspector() {
     selectedInstanceId, selectedHeadOptodeId, selectedHeadPairId,
     newProject, loadProject, setProjectPath, setProjectName, setToast,
     setProjectionMode, resetInstanceOverride, setAnatomyLayer, setAnatomyAppearance,
+    setBidsSettingsExpanded,
   } = useProjectStore();
   const instance = project.instances.find((item) => item.id === selectedInstanceId);
   const layout = project.layouts.find((item) => item.id === instance?.definitionId);
@@ -116,6 +118,12 @@ export function Inspector() {
   };
 
   const exportBids = async () => {
+    const missingFields = getMissingBidsFields(project);
+    setBidsSettingsExpanded(true, missingFields.map((field) => field.key));
+    if (missingFields.length > 0) {
+      setToast(`Complete BIDS settings before export: ${missingFields.map((field) => field.label).join(', ')}.`);
+      return;
+    }
     try {
       const result = await window.cortexlume.export.bidsGeometry(materializeProjectionSnapshot(project));
       if (result) {

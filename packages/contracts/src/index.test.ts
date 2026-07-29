@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { LayoutDefinitionSchema, ProjectionSettingsSchema } from './index';
+import {
+  BidsSettingsSchema,
+  DeviceProfileSchema,
+  LayoutDefinitionSchema,
+  ProjectionSettingsSchema,
+} from './index';
 
 describe('LayoutDefinitionSchema', () => {
   it('rejects non-UUID optode identifiers', () => {
@@ -20,5 +25,25 @@ describe('LayoutDefinitionSchema', () => {
     expect(ProjectionSettingsSchema.parse({ mode: 'surface' }).mode).toBe('scalp');
     expect(ProjectionSettingsSchema.parse({ mode: 'anatomical_depth' }).mode).toBe('cortex');
     expect(ProjectionSettingsSchema.parse({ mode: 'scalp' }).optodeRadiusMm).toBe(3.6);
+  });
+
+  it('provides a Shimadzu LABNIRS BIDS profile by default', () => {
+    expect(DeviceProfileSchema.parse({})).toMatchObject({
+      manufacturer: 'Shimadzu',
+      model: 'LABNIRS',
+      wavelengthsNm: [780, 805, 830],
+      measurementType: 'NIRSCWAMPLITUDE',
+      units: 'V',
+      sourceType: 'LASER',
+      detectorType: 'PMT',
+    });
+    expect(DeviceProfileSchema.parse({ measurementType: 'CW_AMPLITUDE' }).measurementType)
+      .toBe('NIRSCWAMPLITUDE');
+    expect(DeviceProfileSchema.parse({ wavelengthsNm: [] }).wavelengthsNm)
+      .toEqual([780, 805, 830]);
+    expect(BidsSettingsSchema.parse({})).toMatchObject({
+      subjectLabel: '01',
+      taskLabel: 'layout',
+    });
   });
 });

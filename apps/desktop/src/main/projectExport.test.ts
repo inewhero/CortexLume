@@ -16,14 +16,9 @@ describe('project data exports', () => {
     const layoutId = useProjectStore.getState().activeLayoutId;
     useProjectStore.getState().placeLayout(layoutId);
     useProjectStore.getState().placeLayout(layoutId);
-    const project = {
-      ...structuredClone(useProjectStore.getState().project),
-      deviceProfile: {
-        wavelengthsNm: [760, 850],
-        measurementType: 'CW_AMPLITUDE',
-        units: 'V',
-      },
-    };
+    const project = structuredClone(useProjectStore.getState().project);
+    project.deviceProfile.wavelengthsNm = [760, 850];
+    project.deviceProfile.samplingFrequencyHz = 36;
 
     const csv = buildCsvExport(materializeProjectionSnapshot(project));
     expect(csv.files['cortexlume_channels.csv']).toContain('\r\nP01,');
@@ -37,10 +32,13 @@ describe('project data exports', () => {
     expect(csv.files['cortexlume_optodes.csv']?.startsWith('\uFEFF')).toBe(true);
 
     const bids = buildBidsGeometryExport(project);
-    expect(bids.files['sub-template_optodes.tsv']).toContain('P01_S1');
-    expect(bids.files['sub-template_optodes.tsv']).toContain('P02_S1');
-    expect(bids.files['sub-template_task-layout_channels.tsv']).toContain('P01_CH1_760');
-    expect(bids.files['sub-template_task-layout_channels.tsv']).toContain('P02_CH1_850');
+    expect(bids.files['sub-01/nirs/sub-01_optodes.tsv']).toContain('P01_S1');
+    expect(bids.files['sub-01/nirs/sub-01_optodes.tsv']).toContain('P02_S1');
+    expect(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']).toContain('P01_CH1_760');
+    expect(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']).toContain('P02_CH1_850');
+    const sidecar = JSON.parse(bids.files['sub-01/nirs/sub-01_task-layout_nirs.json']!);
+    expect(sidecar.Manufacturer).toBe('Shimadzu');
+    expect(sidecar.NIRSChannelCount).toBe(88);
   });
 
   it('keeps CSV concise and moves technical details into JSON', () => {
@@ -67,12 +65,36 @@ describe('project data exports', () => {
     expect(metadata.technical.projectionResults.length).toBeGreaterThan(0);
 
     const bids = buildBidsGeometryExport(project);
-    const bidsChannel = dataRow(bids.files['sub-template_channels.tsv']!, '\t');
-    expect(bidsChannel.scalp_x).not.toBe('n/a');
-    expect(bidsChannel.cortex_x).not.toBe('n/a');
-    expect(bidsChannel.cortical_region_3).not.toBe('n/a');
+    const bidsChannel = dataRow(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']!, '\t');
+    expect(bidsChannel.type).toBe('NIRSCWAMPLITUDE');
+    expect(bidsChannel.source).toBe('P01_S1');
+    expect(bidsChannel.detector).toBe('P01_D2');
     expect(bidsChannel.actual_scalp_spacing_mm).not.toBe('n/a');
-    expect(bidsChannel.fit_qc_flags).toContain('template_unverified');
-    expect(bids.files['sub-template_channels.tsv']).not.toContain('depth_target');
+    expect(bidsChannel.status).toMatch(/good|bad/);
+    const bidsTechnical = JSON.parse(bids.files['sourcedata/cortexlume_export.json']!);
+    expect(bidsTechnical.technical.instances[0].fitQc.flags).toContain('template_unverified');
+    expect(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']).not.toContain('depth_target');
+  });
+
+  it('uses configured BIDS entities in directories and filenames', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const rawProject = structuredClone(useProjectStore.getState().project);
+    rawProject.bidsSettings = {
+      subjectLabel: '007',
+      sessionLabel: 'baseline',
+      taskLabel: 'motor',
+      acquisitionLabel: 'labnirs',
+      runIndex: 2,
+    };
+    const bids = buildBidsGeometryExport(materializeProjectionSnapshot(rawProject));
+    const prefix = 'sub-007/ses-baseline/nirs';
+    expect(bids.files[`${prefix}/sub-007_ses-baseline_acq-labnirs_optodes.tsv`]).toBeDefined();
+    expect(bids.files[
+      `${prefix}/sub-007_ses-baseline_task-motor_acq-labnirs_run-02_channels.tsv`
+    ]).toBeDefined();
+    expect(bids.files[
+      `${prefix}/sub-007_ses-baseline_task-motor_acq-labnirs_run-02_nirs.json`
+    ]).toBeDefined();
   });
 });
