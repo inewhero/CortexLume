@@ -8,6 +8,12 @@ CortexLume is an offline Electron workstation for designing fNIRS source-detecto
 
 The application includes a high-density 2D matrix editor, channel solver and numbering table, layered scalp/gray-matter/white-matter rendering, five-point registration landmarks, 10–10 reference positions, reusable patch placement, project persistence, and CSV/BIDS geometry output.
 
+## Project archives and exports
+
+`SAVE` writes the current `.cortexlume` archive in place, while `SAVE AS` creates a separate copy. Archives contain a validated `project.json` plus a manifest with project identity, template provenance, application version, save time, and a SHA-256 integrity check. Archives created by earlier CortexLume versions remain readable.
+
+CSV export produces linked layout, instance, optode, and channel tables plus a machine-readable export manifest. BIDS geometry export produces instance-qualified optode and channel names (`P01`, `P02`, …), scalp and cortical MNI coordinates, coordinate-system metadata, and a README that records scientific limitations or missing results.
+
 ## Features
 
 ### 2D Matrix Editor & Array Design

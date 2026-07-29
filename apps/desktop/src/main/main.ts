@@ -3,8 +3,6 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { TextDecoder, TextEncoder } from 'node:util';
-import { unzipSync, zipSync, strToU8 } from 'fflate';
 import {
   CortexLumeProjectSchema,
   FitPlacementRequestSchema,
@@ -12,6 +10,8 @@ import {
   type CortexLumeProject,
   type FitPlacementRequest,
 } from '@cortexlume/contracts';
+import { createProjectArchive, readProjectArchive } from './projectArchive';
+import { buildBidsGeometryExport, buildCsvExport, type ExportBundle } from './projectExport';
 
 let mainWindow: BrowserWindow | null = null;
 let scienceProcess: ChildProcessWithoutNullStreams | null = null;
@@ -19,9 +19,6 @@ let sciencePort: number | null = null;
 let scienceToken = '';
 let scienceReady: Promise<void> | null = null;
 const headlessSmokeTest = process.env.CORTEXLUME_HEADLESS_TEST === '1';
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 function resolveScienceCommand(): { command: string; args: string[]; cwd: string } {
   if (app.isPackaged) {
@@ -142,22 +139,6 @@ async function createWindow(): Promise<void> {
   });
 }
 
-function projectArchive(project: CortexLumeProject): Uint8Array {
-  const manifest = {
-    format: project.format,
-    formatVersion: project.formatVersion,
-    projectId: project.id,
-    template: project.template,
-  };
-  return zipSync(
-    {
-      'manifest.json': strToU8(JSON.stringify(manifest, null, 2)),
-      'project.json': strToU8(JSON.stringify(project, null, 2)),
-    },
-    { level: 6 },
-  );
-}
-
 async function atomicWrite(destination: string, data: Uint8Array | string): Promise<void> {
   const temporary = `${destination}.${process.pid}.tmp`;
   await writeFile(temporary, data);
@@ -169,15 +150,6 @@ async function atomicWrite(destination: string, data: Uint8Array | string): Prom
   }
 }
 
-function csvCell(value: unknown): string {
-  const text = value == null ? '' : String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-function csv(rows: unknown[][]): string {
-  return `${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
-}
-
 async function chooseExportDirectory(title: string): Promise<string | null> {
   const choice = await dialog.showOpenDialog(mainWindow!, {
     title,
@@ -186,8 +158,26 @@ async function chooseExportDirectory(title: string): Promise<string | null> {
   return choice.canceled ? null : (choice.filePaths[0] ?? null);
 }
 
-function resultMap(project: CortexLumeProject): Map<string, CortexLumeProject['verifiedResults'][number]> {
-  return new Map(project.verifiedResults.map((result) => [`${result.instanceId ?? ''}:${result.subjectId}`, result]));
+function projectFilename(name: string): string {
+  const safeName = name.trim()
+    .replaceAll(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
+    .replaceAll(/[. ]+$/g, '')
+    || 'Untitled CortexLume project';
+  return `${safeName}.cortexlume`;
+}
+
+function ensureProjectExtension(destination: string): string {
+  return destination.toLowerCase().endsWith('.cortexlume')
+    ? destination
+    : `${destination}.cortexlume`;
+}
+
+async function writeExportBundle(directory: string, bundle: ExportBundle): Promise<string[]> {
+  const files = Object.entries(bundle.files);
+  await Promise.all(files.map(([filename, content]) => (
+    atomicWrite(path.join(directory, filename), content)
+  )));
+  return files.map(([filename]) => filename);
 }
 
 function registerIpc(): void {
@@ -208,10 +198,8 @@ function registerIpc(): void {
     });
     const selectedPath = selection.filePaths[0];
     if (selection.canceled || !selectedPath) return null;
-    const archive = unzipSync(new Uint8Array(await readFile(selectedPath)));
-    const projectBytes = archive['project.json'];
-    if (!projectBytes) throw new Error('Project archive does not contain project.json');
-    return CortexLumeProjectSchema.parse(JSON.parse(decoder.decode(projectBytes)));
+    const project = readProjectArchive(new Uint8Array(await readFile(selectedPath)));
+    return { project, path: selectedPath };
   });
 
   ipcMain.handle(
@@ -222,13 +210,13 @@ function registerIpc(): void {
       if (!destination) {
         const selection = await dialog.showSaveDialog(mainWindow!, {
           title: 'Save CortexLume project',
-          defaultPath: `${project.name.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}.cortexlume`,
+          defaultPath: projectFilename(project.name),
           filters: [{ name: 'CortexLume project', extensions: ['cortexlume'] }],
         });
         if (selection.canceled || !selection.filePath) return null;
-        destination = selection.filePath;
+        destination = ensureProjectExtension(selection.filePath);
       }
-      await atomicWrite(destination, projectArchive(project));
+      await atomicWrite(destination, createProjectArchive(project, app.getVersion()));
       return { path: destination };
     },
   );
@@ -238,53 +226,9 @@ function registerIpc(): void {
     const directory = await chooseExportDirectory('Export CortexLume CSV files');
     if (!directory) return null;
     await mkdir(directory, { recursive: true });
-    const results = resultMap(project);
-    const optodeRows: unknown[][] = [[
-      'layout', 'instance', 'optode', 'type', 'u_mm', 'v_mm',
-      'scalp_r', 'scalp_a', 'scalp_s', 'cortex_r', 'cortex_a', 'cortex_s',
-      'underlying_cortical_region', 'status', 'qc_flags',
-    ]];
-    const pairRows: unknown[][] = [[
-      'layout', 'pair', 'channel_number', 'source', 'detector', 'nominal_distance_mm', 'short_channel',
-      'depth_mm', 'cortex_r', 'cortex_a', 'cortex_s', 'depth_r', 'depth_a', 'depth_s',
-      'deep_target_structure', 'status', 'qc_flags',
-    ]];
-    for (const layout of project.layouts) {
-      const instances = project.instances.filter((item) => item.definitionId === layout.id);
-      for (const instance of instances) {
-        for (const optode of layout.optodes) {
-          const result = results.get(`${instance.id}:${optode.id}`);
-          optodeRows.push([
-            layout.name, instance.id, optode.label, optode.type, ...optode.uvMm,
-            ...(result?.scalpRasMm ?? ['', '', '']),
-            ...(result?.corticalRasMm ?? ['', '', '']),
-            result?.underlyingCorticalRegions[0]?.labelEn ?? '', result?.status ?? '',
-            result?.qcFlags.join('|') ?? '',
-          ]);
-        }
-      }
-      const byId = new Map(layout.optodes.map((optode) => [optode.id, optode]));
-      for (const pair of layout.pairs) {
-        const firstInstance = project.instances.find((item) => item.definitionId === layout.id);
-        const result = results.get(`${firstInstance?.id ?? ''}:${pair.id}`);
-        pairRows.push([
-          layout.name, pair.id, pair.channelNumber ?? '', byId.get(pair.sourceId)?.label ?? pair.sourceId,
-          byId.get(pair.detectorId)?.label ?? pair.detectorId, pair.nominalDistanceMm,
-          pair.shortChannel,
-          project.projectionSettings.pairDepthOverridesMm[pair.id]
-            ?? project.projectionSettings.defaultDepthMm ?? '',
-          ...(result?.corticalRasMm ?? ['', '', '']),
-          ...(result?.depthTargetRasMm ?? ['', '', '']),
-          result?.deepTargetStructures[0]?.labelEn ?? '', result?.status ?? '',
-          result?.qcFlags.join('|') ?? '',
-        ]);
-      }
-    }
-    await Promise.all([
-      atomicWrite(path.join(directory, 'cortexlume_optodes.csv'), encoder.encode(csv(optodeRows))),
-      atomicWrite(path.join(directory, 'cortexlume_pairs.csv'), encoder.encode(csv(pairRows))),
-    ]);
-    return { directory };
+    const bundle = buildCsvExport(project);
+    const files = await writeExportBundle(directory, bundle);
+    return { directory, files, warnings: bundle.warnings };
   });
 
   ipcMain.handle('export:bids-geometry', async (_event, rawProject: CortexLumeProject) => {
@@ -292,66 +236,9 @@ function registerIpc(): void {
     const directory = await chooseExportDirectory('Export BIDS-compatible geometry sidecars');
     if (!directory) return null;
     await mkdir(directory, { recursive: true });
-    const warnings = [
-      'This geometry bundle is not a complete BIDS dataset because CortexLume V1 does not create a SNIRF recording.',
-    ];
-    const results = resultMap(project);
-    const optodeRows: unknown[][] = [[
-      'name', 'type', 'x', 'y', 'z', 'template_x', 'template_y', 'template_z',
-    ]];
-    const seen = new Set<string>();
-    for (const layout of project.layouts) {
-      for (const optode of layout.optodes) {
-        if (seen.has(optode.id)) continue;
-        seen.add(optode.id);
-        const instance = project.instances.find((item) => item.definitionId === layout.id);
-        const result = results.get(`${instance?.id ?? ''}:${optode.id}`);
-        optodeRows.push([
-          optode.label, optode.type, 'n/a', 'n/a', 'n/a',
-          ...(result?.scalpRasMm ?? ['n/a', 'n/a', 'n/a']),
-        ]);
-      }
-    }
-    await atomicWrite(path.join(directory, 'sub-template_optodes.tsv'), csv(optodeRows).replaceAll(',', '\t'));
-    await atomicWrite(
-      path.join(directory, 'sub-template_coordsystem.json'),
-      JSON.stringify({
-        NIRSCoordinateSystem: 'MNI152NLin6Asym',
-        NIRSCoordinateUnits: 'mm',
-        NIRSCoordinateSystemDescription:
-          `Ideal template positions generated by CortexLume with asset ${project.template.assetVersion}.`,
-      }, null, 2),
-    );
-
-    const profileComplete = project.deviceProfile.wavelengthsNm.length > 0
-      && project.deviceProfile.measurementType
-      && project.deviceProfile.units;
-    if (profileComplete) {
-      const channelRows: unknown[][] = [[
-        'name', 'type', 'source', 'detector', 'wavelength_nominal', 'units', 'short_channel',
-      ]];
-      for (const layout of project.layouts) {
-        const byId = new Map(layout.optodes.map((optode) => [optode.id, optode]));
-        for (const pair of layout.pairs) {
-          for (const wavelength of project.deviceProfile.wavelengthsNm) {
-            channelRows.push([
-              `${pair.channelNumber ? `CH${pair.channelNumber}-` : ''}${byId.get(pair.sourceId)?.label}-${byId.get(pair.detectorId)?.label}-${wavelength}`,
-              project.deviceProfile.measurementType,
-              byId.get(pair.sourceId)?.label,
-              byId.get(pair.detectorId)?.label,
-              wavelength,
-              project.deviceProfile.units,
-              pair.shortChannel,
-            ]);
-          }
-        }
-      }
-      await atomicWrite(path.join(directory, 'sub-template_task-layout_channels.tsv'), csv(channelRows).replaceAll(',', '\t'));
-    } else {
-      warnings.push('channels.tsv was omitted because wavelengths, measurement type, or units are incomplete.');
-    }
-    await atomicWrite(path.join(directory, 'README'), warnings.join('\r\n'));
-    return { directory, warnings };
+    const bundle = buildBidsGeometryExport(project);
+    const files = await writeExportBundle(directory, bundle);
+    return { directory, files, warnings: bundle.warnings };
   });
 
   ipcMain.handle('science:health', async () => {

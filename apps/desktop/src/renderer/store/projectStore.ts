@@ -145,6 +145,7 @@ interface ProjectStore {
   loadProject(project: CortexLumeProject): void;
   setProjectPath(path: string | null): void;
   setProjectName(name: string): void;
+  renameActiveLayout(name: string): void;
   setEditorTool(tool: EditorTool): void;
   selectOptode(optodeId: string | null): void;
   addOptode(type: OptodeType, uvMm: Vec2): void;
@@ -248,6 +249,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         project,
         projectPath: null,
         activeLayoutId: project.layouts[0]!.id,
+        library: [structuredClone(project.layouts[0]!)],
         selectedOptodeId: null,
         selectedInstanceId: null,
         selectedHeadOptodeId: null,
@@ -258,32 +260,61 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         futureLayouts: [],
       });
     },
-    loadProject: (project) => set({
-      project: (() => {
-        const detachedLayouts: LayoutDefinition[] = [];
-        const instances = project.instances.map((instance) => {
-          const source = project.layouts.find((layout) => layout.id === instance.definitionId);
-          if (!source) return { ...instance, visible: instance.visible ?? true };
-          const clone = structuredClone({ ...source, id: id(), name: `${source.name} · instance` });
-          detachedLayouts.push(clone);
-          return { ...instance, definitionId: clone.id, visible: instance.visible ?? true };
-        });
-        return { ...project, layouts: [...project.layouts, ...detachedLayouts], instances };
-      })(),
-      activeLayoutId: project.layouts[0]?.id ?? '',
-      selectedOptodeId: null,
-      selectedInstanceId: project.instances[0]?.id ?? null,
-      selectedHeadOptodeId: null,
-      selectedHeadPairId: null,
-      instanceEditMode: 'group',
-      projectRevision: 0,
-      pastLayouts: [],
-      futureLayouts: [],
+    loadProject: (project) => set(() => {
+      const hydrated: CortexLumeProject = {
+        ...structuredClone(project),
+        instances: project.instances.map((instance) => ({
+          ...structuredClone(instance),
+          visible: instance.visible ?? true,
+        })),
+      };
+      const referencedLayoutIds = new Set(hydrated.instances.map((instance) => instance.definitionId));
+      const reusableLayouts = hydrated.layouts.filter((layout) => !referencedLayoutIds.has(layout.id));
+      const library = (reusableLayouts.length > 0 ? reusableLayouts : hydrated.layouts)
+        .map((layout) => structuredClone(layout));
+      return {
+        project: hydrated,
+        activeLayoutId: library[0]?.id ?? hydrated.layouts[0]?.id ?? '',
+        library,
+        selectedOptodeId: null,
+        selectedInstanceId: hydrated.instances[0]?.id ?? null,
+        selectedHeadOptodeId: null,
+        selectedHeadPairId: null,
+        instanceEditMode: 'group',
+        projectRevision: 0,
+        pastLayouts: [],
+        futureLayouts: [],
+      };
     }),
     setProjectPath: (projectPath) => set({ projectPath }),
     setProjectName: (name) => set((state) => ({
       project: { ...state.project, name, updatedAt: now() },
     })),
+    renameActiveLayout: (name) => {
+      const normalized = name.trim();
+      if (!normalized) {
+        set({ toast: 'Layout name cannot be empty.' });
+        return;
+      }
+      set((state) => {
+        const current = state.project.layouts.find((layout) => layout.id === state.activeLayoutId);
+        if (!current || current.name === normalized) return state;
+        const renamed = { ...current, name: normalized, updatedAt: now() };
+        return {
+          project: {
+            ...state.project,
+            updatedAt: now(),
+            layouts: state.project.layouts.map((layout) => layout.id === current.id ? renamed : layout),
+          },
+          library: state.library.map((layout) => layout.id === current.id
+            ? structuredClone(renamed)
+            : layout),
+          pastLayouts: [...state.pastLayouts.slice(-49), current],
+          futureLayouts: [],
+          projectRevision: state.projectRevision + 1,
+        };
+      });
+    },
     setEditorTool: (editorTool) => set({ editorTool }),
     selectOptode: (selectedOptodeId) => set({ selectedOptodeId }),
 

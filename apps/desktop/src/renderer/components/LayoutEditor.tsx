@@ -25,11 +25,12 @@ export function LayoutEditor() {
   const [zoom, setZoom] = useState(1);
   const [editingPairId, setEditingPairId] = useState<string | null>(null);
   const [editingChannel, setEditingChannel] = useState('');
+  const [layoutNameDraft, setLayoutNameDraft] = useState('');
   const {
     project, activeLayoutId, editorTool, selectedOptodeId, pastLayouts, futureLayouts,
     setEditorTool, selectOptode, addOptode, moveOptode, deleteSelectedOptode,
     generateGrid, reverseOptodeTypes, generatePairs, updatePairChannelNumber,
-    undoLayout, redoLayout, setOptodeRadius,
+    undoLayout, redoLayout, setOptodeRadius, renameActiveLayout,
   } = useProjectStore();
   const layout = project.layouts.find((item) => item.id === activeLayoutId);
   const optodeRadiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
@@ -50,6 +51,10 @@ export function LayoutEditor() {
   useEffect(() => {
     setZoom(1);
   }, [layout?.id, layout?.optodes.length, layout?.pairs.length]);
+
+  useEffect(() => {
+    setLayoutNameDraft(layout?.name ?? '');
+  }, [layout?.id, layout?.name]);
 
   if (!layout) return <div className="empty-state">No layout is open.</div>;
 
@@ -83,7 +88,26 @@ export function LayoutEditor() {
   return (
     <div className="layout-editor-content">
       <div className="module-summary">
-        <div><strong>{layout.name}</strong><span>{layout.optodes.length} OPTODES / {layout.pairs.length} CHANNELS</span></div>
+        <div className="layout-name-editor">
+          <input
+            aria-label="Layout name"
+            value={layoutNameDraft}
+            maxLength={80}
+            onChange={(event) => setLayoutNameDraft(event.target.value)}
+            onBlur={() => {
+              renameActiveLayout(layoutNameDraft);
+              setLayoutNameDraft(layoutNameDraft.trim() || layout.name);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+              if (event.key === 'Escape') {
+                setLayoutNameDraft(layout.name);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          <span>{layout.optodes.length} OPTODES / {layout.pairs.length} CHANNELS</span>
+        </div>
         <div className="history-controls">
           <div className="zoom-controls">
             <button onClick={() => setZoom((value) => Math.max(0.6, value / 1.16))} title="Zoom out">−</button>

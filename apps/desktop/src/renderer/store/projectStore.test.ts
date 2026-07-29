@@ -29,4 +29,31 @@ describe('default optode matrix', () => {
       [19, -45, -30], [20, -15, -30], [21, 15, -30], [22, 45, -30],
     ]);
   });
+
+  it('renames the default layout and keeps its reusable library entry in sync', () => {
+    useProjectStore.getState().newProject();
+    const original = useProjectStore.getState().project.layouts[0]!;
+
+    useProjectStore.getState().renameActiveLayout('Frontal language array');
+
+    const state = useProjectStore.getState();
+    expect(state.project.layouts.find((layout) => layout.id === original.id)?.name)
+      .toBe('Frontal language array');
+    expect(state.library.find((layout) => layout.id === original.id)?.name)
+      .toBe('Frontal language array');
+  });
+
+  it('loads archived instances without cloning their layout definitions again', () => {
+    useProjectStore.getState().newProject();
+    const layoutId = useProjectStore.getState().activeLayoutId;
+    useProjectStore.getState().placeLayout(layoutId);
+    const archived = structuredClone(useProjectStore.getState().project);
+    const expectedLayouts = archived.layouts.length;
+
+    useProjectStore.getState().loadProject(archived);
+    expect(useProjectStore.getState().project.layouts).toHaveLength(expectedLayouts);
+
+    useProjectStore.getState().loadProject(structuredClone(useProjectStore.getState().project));
+    expect(useProjectStore.getState().project.layouts).toHaveLength(expectedLayouts);
+  });
 });

@@ -230,8 +230,30 @@ code { color: #4e585c; background: transparent; font: 9px/1.2 "Cascadia Mono", C
 
 .inspector-content { padding-bottom: 3px; }
 .project-name-field input { width: 100%; font-family: Arial, sans-serif; font-weight: 700; }
+.project-file-path {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .project-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
 .project-actions.two { grid-template-columns: repeat(2, 1fr); }
+.layout-name-editor { min-width: 0; display: grid; gap: 2px; }
+.layout-name-editor input {
+  min-width: 0;
+  width: min(220px, 100%);
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: 700 12px/1.2 Arial, sans-serif;
+}
+.layout-name-editor input:hover { border-color: var(--line); }
+.layout-name-editor input:focus { border-color: var(--accent); background: #fff; color: #15191b; outline: none; }
 .online { color: var(--online); font-weight: 800; }
 .offline { color: #b03b34; font-weight: 800; }
 .layer-list { display: grid; }

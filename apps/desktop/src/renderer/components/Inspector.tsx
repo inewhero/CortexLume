@@ -79,21 +79,24 @@ export function Inspector() {
     try {
       const opened = await window.cortexlume.project.open();
       if (opened) {
-        loadProject(opened);
-        setProjectPath(null);
-        setToast(`Loaded ${opened.name}.`);
+        loadProject(opened.project);
+        setProjectPath(opened.path);
+        setToast(`Loaded ${opened.project.name}.`);
       }
     } catch (error) {
       setToast(`Open error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
-  const saveProject = async () => {
+  const saveProject = async (saveAs = false) => {
     try {
-      const result = await window.cortexlume.project.save(project, projectPath ?? undefined);
+      const result = await window.cortexlume.project.save(
+        project,
+        saveAs ? undefined : projectPath ?? undefined,
+      );
       if (result) {
         setProjectPath(result.path);
-        setToast('Project saved.');
+        setToast(saveAs ? 'Project archive saved as a new file.' : 'Project archive saved.');
       }
     } catch (error) {
       setToast(`Save error: ${error instanceof Error ? error.message : String(error)}`);
@@ -101,13 +104,25 @@ export function Inspector() {
   };
 
   const exportCsv = async () => {
-    const result = await window.cortexlume.export.csv(project);
-    if (result) setToast(`Coordinate tables exported to ${result.directory}`);
+    try {
+      const result = await window.cortexlume.export.csv(project);
+      if (result) {
+        setToast(`Exported ${result.files.length} files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
+      }
+    } catch (error) {
+      setToast(`CSV export error: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const exportBids = async () => {
-    const result = await window.cortexlume.export.bidsGeometry(project);
-    if (result) setToast(`BIDS geometry exported to ${result.directory}`);
+    try {
+      const result = await window.cortexlume.export.bidsGeometry(project);
+      if (result) {
+        setToast(`Exported ${result.files.length} BIDS geometry files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
+      }
+    } catch (error) {
+      setToast(`BIDS export error: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   return (
@@ -116,14 +131,25 @@ export function Inspector() {
         <div className="control-block-title"><span>PROJECT</span><code className={engineOnline ? 'online' : 'offline'}>{engineOnline ? 'ENGINE ONLINE' : 'ENGINE OFFLINE'}</code></div>
         <label className="project-name-field">
           <span>PROJECT NAME</span>
-          <input value={project.name} onChange={(event) => setProjectName(event.target.value)} />
+          <input
+            value={project.name}
+            maxLength={120}
+            onChange={(event) => setProjectName(event.target.value)}
+            onBlur={() => {
+              if (!project.name.trim()) setProjectName('Untitled layout study');
+            }}
+          />
         </label>
+        <code className="project-file-path" title={projectPath ?? 'This project has not been saved yet.'}>
+          {projectPath ?? 'UNSAVED PROJECT'}
+        </code>
         <div className="project-actions">
           <button onClick={() => { newProject(); setToast('New project created.'); }}>NEW</button>
           <button onClick={openProject}>OPEN</button>
-          <button className="primary" onClick={saveProject}>SAVE</button>
+          <button className="primary" onClick={() => saveProject(false)}>SAVE</button>
         </div>
-        <div className="project-actions two">
+        <div className="project-actions">
+          <button onClick={() => saveProject(true)}>SAVE AS</button>
           <button onClick={exportCsv}>EXPORT CSV</button>
           <button onClick={exportBids}>EXPORT BIDS</button>
         </div>

@@ -174,12 +174,20 @@ export interface DesktopApi {
     close(): Promise<void>;
   };
   project: {
-    open(): Promise<CortexLumeProject | null>;
+    open(): Promise<{ project: CortexLumeProject; path: string } | null>;
     save(project: CortexLumeProject, currentPath?: string): Promise<{ path: string } | null>;
   };
   export: {
-    csv(project: CortexLumeProject): Promise<{ directory: string } | null>;
-    bidsGeometry(project: CortexLumeProject): Promise<{ directory: string; warnings: string[] } | null>;
+    csv(project: CortexLumeProject): Promise<{
+      directory: string;
+      files: string[];
+      warnings: string[];
+    } | null>;
+    bidsGeometry(project: CortexLumeProject): Promise<{
+      directory: string;
+      files: string[];
+      warnings: string[];
+    } | null>;
   };
   science: {
     health(): Promise<{ ok: boolean; version?: string; templateVerified?: boolean; error?: string }>;
