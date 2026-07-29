@@ -102,17 +102,25 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
     'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
     'cortex_mni_r', 'cortex_mni_a', 'cortex_mni_s',
     'region_1', 'region_1_percent', 'region_2', 'region_2_percent',
-    'region_3', 'region_3_percent', 'claim_level', 'status', 'qc_flags',
+    'region_3', 'region_3_percent',
+    'fit_converged', 'fit_mean_error_mm', 'fit_max_error_mm', 'fit_qc_flags',
+    'claim_level', 'status', 'qc_flags',
   ]];
   const channelRows: unknown[][] = [[
     'project_id', 'layout_id', 'layout_name', 'instance', 'instance_id',
     'pair_id', 'channel_number', 'source', 'detector',
-    'nominal_distance_mm', 'realized_scalp_distance_mm', 'short_channel',
+    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_cortex_spacing_mm',
+    'spacing_error_mm', 'spacing_error_percent', 'spacing_qc_pass', 'short_channel',
     'projection_mode', 'depth_mm',
+    'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
     'cortex_mni_r', 'cortex_mni_a', 'cortex_mni_s',
+    'cortical_region_1', 'cortical_region_1_percent',
+    'cortical_region_2', 'cortical_region_2_percent',
+    'cortical_region_3', 'cortical_region_3_percent',
     'depth_target_mni_r', 'depth_target_mni_a', 'depth_target_mni_s',
     'deep_region_1', 'deep_region_1_percent', 'deep_region_2', 'deep_region_2_percent',
     'deep_region_3', 'deep_region_3_percent', 'tissue_at_target',
+    'fit_converged', 'fit_mean_error_mm', 'fit_max_error_mm', 'fit_qc_flags',
     'claim_level', 'status', 'qc_flags',
   ]];
 
@@ -122,40 +130,59 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
       project.id, project.name, layout.id, layout.name, layout.version,
       layout.gridSpacingMm, layout.optodes.length, layout.pairs.length, instances.length, layout.updatedAt,
     ]);
-    const scopes: Array<LayoutInstance | null> = instances.length > 0 ? instances : [null];
+    const scopes: LayoutInstance[] = instances;
     const byId = new Map(layout.optodes.map((optode) => [optode.id, optode]));
 
     for (const instance of scopes) {
-      const code = instance ? codes.get(instance.id) ?? '' : '';
+      const code = codes.get(instance.id) ?? '';
       for (const optode of layout.optodes) {
-        const result = instance ? results.get(`${instance.id}:${optode.id}`) : undefined;
+        const result = results.get(`${instance.id}:${optode.id}`);
         optodeRows.push([
-          project.id, layout.id, layout.name, code, instance?.id ?? '',
+          project.id, layout.id, layout.name, code, instance.id,
           optode.id, optode.label, optode.type, ...optode.uvMm,
           ...vector(result?.scalpRasMm),
           ...vector(result?.corticalRasMm),
           ...topRegions(result?.underlyingCorticalRegions ?? []),
+          instance.fitQc?.converged ?? '', instance.fitQc?.meanAbsoluteErrorMm ?? '',
+          instance.fitQc?.maxAbsoluteErrorMm ?? '', instance.fitQc?.flags.join('|') ?? '',
           result?.claimLevel ?? '', result?.status ?? '', result?.qcFlags.join('|') ?? '',
         ]);
       }
       for (const pair of layout.pairs) {
-        const result = instance ? results.get(`${instance.id}:${pair.id}`) : undefined;
-        const sourceResult = instance ? results.get(`${instance.id}:${pair.sourceId}`) : undefined;
-        const detectorResult = instance ? results.get(`${instance.id}:${pair.detectorId}`) : undefined;
+        const result = results.get(`${instance.id}:${pair.id}`);
+        const sourceResult = results.get(`${instance.id}:${pair.sourceId}`);
+        const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
+        const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
+        const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
+        const spacingError = actualScalpSpacing === ''
+          ? ''
+          : Number(Math.abs(actualScalpSpacing - pair.nominalDistanceMm).toFixed(3));
+        const spacingErrorPercent = spacingError === ''
+          ? ''
+          : Number((spacingError / pair.nominalDistanceMm * 100).toFixed(2));
+        const spacingQcPass = spacingError === ''
+          ? ''
+          : spacingError <= 5 && result?.status !== 'blocked';
         channelRows.push([
-          project.id, layout.id, layout.name, code, instance?.id ?? '',
+          project.id, layout.id, layout.name, code, instance.id,
           pair.id, pair.channelNumber ?? '',
           byId.get(pair.sourceId)?.label ?? pair.sourceId,
           byId.get(pair.detectorId)?.label ?? pair.detectorId,
           Number(pair.nominalDistanceMm.toFixed(3)),
-          distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm),
+          actualScalpSpacing, actualCortexSpacing,
+          spacingError, spacingErrorPercent, spacingQcPass,
           pair.shortChannel, project.projectionSettings.mode,
           project.projectionSettings.pairDepthOverridesMm[pair.id]
             ?? project.projectionSettings.defaultDepthMm ?? '',
+          ...vector(result?.scalpRasMm),
           ...vector(result?.corticalRasMm),
+          ...topRegions(result?.underlyingCorticalRegions ?? []),
           ...vector(result?.depthTargetRasMm),
           ...topRegions(result?.deepTargetStructures ?? []),
-          result?.tissueAtTarget ?? '', result?.claimLevel ?? '', result?.status ?? '',
+          result?.tissueAtTarget ?? '',
+          instance.fitQc?.converged ?? '', instance.fitQc?.meanAbsoluteErrorMm ?? '',
+          instance.fitQc?.maxAbsoluteErrorMm ?? '', instance.fitQc?.flags.join('|') ?? '',
+          result?.claimLevel ?? '', result?.status ?? '',
           result?.qcFlags.join('|') ?? '',
         ]);
       }
@@ -205,7 +232,10 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
   const codes = instanceCodes(project);
   const optodeRows: unknown[][] = [[
     'name', 'type', 'x', 'y', 'z', 'cortex_x', 'cortex_y', 'cortex_z',
-    'cortical_region', 'cortical_region_probability',
+    'cortical_region_1', 'cortical_region_1_percent',
+    'cortical_region_2', 'cortical_region_2_percent',
+    'cortical_region_3', 'cortical_region_3_percent',
+    'claim_level', 'status', 'qc_flags',
   ]];
   const optodeNames = new Map<string, string>();
   let missingCoordinates = 0;
@@ -219,14 +249,13 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
       optodeNames.set(`${instance.id}:${optode.id}`, name);
       const result = results.get(`${instance.id}:${optode.id}`);
       if (!result?.scalpRasMm) missingCoordinates += 1;
-      const primaryRegion = result?.underlyingCorticalRegions
-        .slice().sort((a, b) => b.probability - a.probability)[0];
       optodeRows.push([
         name, optode.type,
         ...vector(result?.scalpRasMm, 'n/a'),
         ...vector(result?.corticalRasMm, 'n/a'),
-        primaryRegion?.labelEn ?? 'n/a',
-        primaryRegion ? Number((primaryRegion.probability * 100).toFixed(2)) : 'n/a',
+        ...topRegions(result?.underlyingCorticalRegions ?? []).map((value) => value === '' ? 'n/a' : value),
+        result?.claimLevel ?? 'n/a', result?.status ?? 'n/a',
+        result?.qcFlags.join('|') || 'n/a',
       ]);
     }
   }
@@ -249,9 +278,66 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
       CortexCoordinatesDescription:
         'Additional cortex_x/y/z columns contain the modeled first gray-matter contact in MNI RAS+ millimetres.',
       CorticalRegionDescription:
-        'Highest-probability English atlas label and percentage reported by CortexLume.',
+        'Top three English atlas labels and probabilities reported by CortexLume.',
     }, null, 2)}\n`,
   };
+
+  const geometryChannelRows: unknown[][] = [[
+    'name', 'instance', 'channel_number', 'source', 'detector',
+    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_cortex_spacing_mm',
+    'spacing_error_mm', 'spacing_error_percent', 'spacing_qc_pass', 'short_channel',
+    'projection_mode', 'depth_mm',
+    'scalp_x', 'scalp_y', 'scalp_z', 'cortex_x', 'cortex_y', 'cortex_z',
+    'cortical_region_1', 'cortical_region_1_percent',
+    'cortical_region_2', 'cortical_region_2_percent',
+    'cortical_region_3', 'cortical_region_3_percent',
+    'depth_target_x', 'depth_target_y', 'depth_target_z',
+    'deep_structure_1', 'deep_structure_1_percent',
+    'deep_structure_2', 'deep_structure_2_percent',
+    'deep_structure_3', 'deep_structure_3_percent',
+    'tissue_at_target', 'fit_converged', 'fit_mean_error_mm', 'fit_max_error_mm',
+    'fit_qc_flags', 'claim_level', 'status', 'qc_flags',
+  ]];
+  for (const instance of project.instances) {
+    const layout = layoutForInstance(project, instance);
+    if (!layout) continue;
+    const code = codes.get(instance.id)!;
+    for (const pair of layout.pairs) {
+      const result = results.get(`${instance.id}:${pair.id}`);
+      const sourceResult = results.get(`${instance.id}:${pair.sourceId}`);
+      const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
+      const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
+      const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
+      const spacingError = actualScalpSpacing === ''
+        ? ''
+        : Number(Math.abs(actualScalpSpacing - pair.nominalDistanceMm).toFixed(3));
+      const spacingErrorPercent = spacingError === ''
+        ? ''
+        : Number((spacingError / pair.nominalDistanceMm * 100).toFixed(2));
+      geometryChannelRows.push([
+        `${code}_CH${pair.channelNumber ?? pair.id}`, code, pair.channelNumber ?? 'n/a',
+        optodeNames.get(`${instance.id}:${pair.sourceId}`) ?? `${code}_${pair.sourceId}`,
+        optodeNames.get(`${instance.id}:${pair.detectorId}`) ?? `${code}_${pair.detectorId}`,
+        Number(pair.nominalDistanceMm.toFixed(3)), actualScalpSpacing || 'n/a',
+        actualCortexSpacing || 'n/a', spacingError || 0, spacingErrorPercent || 0,
+        spacingError === '' ? 'n/a' : spacingError <= 5 && result?.status !== 'blocked',
+        pair.shortChannel, project.projectionSettings.mode,
+        project.projectionSettings.pairDepthOverridesMm[pair.id]
+          ?? project.projectionSettings.defaultDepthMm ?? 'n/a',
+        ...vector(result?.scalpRasMm, 'n/a'),
+        ...vector(result?.corticalRasMm, 'n/a'),
+        ...topRegions(result?.underlyingCorticalRegions ?? []).map((value) => value === '' ? 'n/a' : value),
+        ...vector(result?.depthTargetRasMm, 'n/a'),
+        ...topRegions(result?.deepTargetStructures ?? []).map((value) => value === '' ? 'n/a' : value),
+        result?.tissueAtTarget ?? 'n/a',
+        instance.fitQc?.converged ?? 'n/a', instance.fitQc?.meanAbsoluteErrorMm ?? 'n/a',
+        instance.fitQc?.maxAbsoluteErrorMm ?? 'n/a', instance.fitQc?.flags.join('|') || 'n/a',
+        result?.claimLevel ?? 'n/a', result?.status ?? 'n/a',
+        result?.qcFlags.join('|') || 'n/a',
+      ]);
+    }
+  }
+  files['sub-template_channels.tsv'] = table(geometryChannelRows, '\t');
 
   const profileComplete = project.deviceProfile.wavelengthsNm.length > 0
     && project.deviceProfile.measurementType

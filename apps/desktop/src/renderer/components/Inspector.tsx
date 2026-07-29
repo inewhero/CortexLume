@@ -7,6 +7,7 @@ import {
   projectToCorticalSurface,
   projectScalpSphereCenter,
 } from '../lib/geometry';
+import { materializeProjectionSnapshot } from '../lib/projectionSnapshot';
 import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from '../store/projectStore';
 
 const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code: string }> = [
@@ -105,7 +106,7 @@ export function Inspector() {
 
   const exportCsv = async () => {
     try {
-      const result = await window.cortexlume.export.csv(project);
+      const result = await window.cortexlume.export.csv(materializeProjectionSnapshot(project));
       if (result) {
         setToast(`Exported ${result.files.length} files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
       }
@@ -116,7 +117,7 @@ export function Inspector() {
 
   const exportBids = async () => {
     try {
-      const result = await window.cortexlume.export.bidsGeometry(project);
+      const result = await window.cortexlume.export.bidsGeometry(materializeProjectionSnapshot(project));
       if (result) {
         setToast(`Exported ${result.files.length} BIDS geometry files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
       }

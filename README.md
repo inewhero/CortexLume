@@ -8,12 +8,6 @@ CortexLume is an offline Electron workstation for designing fNIRS source-detecto
 
 The application includes a high-density 2D matrix editor, channel solver and numbering table, layered scalp/gray-matter/white-matter rendering, five-point registration landmarks, 10–10 reference positions, reusable patch placement, project persistence, and CSV/BIDS geometry output.
 
-## Project archives and exports
-
-`SAVE` writes the current `.cortexlume` archive in place, while `SAVE AS` creates a separate copy. Archives contain a validated `project.json` plus a manifest with project identity, template provenance, application version, save time, and a SHA-256 integrity check. Archives created by earlier CortexLume versions remain readable.
-
-CSV export produces linked layout, instance, optode, and channel tables plus a machine-readable export manifest. BIDS geometry export produces instance-qualified optode and channel names (`P01`, `P02`, …), scalp and cortical MNI coordinates, coordinate-system metadata, and a README that records scientific limitations or missing results.
-
 ## Features
 
 ### 2D Matrix Editor & Array Design
@@ -35,6 +29,15 @@ View and interact with your layout on a 3D anatomical head model with multiple v
 Simulate and validate your fNIRS layout design, verify channel coverage, and check for conflicts.
 
 ![Project Simulation](./screenshots/ScreenShot_project_simulate.png)
+
+## How to use
+
+1. **Design an array.** Build an S/D pattern in **Optode Design**, or generate an `x × y` grid as a starting point. Adjust optode positions, reverse source and detector roles, and edit channel numbers directly.
+2. **Place it on the head.** Drag the finished layout into **3D Align**. Add multiple patches when the study requires broader or bilateral coverage.
+3. **Align each patch.** Select a patch, move it across the scalp, and use the rotation controls to match the intended anatomical position. Switch to single-optode editing for local adjustments.
+4. **Choose the projection.** Use **Scalp** to position optodes on the head surface, or **Cortex** to project them to their first gray-matter contact. Set a depth when deeper target estimates are needed.
+5. **Inspect the result.** Select an optode or channel to review scalp and cortical MNI coordinates, cortical-region probabilities, channel spacing, deep structures, and QC information. Layer controls can isolate the scalp, gray matter, white matter, landmarks, and channel labels.
+6. **Save or export.** Save the complete workspace as a `.cortexlume` project for later editing. Export CSV for linked layout, optode, channel, coordinate, anatomical, and QC tables, or export BIDS-compatible geometry files for downstream workflows.
 
 ## Development
 
