@@ -57,9 +57,9 @@
     "brainScientificGlb": { "path": "generated/brain_scientific.glb", "sha256": "e4c9033a515fd7693eb07fb80708509352b7f8044f860e690acf52cbc98119f1", "vertices": 25000, "faces": 49992, "simplified": false },
     "brainVertexCoordinates": { "path": "generated/brain_vertex_coordinates.csv", "sha256": "8b5c0e45f58f0e5741b6d16dc6cfcb73d9014fe923eee1d7474b86d3f0e5b92c" },
     "voxelToVertexBrain": { "path": "generated/voxel_to_vertex_brain.mtx.gz", "sha256": "049a3957ea351b65b20a37794e8801976afbf02ab77a3efe075b67166d904db6" },
-    "cedalionCorrespondenceAssets": { "path": "generated/cedalion-correspondence-assets.json", "sha256": "c05d66898d713ef50c3fc714e5782b961aee21dcfa9ea9a01011955f21967ed4" },
-    "cedalionCorrespondenceQc": { "path": "generated/cedalion-correspondence-qc.json", "sha256": "a2f5b5483a29ec5cf6f4941db8709731b375221e75146e01774e41869ee661e3" },
-    "landmarks": { "path": "generated/landmarks.json", "sha256": "e285eeaba04ce0ed6d335578f6791a8d2cb6ccb3e5be9b5ff24e98b094de0f16", "count": 73 },
+    "cedalionCorrespondenceAssets": { "path": "generated/cedalion-correspondence-assets.json", "sha256": "6dfbc997f534ef64b9ec661f495aa466b1b1e44f0e98410119cf36e362566969" },
+    "cedalionCorrespondenceQc": { "path": "generated/cedalion-correspondence-qc.json", "sha256": "ebbbe5ada1c872b93c0cdc3e70e71e407296fb4c441cda2ab681e0a44410fcec" },
+    "landmarks": { "path": "generated/landmarks.json", "sha256": "d0b96651be82c3eca94c19d323c2dfb1918bd76cf94dca93b49c27688d80599e", "count": 73 },
     "templateDescription": { "path": "upstream/template_description.json", "sha256": "4ae55cb140b6f3c38f5e48d50931d599c3bec49750173d8e2a589104e15acb07" },
     "templateBrainT1w": { "path": "upstream/tpl-MNI152NLin6Asym_res-01_desc-brain_T1w.nii.gz", "sha256": "72f8edc99d7e696da7717db20b73897d8da5909d7f30b1c9a7e2a79e9f64ff2f" },
     "templateBrainMask": { "path": "upstream/tpl-MNI152NLin6Asym_res-01_desc-brain_mask.nii.gz", "sha256": "6d540075dac093fa5070a929dc5ea52795d54cc9ab57fe1272086dc70314b428" },
@@ -68,6 +68,6 @@
     "corticalLabels": { "path": "upstream/fsl/data/atlases/HarvardOxford-Cortical-Lateralized.xml", "sha256": "c4dcb7830b9006dc2f1f62ddb29f890122b0638a7418e0f6fb736f85f678f61b" },
     "subcorticalLabels": { "path": "upstream/fsl/data/atlases/HarvardOxford-Subcortical.xml", "sha256": "576f825bcc51e2afaa5411aef85858091fcaf823e27415f9f263fbca4743ba8b" },
     "harvardOxfordIndex": { "path": "generated/harvard_oxford_top3_1mm.npz", "sha256": "8591df9e9b37df27748d5ae3c8ca0478201834bac8014950115ba46697c4f6d0" },
-    "harvardOxfordIndexMetadata": { "path": "generated/harvard_oxford_top3_1mm.json", "sha256": "11adfd295a7008d08f81005b40546561e0bddf0b521d4096cbe0b71c931fae6a" }
+    "harvardOxfordIndexMetadata": { "path": "generated/harvard_oxford_top3_1mm.json", "sha256": "097843e228407b609602c6a8752e263550b170a9f2e4d36bae2a7a9ada15cf87" }
   }
 }

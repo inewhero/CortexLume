@@ -89,7 +89,7 @@ function createProject(): CortexLumeProject {
       coordinateConvention: 'RAS+',
       units: 'mm',
       verified: true,
-      manifestSha256: '98a3aaeb4e64d1f50406ad07da152ff9b796b28742e9452deb411f6fb9811a14',
+      manifestSha256: '27ab30e8a6b3b6419937b26adbd930d32adfe26afbbf73795ea30505619abe42',
       scalpMeshSha256: '28836d0d13d22ccbd16e039e28f49b2357c15fb398a2a9e630ef484d7a95f01d',
       cortexMeshSha256: 'e4c9033a515fd7693eb07fb80708509352b7f8044f860e690acf52cbc98119f1',
       atlasSha256: '8591df9e9b37df27748d5ae3c8ca0478201834bac8014950115ba46697c4f6d0',
