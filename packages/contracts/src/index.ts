@@ -217,6 +217,17 @@ export interface DesktopApi {
       files: string[];
       warnings: string[];
     } | null>;
+    brainNet(project: CortexLumeProject): Promise<{
+      directory: string;
+      files: string[];
+      warnings: string[];
+      brainNet: {
+        matlabFound: boolean;
+        brainNetFound: boolean;
+        launched: boolean;
+        detail: string;
+      };
+    } | null>;
     bidsGeometry(project: CortexLumeProject): Promise<{
       directory: string;
       files: string[];

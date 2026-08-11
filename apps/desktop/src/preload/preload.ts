@@ -18,6 +18,7 @@ const api: DesktopApi = {
   },
   export: {
     csv: (project: CortexLumeProject) => ipcRenderer.invoke('export:csv', project),
+    brainNet: (project: CortexLumeProject) => ipcRenderer.invoke('export:brainnet', project),
     bidsGeometry: (project: CortexLumeProject) =>
       ipcRenderer.invoke('export:bids-geometry', project),
   },

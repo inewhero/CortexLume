@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { useProjectStore } from '../renderer/store/projectStore';
 import { materializeProjectionSnapshot } from '../renderer/lib/projectionSnapshot';
-import { buildBidsGeometryExport, buildCsvExport } from './projectExport';
+import { buildBidsGeometryExport, buildBrainNetExport, buildCsvExport } from './projectExport';
 
 function dataRow(table: string, delimiter: ',' | '\t'): Record<string, string> {
   const [header = '', row = ''] = table.trim().split(/\r?\n/);
@@ -65,13 +65,24 @@ describe('project data exports', () => {
     expect(channel.cortex_mni_r).not.toBe('');
     expect(channel.cortical_region_1).not.toBe('');
     expect(Number(channel.cortical_region_1_percent)).toBeGreaterThan(0);
-    expect(channel.spacing_qc).toMatch(/PASS|CHECK/);
+    expect(channel.spacing_qc).toBeUndefined();
+    expect(csv.files['cortexlume_channels.csv']).not.toContain('spacing_error');
+    expect(csv.files['cortexlume_channels.csv']).not.toContain('spacing_qc');
     expect(csv.files['cortexlume_channels.csv']).not.toContain('depth_target');
     expect(csv.files['cortexlume_channels.csv']).not.toContain('project_id');
     const metadata = JSON.parse(csv.files['cortexlume_export.json']!);
-    expect(metadata.formatVersion).toBe(2);
+    expect(metadata.formatVersion).toBe(3);
     expect(metadata.technical.instances[0].fitQc.flags).not.toContain('template_unverified');
     expect(metadata.technical.projectionResults.length).toBeGreaterThan(0);
+    expect(metadata.technical.qualityControl.channelSpacing.thresholdsMm).toEqual({
+      passMaximum: 2,
+      checkMaximum: 5,
+    });
+    expect(metadata.technical.qualityControl.channelSpacing.results[0]).toMatchObject({
+      patch: 'P01',
+      channel: 1,
+      status: expect.stringMatching(/pass|check|fail/),
+    });
 
     const bids = buildBidsGeometryExport(project);
     const bidsChannel = dataRow(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']!, '\t');
@@ -83,6 +94,30 @@ describe('project data exports', () => {
     const bidsTechnical = JSON.parse(bids.files['sourcedata/cortexlume_export.json']!);
     expect(bidsTechnical.technical.instances[0].fitQc.flags).not.toContain('template_unverified');
     expect(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']).not.toContain('depth_target');
+  });
+
+  it('builds a BrainNet Viewer bundle from cortical optode coordinates', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+    const bundle = buildBrainNetExport(project);
+
+    expect(Object.keys(bundle.files).sort()).toEqual([
+      'README_BRAINNET.txt',
+      'cortexlume_brainnet.edge',
+      'cortexlume_brainnet.node',
+      'cortexlume_channels.csv',
+      'cortexlume_export.json',
+      'cortexlume_open_brainnet.m',
+      'cortexlume_optodes.csv',
+    ]);
+    expect(bundle.files['cortexlume_brainnet.node']!.trim().split(/\r?\n/)).toHaveLength(15);
+    const edgeRows = bundle.files['cortexlume_brainnet.edge']!.trim().split(/\r?\n/);
+    expect(edgeRows).toHaveLength(15);
+    expect(edgeRows.every((row) => row.split('\t').length === 15)).toBe(true);
+    expect(bundle.files['cortexlume_open_brainnet.m']).toContain("readtable(optodeCsv)");
+    expect(bundle.files['cortexlume_open_brainnet.m']).toContain('BrainNet_MapCfg(surfacePath, nodePath, edgePath)');
+    expect(bundle.files['README_BRAINNET.txt']).toContain('not measured functional or effective connectivity');
   });
 
   it('uses configured BIDS entities in directories and filenames', () => {

@@ -4,41 +4,90 @@
 
 # CortexLume
 
-CortexLume is an offline Electron workstation for designing fNIRS source-detector layouts, placing reusable layout patches on an anatomical head model, and reporting scalp and cortical coordinates in MNI space.
+CortexLume is an offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp and cortical coordinates in MNI space.
 
-The application includes a high-density 2D matrix editor, channel solver and numbering table, layered scalp/gray-matter/white-matter rendering, five-point registration landmarks, 10–10 reference positions, reusable patch placement, project persistence, and CSV/BIDS geometry output.
+The application combines a high-density 2D array editor, multi-patch 3D alignment, sphere-aware scalp and cortical projection, five-point and 10–10 references, Harvard–Oxford probability-volume lookup, project archives, focused CSV results, BIDS-NIRS geometry sidecars, and direct BrainNet Viewer export.
 
 ## Features
 
-### 2D Matrix Editor & Array Design
-Design and edit high-density fNIRS source-detector arrays with an intuitive matrix interface.
+### Optode and channel design
+
+Build dense S/D arrays on a 10 mm editing grid with emphasized 30 mm guides. Generate rectangular layouts, reverse source and detector roles, edit channel numbering, zoom the canvas, and save reusable patch definitions.
 
 ![Array Design](./screenshots/ScreenShot_array_design.png)
 
-### Single Channel Modification
-Precisely modify individual channels and source-detector pairs with real-time feedback.
+### Local optode adjustment
+
+Place multiple independent patches, align them on the scalp, rotate the mapping, and switch to single-optode editing when a local correction is required.
 
 ![Single Modification](./screenshots/ScreenShot_sigle_modify.png)
 
-### Omnidirectional Head Model Visualization
-View and interact with your layout on a 3D anatomical head model with multiple viewing angles and cortical surface rendering.
+### Anatomical inspection
+
+Inspect the scalp, gray matter, white matter, five-point landmarks, 10–10 positions, optodes, channels, and cortical atlas results in one interactive 3D workspace.
 
 ![Omnidirectional View](./screenshots/ScreenShot_omni.png)
 
-### Project Simulation & Validation
-Simulate and validate your fNIRS layout design, verify channel coverage, and check for conflicts.
+### Reproducible output
 
-![Project Simulation](./screenshots/ScreenShot_project_simulate.png)
+Export clear coordinate tables for analysis, a technical JSON provenance record, BIDS-NIRS geometry scaffolds, or a BrainNet Viewer bundle that opens the mapped array in MATLAB.
+
+![Project Inspection](./screenshots/ScreenShot_project_simulate.png)
+
+## Scientific validation
+
+The bundled `MNI152NLin6Asym` asset manifest is verified and the atlas, correspondence, and full science gates pass.
+
+| Validation layer | Result | Recorded evidence |
+| --- | --- | --- |
+| Cedalion source archive | Passed | Cedalion ICBM152 v26.5.1 archive pinned by SHA-256 |
+| Vertex-to-MNI correspondence | Passed | 25,000 official vertices; 95th-percentile residual `0.000689 mm` |
+| Template grid correspondence | Passed | TemplateFlow 1 mm target is an exact integer subgrid at Cedalion offset `[5, 6, 76]` |
+| Brain-mask agreement | Passed | Dice coefficient `0.953731`, above the declared `0.95` gate |
+| Runtime cortical contact | Passed | Unsimplified correspondence-backed 25k mesh used for BVH ray and optode-sphere collision; dense pial mesh is display-only |
+| Harvard–Oxford atlas | Passed | FSL authority probability volumes mapped losslessly to the locked TemplateFlow RAS+ grid and checked against golden coordinates |
+| Asset integrity | Passed | Every released template, mesh, atlas index, correspondence table, and QC report is SHA-256 checked at runtime |
+
+Coordinates use `MNI152NLin6Asym`, RAS+, millimetres. Scalp coordinates describe optode sphere centres. Cortical coordinates describe the first correspondence-backed cortical contact along the defined radial projection. Channel atlas results aggregate the sampled geometric channel path; optode atlas results are retained as single-ray references.
+
+Harvard–Oxford percentages are the original population-atlas voxel probabilities. CortexLume reports the three highest values without renormalization. They are not subject-specific placement confidence. CortexLume is a template-based planning and reporting tool: its verified correspondence removes ambiguity between the bundled template, mesh, and atlas, but it does not claim participant-specific anatomy without participant registration.
+
+The complete numerical evidence is stored in [`cedalion-correspondence-qc.json`](./assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-qc.json), with the reproducible process documented in [`SCIENTIFIC_ASSET_PIPELINE.md`](./docs/SCIENTIFIC_ASSET_PIPELINE.md).
 
 ## How to use
 
-1. **Design an array.** Build an S/D pattern in **Optode Design**, or generate an `x × y` grid as a starting point. New and dragged optodes snap to a 10 mm editing grid with emphasized 30 mm guide lines. Adjust optode positions, reverse source and detector roles, and edit channel numbers directly.
-2. **Place it on the head.** Drag the finished layout into **3D Align**. Add multiple patches when the study requires broader or bilateral coverage.
-3. **Align each patch.** Select a patch, move it across the scalp, and use the rotation controls to match the intended anatomical position. Switch to single-optode editing for local adjustments.
-4. **Choose the projection.** Use **Scalp** to position optodes on the head surface, or **Cortex** to project them to their first gray-matter contact. Set a depth when deeper target estimates are needed.
-5. **Inspect the result.** Select an optode or channel to review scalp and cortical MNI coordinates, cortical-region probabilities, channel spacing, deep structures, and QC information. Layer controls can isolate the scalp, gray matter, white matter, landmarks, and channel labels.
-6. **Configure the recording metadata.** In **Device**, set the subject, session, task, acquisition, and run entities, then confirm the instrument profile. New projects use a Shimadzu LABNIRS continuous-wave profile with 780, 805, and 830 nm wavelengths.
-7. **Save or export.** Save the complete workspace as a `.cortexlume` project for later editing. CSV export creates focused optode and channel result tables plus a technical JSON record. BIDS export creates a subject/session NIRS scaffold with optode coordinates, one channel row per source-detector-wavelength combination, device metadata, and the full CortexLume technical record in `sourcedata`.
+1. **Design a patch.** Create an S/D pattern in **Optode Design**, or generate an `x × y` grid. Adjust optode positions and channel numbering directly on the canvas.
+2. **Place it on the head.** Drag the layout into **3D Align**. Add further patches for bilateral or distributed coverage.
+3. **Align the mapping.** Select one patch, move it over the scalp, and use the rotation controls. Enable single-optode editing only for local corrections.
+4. **Choose the display mode.** **Scalp** keeps optodes on the head surface. **Cortex** displays their first cortical contact. The default channel transmission depth is 25 mm and can be adjusted in **Info Panel**.
+5. **Inspect results.** Select an optode or channel to view scalp MNI, cortical MNI, and the highest-probability cortical region. The Info Panel reports the full top-three atlas result.
+6. **Describe the recording.** Expand **Device** when preparing BIDS output and enter the subject, task, acquisition, run, sampling frequency, and instrument metadata.
+7. **Save or export.** Save the editable workspace as `.cortexlume`, or select CSV, BIDS, or BrainNet Viewer output.
+
+## Data integrity and exports
+
+### CSV
+
+CSV export creates `cortexlume_optodes.csv` and `cortexlume_channels.csv`. These tables contain calculated coordinates, distances, channel definitions, and atlas results only. QC decisions and internal flags are deliberately excluded from CSV.
+
+`cortexlume_export.json` is the authoritative technical companion. It records the template and atlas hashes, projection settings, device metadata, complete layouts and instances, projection results, channel-level spacing errors, declared QC thresholds, flags, and export warnings. Export format version 3 separates readable results from machine-auditable provenance.
+
+### BIDS-NIRS
+
+BIDS export creates subject/session NIRS geometry files, coordinate-system metadata, device information, and one channel row per source–detector–wavelength combination. The corresponding SNIRF recording must be added to form a complete BIDS-NIRS dataset. CortexLume's full technical JSON is retained under `sourcedata`.
+
+### BrainNet Viewer
+
+**Export BrainNet** writes:
+
+- the standard CortexLume optode and channel CSV files;
+- `cortexlume_brainnet.node` and `cortexlume_brainnet.edge`;
+- `cortexlume_open_brainnet.m`;
+- the technical JSON and a short format note.
+
+The MATLAB script reads the exported CSV tables, rebuilds the BrainNet native files, locates `BrainNet_MapCfg`, selects BrainNet Viewer's ICBM152 surface, and opens the result. Nodes use cortical MNI coordinates; color value 1 represents sources and 2 represents detectors. Edges describe the designed S–D channel pairing, not measured functional or effective connectivity.
+
+Automatic launch requires MATLAB and BrainNet Viewer on the MATLAB search path. `CORTEXLUME_MATLAB` can point to a specific `matlab.exe`. The integration is tested against MATLAB R2020a and the 2019 BrainNet Viewer distribution (`BrainNet.m` 1.63 and `BrainNet_MapCfg.m` 1.52). BrainNet Viewer remains an external application and is not bundled with CortexLume. See the [official BrainNet Viewer project](https://www.nitrc.org/projects/bnv/) and cite [Xia, Wang, and He (2013)](https://doi.org/10.1371/journal.pone.0068910) when publishing its figures.
 
 ## Development
 
@@ -56,19 +105,14 @@ Run checks with `pnpm typecheck`, `pnpm test`, and `pnpm build`.
 
 ## Windows distribution
 
-Build the PyInstaller science service, packaged application, Squirrel installer,
-and portable ZIP with:
+Build the PyInstaller science service, packaged application, Squirrel installer, and portable ZIP with:
 
 ```powershell
 pnpm package:win
 ```
 
-Artifacts are written under `apps/desktop/out/make`. See
-`docs/SCIENTIFIC_ASSET_PIPELINE.md` for the reproducible anatomical asset
-contract and validation process.
+Artifacts are written under `apps/desktop/out/make`. Release builds package the checksum-pinned anatomical and atlas assets but do not include source archives, temporary processing environments, or external applications such as MATLAB and BrainNet Viewer.
 
 ## License
 
-CortexLume source code is released under the permissive [MIT License](LICENSE).
-Bundled anatomical templates and other scientific assets retain their upstream
-licenses and attribution requirements; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+CortexLume source code is released under the permissive [MIT License](LICENSE). Bundled anatomical templates and atlas assets retain their upstream licenses and attribution requirements; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

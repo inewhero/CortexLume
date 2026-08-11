@@ -20,3 +20,10 @@ subcortical 1 mm probability volumes, their FSL XML labels, and a derived compac
 top-three lookup index. The derivative is an axis-reordered, non-interpolated
 representation in TemplateFlow MNI152NLin6Asym RAS+ coordinates. Atlas values
 remain unchanged integer percentages and are not renormalized by CortexLume.
+
+BrainNet Viewer is an external GPL-licensed MATLAB application and is not
+bundled with CortexLume. The BrainNet export generates interoperable CSV,
+`.node`, `.edge`, and MATLAB script files, then calls the user's independently
+installed `BrainNet_MapCfg` entry point. Users should cite Xia, Wang, and He
+(2013), *BrainNet Viewer: A Network Visualization Tool for Human Brain
+Connectomics*, PLOS ONE 8:e68910 when publishing BrainNet Viewer figures.

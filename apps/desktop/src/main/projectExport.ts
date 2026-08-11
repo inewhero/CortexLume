@@ -63,10 +63,47 @@ function layoutForInstance(
   return project.layouts.find((layout) => layout.id === instance.definitionId);
 }
 
+function qualityControl(project: CortexLumeProject) {
+  const results = resultMap(project);
+  const codes = instanceCodes(project);
+  const channelSpacing = project.instances.flatMap((instance) => {
+    const layout = layoutForInstance(project, instance);
+    if (!layout) return [];
+    return layout.pairs.map((pair) => {
+      const result = results.get(`${instance.id}:${pair.id}`);
+      const sourceResult = results.get(`${instance.id}:${pair.sourceId}`);
+      const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
+      const actual = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
+      const error = actual === '' ? null : Number(Math.abs(actual - pair.nominalDistanceMm).toFixed(3));
+      return {
+        patch: codes.get(instance.id) ?? instance.id,
+        channel: pair.channelNumber,
+        nominalDistanceMm: Number(pair.nominalDistanceMm.toFixed(3)),
+        actualScalpSpacingMm: actual === '' ? null : actual,
+        absoluteErrorMm: error,
+        errorPercent: error == null
+          ? null
+          : Number((error / pair.nominalDistanceMm * 100).toFixed(2)),
+        status: error == null || result?.status === 'blocked'
+          ? 'unavailable'
+          : error > 5 ? 'fail' : error > 2 ? 'check' : 'pass',
+        flags: result?.qcFlags ?? ['projection_result_missing'],
+      };
+    });
+  });
+  return {
+    channelSpacing: {
+      definition: 'Absolute difference between the 2D nominal source-detector distance and the projected 3D optode-sphere-centre distance on the scalp.',
+      thresholdsMm: { passMaximum: 2, checkMaximum: 5 },
+      results: channelSpacing,
+    },
+  };
+}
+
 function exportMetadata(project: CortexLumeProject, kind: string, warnings: string[]) {
   return {
     format: 'cortexlume-export',
-    formatVersion: 2,
+    formatVersion: 3,
     kind,
     exportedAt: new Date().toISOString(),
     project: {
@@ -94,6 +131,7 @@ function exportMetadata(project: CortexLumeProject, kind: string, warnings: stri
       layouts: project.layouts,
       instances: project.instances,
       projectionResults: project.verifiedResults,
+      qualityControl: qualityControl(project),
     },
     warnings,
   };
@@ -114,7 +152,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
   const channelRows: unknown[][] = [[
     'patch', 'channel', 'source', 'detector',
     'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_cortex_spacing_mm',
-    'spacing_error_mm', 'spacing_error_percent', 'spacing_qc', 'short_channel',
+    'short_channel',
     'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
     'cortex_mni_r', 'cortex_mni_a', 'cortex_mni_s',
     'cortical_region_1', 'cortical_region_1_percent',
@@ -142,22 +180,13 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
       const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
       const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
       const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
-      const spacingError = actualScalpSpacing === ''
-        ? ''
-        : Number(Math.abs(actualScalpSpacing - pair.nominalDistanceMm).toFixed(3));
-      const spacingErrorPercent = spacingError === ''
-        ? ''
-        : Number((spacingError / pair.nominalDistanceMm * 100).toFixed(2));
-      const spacingQc = spacingError === ''
-        ? ''
-        : spacingError <= 5 && result?.status !== 'blocked' ? 'PASS' : 'CHECK';
       channelRows.push([
         code, pair.channelNumber ?? '',
         byId.get(pair.sourceId)?.label ?? pair.sourceId,
         byId.get(pair.detectorId)?.label ?? pair.detectorId,
         Number(pair.nominalDistanceMm.toFixed(3)),
         actualScalpSpacing, actualCortexSpacing,
-        spacingError, spacingErrorPercent, spacingQc, pair.shortChannel,
+        pair.shortChannel,
         ...vector(result?.scalpRasMm),
         ...vector(result?.corticalRasMm),
         ...topRegions(result?.underlyingCorticalRegions ?? []),
@@ -181,6 +210,118 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
     'cortexlume_channels.csv': csvTable(channelRows),
   };
   files['cortexlume_export.json'] = `${JSON.stringify(exportMetadata(project, 'csv', warnings), null, 2)}\n`;
+  return { files, warnings };
+}
+
+function brainNetMatlabScript(): string {
+  return `${[
+    "% CortexLume BrainNet Viewer bridge",
+    "% Rebuilds BrainNet Viewer files from the exported CSV tables and opens them.",
+    "root = fileparts(mfilename('fullpath'));",
+    "optodeCsv = fullfile(root, 'cortexlume_optodes.csv');",
+    "channelCsv = fullfile(root, 'cortexlume_channels.csv');",
+    "assert(isfile(optodeCsv), 'CortexLume:MissingOptodesCsv', 'Missing cortexlume_optodes.csv');",
+    "assert(isfile(channelCsv), 'CortexLume:MissingChannelsCsv', 'Missing cortexlume_channels.csv');",
+    "optodes = readtable(optodeCsv);",
+    "channels = readtable(channelCsv);",
+    "requiredOptodeColumns = {'patch','optode','type','cortex_mni_r','cortex_mni_a','cortex_mni_s'};",
+    "assert(all(ismember(requiredOptodeColumns, optodes.Properties.VariableNames)), 'CortexLume:InvalidOptodesCsv', 'CortexLume optode CSV columns are incomplete');",
+    "requiredChannelColumns = {'patch','source','detector'};",
+    "assert(all(ismember(requiredChannelColumns, channels.Properties.VariableNames)), 'CortexLume:InvalidChannelsCsv', 'CortexLume channel CSV columns are incomplete');",
+    "valid = isfinite(optodes.cortex_mni_r) & isfinite(optodes.cortex_mni_a) & isfinite(optodes.cortex_mni_s);",
+    "optodes = optodes(valid, :);",
+    "assert(height(optodes) > 0, 'CortexLume:NoCoordinates', 'No finite cortical MNI coordinates are available');",
+    "labels = strcat(string(optodes.patch), '_', string(optodes.optode));",
+    "labels = regexprep(labels, '\\s+', '_');",
+    "nodeColors = 1 + double(strcmpi(string(optodes.type), 'detector'));",
+    "nodeSizes = repmat(2.0, height(optodes), 1);",
+    "nodePath = fullfile(root, 'cortexlume_brainnet.node');",
+    "fid = fopen(nodePath, 'w');",
+    "assert(fid >= 0, 'CortexLume:NodeWriteFailed', 'Cannot create BrainNet node file');",
+    "cleanupNode = onCleanup(@() fclose(fid));",
+    "for row = 1:height(optodes)",
+    "    fprintf(fid, '%.6f %.6f %.6f %d %.3f %s\\n', optodes.cortex_mni_r(row), optodes.cortex_mni_a(row), optodes.cortex_mni_s(row), nodeColors(row), nodeSizes(row), labels(row));",
+    "end",
+    "clear cleanupNode;",
+    "nodeIndex = containers.Map(cellstr(labels), num2cell(1:height(optodes)));",
+    "edgeMatrix = zeros(height(optodes));",
+    "for row = 1:height(channels)",
+    "    sourceKey = char(strcat(string(channels.patch(row)), '_', string(channels.source(row))));",
+    "    detectorKey = char(strcat(string(channels.patch(row)), '_', string(channels.detector(row))));",
+    "    if isKey(nodeIndex, sourceKey) && isKey(nodeIndex, detectorKey)",
+    "        sourceIndex = nodeIndex(sourceKey);",
+    "        detectorIndex = nodeIndex(detectorKey);",
+    "        edgeMatrix(min(sourceIndex, detectorIndex), max(sourceIndex, detectorIndex)) = 1;",
+    "    end",
+    "end",
+    "edgePath = fullfile(root, 'cortexlume_brainnet.edge');",
+    "dlmwrite(edgePath, edgeMatrix, 'delimiter', '\\t', 'precision', '%.6f');",
+    "brainNetMap = which('BrainNet_MapCfg');",
+    "assert(~isempty(brainNetMap), 'CortexLume:BrainNetNotFound', 'BrainNet Viewer is not on the MATLAB path');",
+    "brainNetRoot = fileparts(brainNetMap);",
+    "surfacePath = fullfile(brainNetRoot, 'Data', 'SurfTemplate', 'BrainMesh_ICBM152.nv');",
+    "assert(isfile(surfacePath), 'CortexLume:BrainNetSurfaceMissing', 'BrainNet ICBM152 surface was not found');",
+    "fprintf('CortexLume: loading %d cortical optodes and %d channel links into BrainNet Viewer.\\n', height(optodes), nnz(edgeMatrix));",
+    "BrainNet_MapCfg(surfacePath, nodePath, edgePath);",
+  ].join('\r\n')}\r\n`;
+}
+
+export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
+  const csv = buildCsvExport(project);
+  const warnings = [...csv.warnings];
+  const results = resultMap(project);
+  const codes = instanceCodes(project);
+  const nodes: Array<{ key: string; label: string; coordinate: Vec3; color: number }> = [];
+
+  for (const instance of project.instances) {
+    const layout = layoutForInstance(project, instance);
+    if (!layout) continue;
+    const patch = codes.get(instance.id) ?? instance.id;
+    for (const optode of layout.optodes) {
+      const coordinate = results.get(`${instance.id}:${optode.id}`)?.corticalRasMm;
+      if (!coordinate?.every(Number.isFinite)) continue;
+      nodes.push({
+        key: `${instance.id}:${optode.id}`,
+        label: `${patch}_${optode.label}`.replaceAll(/\s+/g, '_'),
+        coordinate,
+        color: optode.type === 'source' ? 1 : 2,
+      });
+    }
+  }
+  if (nodes.length === 0) warnings.push('BrainNet Viewer output contains no finite cortical optode coordinates.');
+  const nodeIndex = new Map(nodes.map((node, index) => [node.key, index]));
+  const edges = Array.from({ length: nodes.length }, () => Array<number>(nodes.length).fill(0));
+  for (const instance of project.instances) {
+    const layout = layoutForInstance(project, instance);
+    if (!layout) continue;
+    for (const pair of layout.pairs) {
+      const source = nodeIndex.get(`${instance.id}:${pair.sourceId}`);
+      const detector = nodeIndex.get(`${instance.id}:${pair.detectorId}`);
+      if (source == null || detector == null) continue;
+      edges[Math.min(source, detector)]![Math.max(source, detector)] = 1;
+    }
+  }
+
+  const files = {
+    ...csv.files,
+    'cortexlume_export.json': `${JSON.stringify(exportMetadata(project, 'brainnet-viewer', warnings), null, 2)}\n`,
+    'cortexlume_brainnet.node': `${nodes.map((node) => [
+      ...node.coordinate.map((value) => value.toFixed(6)),
+      node.color,
+      '2.000',
+      node.label,
+    ].join(' ')).join('\r\n')}\r\n`,
+    'cortexlume_brainnet.edge': `${edges.map((row) => row.join('\t')).join('\r\n')}\r\n`,
+    'cortexlume_open_brainnet.m': brainNetMatlabScript(),
+    'README_BRAINNET.txt': `${[
+      'CortexLume BrainNet Viewer export',
+      '',
+      'Run cortexlume_open_brainnet.m in MATLAB to rebuild the .node and .edge files from the CSV tables and open BrainNet Viewer.',
+      'Nodes use cortical MNI RAS+ coordinates. Node color 1 denotes a source and color 2 denotes a detector.',
+      'Edges represent the designed source-detector channel pairing only; they are not measured functional or effective connectivity.',
+      'The bundled native files are provided for direct inspection and are regenerated by the MATLAB script before loading.',
+    ].join('\r\n')}\r\n`,
+  };
   return { files, warnings };
 }
 

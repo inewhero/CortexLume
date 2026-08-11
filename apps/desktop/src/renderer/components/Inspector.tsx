@@ -114,15 +114,15 @@ export function Inspector() {
     }
   };
 
-  const saveProject = async (saveAs = false) => {
+  const saveProject = async () => {
     try {
       const result = await window.cortexlume.project.save(
         project,
-        saveAs ? undefined : projectPath ?? undefined,
+        projectPath ?? undefined,
       );
       if (result) {
         setProjectPath(result.path);
-        setToast(saveAs ? 'Project archive saved as a new file.' : 'Project archive saved.');
+        setToast('Project archive saved.');
       }
     } catch (error) {
       setToast(`Save error: ${error instanceof Error ? error.message : String(error)}`);
@@ -138,6 +138,22 @@ export function Inspector() {
       }
     } catch (error) {
       setToast(`CSV export error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const exportBrainNet = async () => {
+    try {
+      setToast('Exporting and checking MATLAB / BrainNet Viewer…');
+      const snapshot = materializeProjectionSnapshot(project);
+      const annotated = await window.cortexlume.science.annotateProject(snapshot);
+      const result = await window.cortexlume.export.brainNet(annotated);
+      if (result) {
+        setToast(result.brainNet.launched
+          ? `Exported ${result.files.length} files and opened BrainNet Viewer.`
+          : `BrainNet files exported, but automatic launch was unavailable: ${result.brainNet.detail}`);
+      }
+    } catch (error) {
+      setToast(`BrainNet export error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -180,10 +196,10 @@ export function Inspector() {
         <div className="project-actions">
           <button onClick={() => { newProject(); setToast('New project created.'); }}>NEW</button>
           <button onClick={openProject}>OPEN</button>
-          <button className="primary" onClick={() => saveProject(false)}>SAVE</button>
+          <button className="primary" onClick={saveProject}>SAVE</button>
         </div>
         <div className="project-actions">
-          <button onClick={() => saveProject(true)}>SAVE AS</button>
+          <button onClick={exportBrainNet}>EXPORT BRAINNET</button>
           <button onClick={exportCsv}>EXPORT CSV</button>
           <button onClick={exportBids}>EXPORT BIDS</button>
         </div>

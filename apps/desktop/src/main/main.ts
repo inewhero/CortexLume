@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import {
   type Vec3,
 } from '@cortexlume/contracts';
 import { createProjectArchive, readProjectArchive } from './projectArchive';
-import { buildBidsGeometryExport, buildCsvExport, type ExportBundle } from './projectExport';
+import { buildBidsGeometryExport, buildBrainNetExport, buildCsvExport, type ExportBundle } from './projectExport';
 
 let mainWindow: BrowserWindow | null = null;
 let scienceProcess: ChildProcessWithoutNullStreams | null = null;
@@ -209,6 +209,57 @@ async function writeExportBundle(directory: string, bundle: ExportBundle): Promi
   return files.map(([filename]) => filename);
 }
 
+interface BrainNetLaunchStatus {
+  matlabFound: boolean;
+  brainNetFound: boolean;
+  launched: boolean;
+  detail: string;
+}
+
+function matlabCommand(): string {
+  return process.env.CORTEXLUME_MATLAB?.trim() || 'matlab';
+}
+
+function inspectBrainNet(command: string): Promise<BrainNetLaunchStatus> {
+  const expression = [
+    "location=which('BrainNet_MapCfg');",
+    "if isempty(location), error('CORTEXLUME_BRAINNET_NOT_FOUND'); end;",
+    "surface=fullfile(fileparts(location),'Data','SurfTemplate','BrainMesh_ICBM152.nv');",
+    "if ~isfile(surface), error('CORTEXLUME_BRAINNET_SURFACE_NOT_FOUND'); end;",
+    "fprintf('CORTEXLUME_BRAINNET_READY %s\\n',location);",
+  ].join(' ');
+  return new Promise((resolve) => {
+    execFile(command, ['-batch', expression], { timeout: 90_000, windowsHide: true }, (error, stdout, stderr) => {
+      const match = stdout.match(/CORTEXLUME_BRAINNET_READY\s+([^\r\n]+)/);
+      if (!error && match) {
+        resolve({ matlabFound: true, brainNetFound: true, launched: false, detail: match[1]!.trim() });
+        return;
+      }
+      const missingExecutable = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
+      resolve({
+        matlabFound: !missingExecutable,
+        brainNetFound: false,
+        launched: false,
+        detail: (missingExecutable
+          ? 'MATLAB executable was not found. Set CORTEXLUME_MATLAB to matlab.exe.'
+          : `${stderr || stdout || error?.message || 'BrainNet Viewer was not found on the MATLAB path.'}`.trim()).slice(-500),
+      });
+    });
+  });
+}
+
+function launchBrainNet(command: string, scriptPath: string, status: BrainNetLaunchStatus): BrainNetLaunchStatus {
+  const escapedPath = scriptPath.replaceAll("'", "''");
+  const expression = `try, run('${escapedPath}'); catch error, disp(getReport(error,'extended')); end`;
+  const child = spawn(command, ['-r', expression], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+  });
+  child.unref();
+  return { ...status, launched: true, detail: `BrainNet Viewer launched via ${status.detail}` };
+}
+
 function registerIpc(): void {
   ipcMain.handle('window:minimize', () => mainWindow?.minimize());
   ipcMain.handle('window:toggle-maximize', () => {
@@ -258,6 +309,30 @@ function registerIpc(): void {
     const bundle = buildCsvExport(project);
     const files = await writeExportBundle(directory, bundle);
     return { directory, files, warnings: bundle.warnings };
+  });
+
+  ipcMain.handle('export:brainnet', async (_event, rawProject: CortexLumeProject) => {
+    const project = CortexLumeProjectSchema.parse(rawProject);
+    const directory = await chooseExportDirectory('Export and open in BrainNet Viewer');
+    if (!directory) return null;
+    await mkdir(directory, { recursive: true });
+    const bundle = buildBrainNetExport(project);
+    const files = await writeExportBundle(directory, bundle);
+    const command = matlabCommand();
+    let brainNet = await inspectBrainNet(command);
+    const hasCorticalCoordinates = project.verifiedResults.some(
+      (result) => result.subjectKind === 'optode' && result.corticalRasMm?.every(Number.isFinite),
+    );
+    if (brainNet.brainNetFound && hasCorticalCoordinates) {
+      brainNet = launchBrainNet(command, path.join(directory, 'cortexlume_open_brainnet.m'), brainNet);
+    } else if (!hasCorticalCoordinates) {
+      brainNet = { ...brainNet, detail: 'Exported files, but no finite cortical optode coordinates were available to load.' };
+    }
+    const warnings = [
+      ...bundle.warnings,
+      ...(brainNet.launched ? [] : [brainNet.detail]),
+    ];
+    return { directory, files, warnings, brainNet };
   });
 
   ipcMain.handle('export:bids-geometry', async (_event, rawProject: CortexLumeProject) => {
