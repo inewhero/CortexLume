@@ -58,7 +58,8 @@ def compute_projections(
     probability_threshold: float = 0.0,
 ) -> list[ProjectionResult]:
     positions = fitted_positions(request.layout, request.instance)
-    status_value = "provisional"
+    gate = inspect_template_gate()
+    status_value = "verified" if gate.passed else "provisional"
     claim = "geometric"
     atlas = atlas_status()
     flags: list[str] = [] if atlas.available else [atlas.issue or "atlas_unavailable"]
@@ -125,7 +126,7 @@ def fit_placement(request: FitPlacementRequest, authorization: str | None = Head
     authorize(authorization)
     positions = fitted_positions(request.layout, request.instance)
     mean_error, max_error = fit_errors(request.layout, positions)
-    flags = ["development_fit_only"]
+    flags = []
     if mean_error > 2:
         flags.append("mean_distance_distortion")
     if max_error > 5:

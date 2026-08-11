@@ -74,6 +74,7 @@ describe('project data exports', () => {
     expect(metadata.formatVersion).toBe(3);
     expect(metadata.technical.instances[0].fitQc.flags).not.toContain('template_unverified');
     expect(metadata.technical.projectionResults.length).toBeGreaterThan(0);
+    expect(metadata.technical.projectionResults.every((result: { status: string }) => result.status === 'verified')).toBe(true);
     expect(metadata.technical.qualityControl.channelSpacing.thresholdsMm).toEqual({
       passMaximum: 2,
       checkMaximum: 5,
@@ -117,7 +118,7 @@ describe('project data exports', () => {
     expect(edgeRows.every((row) => row.split('\t').length === 15)).toBe(true);
     expect(bundle.files['cortexlume_open_brainnet.m']).toContain("readtable(optodeCsv)");
     expect(bundle.files['cortexlume_open_brainnet.m']).toContain('BrainNet_MapCfg(surfacePath, nodePath, edgePath)');
-    expect(bundle.files['README_BRAINNET.txt']).toContain('not measured functional or effective connectivity');
+    expect(bundle.files['README_BRAINNET.txt']).toContain('designed source-detector channel topology');
   });
 
   it('uses configured BIDS entities in directories and filenames', () => {

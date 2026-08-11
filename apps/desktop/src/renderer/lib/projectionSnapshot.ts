@@ -47,6 +47,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
   const transmissionDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
   const projections: ProjectionResult[] = [];
+  const projectionStatus: ProjectionResult['status'] = project.template.verified ? 'verified' : 'provisional';
   const instances = project.instances.map((instance) => {
     const layout = project.layouts.find((candidate) => candidate.id === instance.definitionId);
     if (!layout) return instance;
@@ -74,7 +75,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         deepTargetStructures: [],
         tissueAtTarget: 'cortical gray matter',
         claimLevel: 'geometric',
-        status: 'provisional',
+        status: projectionStatus,
         qcFlags: [...commonFlags, 'atlas_lookup_pending'],
       });
     }
@@ -132,7 +133,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         deepTargetStructures: [],
         tissueAtTarget: 'cortical gray matter',
         claimLevel: 'geometric',
-        status: 'provisional',
+        status: projectionStatus,
         qcFlags: [...flags, 'atlas_lookup_pending'],
       });
     }

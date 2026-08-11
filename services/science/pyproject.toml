@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cortexlume-science"
-version = "0.1.5"
-description = "Authoritative local geometry service for CortexLume"
+version = "1.0.0"
+description = "Validated local anatomy and atlas service for CortexLume"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.116,<1",

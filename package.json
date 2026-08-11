@@ -1,17 +1,10 @@
 {
   "name": "cortexlume",
-  "version": "0.1.5",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@10.30.0",
   "engines": {
     "node": ">=24"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "electron-winstaller",
-      "esbuild"
-    ]
   },
   "scripts": {
     "dev": "pnpm --filter @cortexlume/desktop start",

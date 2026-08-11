@@ -41,7 +41,7 @@ def test_fit_returns_geometric_coordinates_and_region_labels() -> None:
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["templateVerified"] is True
-    assert {item["status"] for item in body["projections"]} == {"provisional"}
+    assert {item["status"] for item in body["projections"]} == {"verified"}
     assert {item["claimLevel"] for item in body["projections"]} == {"geometric"}
     optodes = [item for item in body["projections"] if item["subjectKind"] == "optode"]
     assert all(item["underlyingCorticalRegions"][0]["labelEn"] for item in optodes)

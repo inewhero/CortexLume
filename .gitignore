@@ -15,6 +15,21 @@ node_modules/
 /CortexLume-*.zip
 /hm_icbm152.zip
 
+# Local projects and exported analysis bundles
+/*.cortexlume
+/cortexlume_optodes.csv
+/cortexlume_channels.csv
+/cortexlume_export.json
+/cortexlume_brainnet.node
+/cortexlume_brainnet.edge
+/cortexlume_open_brainnet.m
+/README_BRAINNET.txt
+
+# Local configuration and credentials
+/.env
+/.env.*
+!/.env.example
+
 # Test, analysis, and runtime caches
 __pycache__/
 .pytest_cache/

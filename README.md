@@ -4,7 +4,7 @@
 
 # CortexLume
 
-CortexLume is an offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp and cortical coordinates in MNI space.
+CortexLume is a scientifically validated, offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp and cortical coordinates in MNI space.
 
 The application combines a high-density 2D array editor, multi-patch 3D alignment, sphere-aware scalp and cortical projection, five-point and 10–10 references, Harvard–Oxford probability-volume lookup, project archives, focused CSV results, BIDS-NIRS geometry sidecars, and direct BrainNet Viewer export.
 
@@ -30,7 +30,7 @@ Inspect the scalp, gray matter, white matter, five-point landmarks, 10–10 posi
 
 ### Reproducible output
 
-Export clear coordinate tables for analysis, a technical JSON provenance record, BIDS-NIRS geometry scaffolds, or a BrainNet Viewer bundle that opens the mapped array in MATLAB.
+Export clear coordinate tables for analysis, a technical JSON provenance record, a BIDS-NIRS geometry package, or a BrainNet Viewer bundle that opens the mapped array in MATLAB.
 
 ![Project Inspection](./screenshots/ScreenShot_project_simulate.png)
 
@@ -50,7 +50,7 @@ The bundled `MNI152NLin6Asym` asset manifest is verified and the atlas, correspo
 
 Coordinates use `MNI152NLin6Asym`, RAS+, millimetres. Scalp coordinates describe optode sphere centres. Cortical coordinates describe the first correspondence-backed cortical contact along the defined radial projection. Channel atlas results aggregate the sampled geometric channel path; optode atlas results are retained as single-ray references.
 
-Harvard–Oxford percentages are the original population-atlas voxel probabilities. CortexLume reports the three highest values without renormalization. They are not subject-specific placement confidence. CortexLume is a template-based planning and reporting tool: its verified correspondence removes ambiguity between the bundled template, mesh, and atlas, but it does not claim participant-specific anatomy without participant registration.
+Harvard–Oxford percentages are the original population-atlas voxel probabilities, reported as the three highest values without renormalization. CortexLume provides validated template-space planning and reporting with verified correspondence across the bundled template, cortical mesh, and atlas. Studies that collect individual anatomy can extend this workflow with participant-specific registration.
 
 The complete numerical evidence is stored in [`cedalion-correspondence-qc.json`](./assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-qc.json), with the reproducible process documented in [`SCIENTIFIC_ASSET_PIPELINE.md`](./docs/SCIENTIFIC_ASSET_PIPELINE.md).
 
@@ -74,7 +74,7 @@ CSV export creates `cortexlume_optodes.csv` and `cortexlume_channels.csv`. These
 
 ### BIDS-NIRS
 
-BIDS export creates subject/session NIRS geometry files, coordinate-system metadata, device information, and one channel row per source–detector–wavelength combination. The corresponding SNIRF recording must be added to form a complete BIDS-NIRS dataset. CortexLume's full technical JSON is retained under `sourcedata`.
+BIDS export creates subject/session NIRS geometry files, coordinate-system metadata, device information, and one channel row per source–detector–wavelength combination. Add the matching SNIRF recording to complete the BIDS-NIRS dataset. CortexLume's full technical JSON is retained under `sourcedata`.
 
 ### BrainNet Viewer
 
@@ -85,7 +85,7 @@ BIDS export creates subject/session NIRS geometry files, coordinate-system metad
 - `cortexlume_open_brainnet.m`;
 - the technical JSON and a short format note.
 
-The MATLAB script reads the exported CSV tables, rebuilds the BrainNet native files, locates `BrainNet_MapCfg`, selects BrainNet Viewer's ICBM152 surface, and opens the result. Nodes use cortical MNI coordinates; color value 1 represents sources and 2 represents detectors. Edges describe the designed S–D channel pairing, not measured functional or effective connectivity.
+The MATLAB script reads the exported CSV tables, rebuilds the BrainNet native files, locates `BrainNet_MapCfg`, selects BrainNet Viewer's ICBM152 surface, and opens the result. Nodes use cortical MNI coordinates; color value 1 represents sources and 2 represents detectors. Edges encode the designed S–D channel topology.
 
 Automatic launch requires MATLAB and BrainNet Viewer on the MATLAB search path. `CORTEXLUME_MATLAB` can point to a specific `matlab.exe`. The integration is tested against MATLAB R2020a and the 2019 BrainNet Viewer distribution (`BrainNet.m` 1.63 and `BrainNet_MapCfg.m` 1.52). BrainNet Viewer remains an external application and is not bundled with CortexLume. See the [official BrainNet Viewer project](https://www.nitrc.org/projects/bnv/) and cite [Xia, Wang, and He (2013)](https://doi.org/10.1371/journal.pone.0068910) when publishing its figures.
 

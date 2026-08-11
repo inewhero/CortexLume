@@ -1,3 +1,12 @@
 packages:
   - apps/*
   - packages/*
+
+nodeLinker: hoisted
+preferOffline: true
+strictPeerDependencies: false
+
+onlyBuiltDependencies:
+  - electron
+  - electron-winstaller
+  - esbuild
