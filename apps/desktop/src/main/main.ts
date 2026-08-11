@@ -7,8 +7,10 @@ import {
   CortexLumeProjectSchema,
   FitPlacementRequestSchema,
   FitPlacementResponseSchema,
+  AtlasLabelSchema,
   type CortexLumeProject,
   type FitPlacementRequest,
+  type Vec3,
 } from '@cortexlume/contracts';
 import { createProjectArchive, readProjectArchive } from './projectArchive';
 import { buildBidsGeometryExport, buildCsvExport, type ExportBundle } from './projectExport';
@@ -19,6 +21,25 @@ let sciencePort: number | null = null;
 let scienceToken = '';
 let scienceReady: Promise<void> | null = null;
 const headlessSmokeTest = process.env.CORTEXLUME_HEADLESS_TEST === '1';
+
+function quadraticPathThroughTarget(source: Vec3, target: Vec3, detector: Vec3, count = 33): Vec3[] {
+  const control: Vec3 = [
+    2 * target[0] - (source[0] + detector[0]) / 2,
+    2 * target[1] - (source[1] + detector[1]) / 2,
+    2 * target[2] - (source[2] + detector[2]) / 2,
+  ];
+  return Array.from({ length: count }, (_, index): Vec3 => {
+    const t = index / (count - 1);
+    const a = (1 - t) ** 2;
+    const b = 2 * (1 - t) * t;
+    const c = t ** 2;
+    return [
+      a * source[0] + b * control[0] + c * detector[0],
+      a * source[1] + b * control[1] + c * detector[1],
+      a * source[2] + b * control[2] + c * detector[2],
+    ];
+  });
+}
 
 function resolveScienceCommand(): { command: string; args: string[]; cwd: string } {
   if (app.isPackaged) {
@@ -108,7 +129,7 @@ async function createWindow(): Promise<void> {
     backgroundColor: '#0a0d12',
     ...(app.isPackaged ? {} : { icon: path.join(app.getAppPath(), 'assets', 'icon.png') }),
     frame: false,
-    show: false,
+    show: !app.isPackaged && !headlessSmokeTest,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -127,6 +148,10 @@ async function createWindow(): Promise<void> {
     if (!isDevNavigation) event.preventDefault();
   });
 
+  mainWindow.once('ready-to-show', () => {
+    if (!headlessSmokeTest) mainWindow?.show();
+  });
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     await mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
@@ -134,9 +159,7 @@ async function createWindow(): Promise<void> {
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
   }
-  mainWindow.once('ready-to-show', () => {
-    if (!headlessSmokeTest) mainWindow?.show();
-  });
+  if (!headlessSmokeTest && !mainWindow.isVisible()) mainWindow.show();
 }
 
 async function atomicWrite(destination: string, data: Uint8Array | string): Promise<void> {
@@ -259,6 +282,87 @@ function registerIpc(): void {
     const request = FitPlacementRequestSchema.parse(rawRequest);
     const response = await scienceRequest<unknown>('/v1/placements/fit', request);
     return FitPlacementResponseSchema.parse(response);
+  });
+
+  ipcMain.handle('science:atlas-lookup', async (_event, point: [number, number, number], probabilityThreshold = 0) => {
+    const response = await scienceRequest<{
+      atlasVerified: boolean;
+      results: Array<{ corticalRegions: unknown[] }>;
+    }>('/v1/atlas/query-batch', {
+      points: [{ id: 'selection', corticalRasMm: point, deepTargetRasMm: null }],
+      probabilityThreshold,
+    });
+    const candidate = response.results[0]?.corticalRegions ?? [];
+    return AtlasLabelSchema.array().parse(candidate);
+  });
+
+  ipcMain.handle('science:atlas-lookup-path', async (
+    _event,
+    points: Array<[number, number, number]>,
+    probabilityThreshold = 0,
+  ) => {
+    const response = await scienceRequest<{
+      atlasVerified: boolean;
+      regions: unknown[];
+    }>('/v1/atlas/query-path', { points, probabilityThreshold });
+    return AtlasLabelSchema.array().parse(response.regions ?? []);
+  });
+
+  ipcMain.handle('science:annotate-project', async (_event, rawProject: CortexLumeProject) => {
+    const project = CortexLumeProjectSchema.parse(rawProject);
+    const response = await scienceRequest<{
+      atlasVerified: boolean;
+      issue: string | null;
+      results: Array<{
+        id: string;
+        corticalRegions: CortexLumeProject['verifiedResults'][number]['underlyingCorticalRegions'];
+        deepStructures: CortexLumeProject['verifiedResults'][number]['deepTargetStructures'];
+      }>;
+    }>('/v1/atlas/query-batch', {
+      points: project.verifiedResults.map((result, index) => ({
+        id: String(index),
+        corticalRasMm: result.corticalRasMm,
+        deepTargetRasMm: result.depthTargetRasMm,
+      })),
+      probabilityThreshold: project.projectionSettings.atlasProbabilityThreshold,
+    });
+    const byIndex = new Map(response.results.map((result) => [Number(result.id), result]));
+    const pathRegions = await Promise.all(project.verifiedResults.map(async (result) => {
+      if (result.subjectKind !== 'pair' || !result.instanceId || !result.corticalRasMm) return null;
+      const instance = project.instances.find((candidate) => candidate.id === result.instanceId);
+      const layout = project.layouts.find((candidate) => candidate.id === instance?.definitionId);
+      const pair = layout?.pairs.find((candidate) => candidate.id === result.subjectId);
+      if (!pair) return null;
+      const source = project.verifiedResults.find((candidate) =>
+        candidate.instanceId === result.instanceId
+        && candidate.subjectKind === 'optode'
+        && candidate.subjectId === pair.sourceId)?.corticalRasMm;
+      const detector = project.verifiedResults.find((candidate) =>
+        candidate.instanceId === result.instanceId
+        && candidate.subjectKind === 'optode'
+        && candidate.subjectId === pair.detectorId)?.corticalRasMm;
+      if (!source || !detector) return null;
+      const pathResponse = await scienceRequest<{ regions: unknown[] }>('/v1/atlas/query-path', {
+        points: quadraticPathThroughTarget(source, result.corticalRasMm, detector),
+        probabilityThreshold: project.projectionSettings.atlasProbabilityThreshold,
+      });
+      return AtlasLabelSchema.array().parse(pathResponse.regions ?? []);
+    }));
+    return CortexLumeProjectSchema.parse({
+      ...project,
+      verifiedResults: project.verifiedResults.map((result, index) => {
+        const annotation = byIndex.get(index);
+        return {
+          ...result,
+          underlyingCorticalRegions: pathRegions[index] ?? annotation?.corticalRegions ?? [],
+          deepTargetStructures: annotation?.deepStructures ?? [],
+          qcFlags: [
+            ...result.qcFlags.filter((flag) => flag !== 'atlas_lookup_pending' && !flag.startsWith('atlas_unavailable')),
+            ...(response.atlasVerified ? [] : [response.issue ?? 'atlas_unavailable']),
+          ],
+        };
+      }),
+    });
   });
 }
 

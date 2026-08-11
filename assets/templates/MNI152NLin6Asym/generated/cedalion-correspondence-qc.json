@@ -1,0 +1,179 @@
+{
+  "format": "cortexlume-cedalion-correspondence-qc",
+  "formatVersion": 1,
+  "source": {
+    "name": "Cedalion ICBM152 head model",
+    "version": "26.5.1",
+    "url": "https://doc.ibs.tu-berlin.de/cedalion/datasets/26.5.1/hm_icbm152.zip",
+    "sha256": "91bb99709b6ceadd41674acc0db6cf26d70dccb57e41797b474aa9ce6aeed3e8",
+    "sha256Verified": true
+  },
+  "vertexMni": {
+    "rows": 25000,
+    "brainObjVertices": 25000,
+    "sequentialVertexIndices": true,
+    "directlyComparable": true,
+    "affineResiduals": {
+      "meanMm": 0.000481,
+      "medianMm": 0.000493,
+      "p95Mm": 0.000689,
+      "maxMm": 0.000852
+    },
+    "highResolutionMesh": {
+      "vertices": 320371,
+      "uniqueMappedIndices": 25000,
+      "indexIntegrity": true,
+      "mappedAffineResiduals": {
+        "meanMm": 0.000481,
+        "medianMm": 0.000493,
+        "p95Mm": 0.000689,
+        "maxMm": 0.000852
+      }
+    }
+  },
+  "voxelToVertex": {
+    "shape": [
+      12131401,
+      25000
+    ],
+    "nonzeroEntries": 614935,
+    "candidateTissueVoxelCounts": {
+      "gm": 998406,
+      "wm": 621108,
+      "csf": 400372,
+      "scalp": 2686200,
+      "skull": 866949,
+      "brainUnion": 2019886,
+      "allTissueUnion": 5573035,
+      "fullGrid": 12131401
+    },
+    "matrixVoxelAxis": 12131401,
+    "matchingTissueCounts": [
+      "fullGrid"
+    ]
+  },
+  "targetGrid": {
+    "cedalionShape": [
+      193,
+      239,
+      263
+    ],
+    "targetShape": [
+      182,
+      218,
+      182
+    ],
+    "cedalionAffine": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        -96.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        -132.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        -148.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "targetAffine": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        -91.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        -126.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        -72.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "numericallyIdentical": false,
+    "targetFromCedalionVoxel": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        -5.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        -6.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        -76.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "cedalionFromTargetVoxel": [
+      [
+        1.0,
+        0.0,
+        0.0,
+        5.0
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        6.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0,
+        76.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "integerVoxelEmbedding": true,
+    "cedalionInsideTarget": false,
+    "targetInsideCedalion": true,
+    "relation": "target_is_integer_subgrid_of_cedalion",
+    "cedalionBrainVsTargetMaskDice": 0.953731
+  },
+  "decision": "identity_accepted",
+  "scienceGatePromoted": true
+}

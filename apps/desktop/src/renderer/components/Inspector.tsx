@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  corticalRegionProbabilities,
+  channelSensitivityPath,
   distance3,
   fittedOptodePositions,
   formatRas,
-  projectToCorticalSurface,
+  projectToCorticalContact,
   projectScalpSphereCenter,
 } from '../lib/geometry';
 import { materializeProjectionSnapshot } from '../lib/projectionSnapshot';
@@ -22,6 +22,7 @@ const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code:
 ];
 
 function ProbabilityList({ values }: { values: Array<{ label: string; probability: number }> }) {
+  if (values.length === 0) return <div className="empty-probability">NO ATLAS LABEL AT THIS VOXEL</div>;
   return <div className="probability-list">{values.map((value) => (
     <div key={value.label}>
       <span>{value.label}</span><strong>{Math.round(value.probability * 100)}%</strong>
@@ -31,7 +32,7 @@ function ProbabilityList({ values }: { values: Array<{ label: string; probabilit
 }
 
 export function Inspector() {
-  const [engineOnline, setEngineOnline] = useState(false);
+  const [corticalRegions, setCorticalRegions] = useState<Array<{ label: string; probability: number }>>([]);
   const [materialPopup, setMaterialPopup] = useState<keyof AnatomyAppearance | null>(null);
   const materialPopupRef = useRef<HTMLDivElement>(null);
   const {
@@ -39,7 +40,7 @@ export function Inspector() {
     selectedInstanceId, selectedHeadOptodeId, selectedHeadPairId,
     newProject, loadProject, setProjectPath, setProjectName, setToast,
     setProjectionMode, resetInstanceOverride, setAnatomyLayer, setAnatomyAppearance,
-    setBidsSettingsExpanded,
+    setBidsSettingsExpanded, setDefaultDepth,
   } = useProjectStore();
   const instance = project.instances.find((item) => item.id === selectedInstanceId);
   const layout = project.layouts.find((item) => item.id === instance?.definitionId);
@@ -47,6 +48,7 @@ export function Inspector() {
   const pair = layout?.pairs.find((item) => item.id === selectedHeadPairId);
   const positions = useMemo(() => layout && instance ? fittedOptodePositions(layout, instance) : new Map(), [layout, instance]);
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
+  const transmissionDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
   const pairSource = pair ? positions.get(pair.sourceId) : undefined;
   const pairDetector = pair ? positions.get(pair.detectorId) : undefined;
   const scalp = selectedHeadOptodeId
@@ -58,15 +60,36 @@ export function Inspector() {
           (pairSource[2] + pairDetector[2]) / 2,
         ] as [number, number, number]
       : undefined;
-  const cortical = scalp ? projectToCorticalSurface(scalp, radiusMm) : undefined;
+  const channelPath = pairSource && pairDetector
+    ? channelSensitivityPath(pairSource, pairDetector, radiusMm, transmissionDepthMm)
+    : undefined;
+  // Optodes retain a single-ray reference; channel labels summarize the sampled path.
+  const cortical = channelPath?.target ?? (scalp ? projectToCorticalContact(scalp) : undefined);
   const scalpMni = scalp ? projectScalpSphereCenter(scalp, radiusMm) : undefined;
-  const corticalRegions = cortical ? corticalRegionProbabilities(cortical) : [];
   const override = instance?.overrides.find((item) => item.optodeId === selectedHeadOptodeId);
 
   useEffect(() => {
-    if (!window.cortexlume) return;
-    void window.cortexlume.science.health().then((health) => setEngineOnline(health.ok));
-  }, []);
+    let current = true;
+    setCorticalRegions([]);
+    if (!cortical || !window.cortexlume) return () => { current = false; };
+    const lookup = channelPath
+      ? window.cortexlume.science.atlasLookupPath(
+          channelPath.points,
+          project.projectionSettings.atlasProbabilityThreshold,
+        )
+      : window.cortexlume.science.atlasLookup(
+          cortical,
+          project.projectionSettings.atlasProbabilityThreshold,
+        );
+    void lookup
+      .then((values) => {
+        if (current) setCorticalRegions(values.map((value) => ({ label: value.labelEn, probability: value.probability })));
+      })
+      .catch(() => {
+        if (current) setCorticalRegions([]);
+      });
+    return () => { current = false; };
+  }, [cortical?.[0], cortical?.[1], cortical?.[2], pair?.id, transmissionDepthMm, project.projectionSettings.atlasProbabilityThreshold]);
 
   useEffect(() => {
     const closeMaterialPopup = (event: PointerEvent) => {
@@ -108,7 +131,8 @@ export function Inspector() {
 
   const exportCsv = async () => {
     try {
-      const result = await window.cortexlume.export.csv(materializeProjectionSnapshot(project));
+      const snapshot = materializeProjectionSnapshot(project);
+      const result = await window.cortexlume.export.csv(await window.cortexlume.science.annotateProject(snapshot));
       if (result) {
         setToast(`Exported ${result.files.length} files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
       }
@@ -125,7 +149,8 @@ export function Inspector() {
       return;
     }
     try {
-      const result = await window.cortexlume.export.bidsGeometry(materializeProjectionSnapshot(project));
+      const snapshot = materializeProjectionSnapshot(project);
+      const result = await window.cortexlume.export.bidsGeometry(await window.cortexlume.science.annotateProject(snapshot));
       if (result) {
         setToast(`Exported ${result.files.length} BIDS geometry files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
       }
@@ -137,7 +162,7 @@ export function Inspector() {
   return (
     <div className="inspector-content">
       <section className="control-block project-control">
-        <div className="control-block-title"><span>PROJECT</span><code className={engineOnline ? 'online' : 'offline'}>{engineOnline ? 'ENGINE ONLINE' : 'ENGINE OFFLINE'}</code></div>
+        <div className="control-block-title"><span>PROJECT</span></div>
         <label className="project-name-field">
           <span>PROJECT NAME</span>
           <input
@@ -224,6 +249,20 @@ export function Inspector() {
           <button className={project.projectionSettings.mode === 'scalp' ? 'active' : ''} onClick={() => setProjectionMode('scalp')}>SCALP</button>
           <button className={project.projectionSettings.mode === 'cortex' ? 'active' : ''} onClick={() => setProjectionMode('cortex')}>CORTEX</button>
         </div>
+        <label className="parameter-field">
+          <span>TRANSMISSION DEPTH FROM SCALP</span>
+          <div>
+            <input
+              type="range"
+              min="5"
+              max="40"
+              step="1"
+              value={transmissionDepthMm}
+              onInput={(event) => setDefaultDepth(Number(event.currentTarget.value))}
+            />
+            <code>{transmissionDepthMm} mm</code>
+          </div>
+        </label>
       </section>
 
       <section className="control-block selection-block">
@@ -233,10 +272,7 @@ export function Inspector() {
           <dl>
             <dt>INSTANCE</dt><dd>{layout?.name ?? '—'}</dd>
             <dt>ANCHOR MNI</dt><dd>{formatRas(instance.anchorRasMm)}</dd>
-            <dt>ROTATION</dt><dd>{(instance.rotationRad * 180 / Math.PI).toFixed(1)}°</dd>
-            <dt>MAPPING ROT.</dt><dd>{((instance.mappingRotationRad ?? 0) * 180 / Math.PI).toFixed(1)}°</dd>
             <dt>EDIT MODE</dt><dd>{instance.locked ? 'PATCH' : 'OPTODES'}</dd>
-            <dt>LOCAL OFFSETS</dt><dd>{instance.overrides.length}</dd>
           </dl>
         )}
         {instance && optode && (
@@ -248,7 +284,7 @@ export function Inspector() {
             <dl>
               <dt>SCALP MNI</dt><dd>{formatRas(scalpMni)}</dd>
               <dt>CORTEX MNI</dt><dd>{formatRas(cortical)}</dd>
-              <dt>CORTICAL REGION</dt><dd><ProbabilityList values={corticalRegions} /></dd>
+              <dt>REFERENCE REGION</dt><dd><ProbabilityList values={corticalRegions} /></dd>
             </dl>
             {override && <button className="wide" onClick={() => resetInstanceOverride(instance.id, optode.id)}>RESET LOCAL OFFSET</button>}
           </>
@@ -262,7 +298,7 @@ export function Inspector() {
             <dl>
               <dt>SCALP MNI</dt><dd>{formatRas(scalpMni)}</dd>
               <dt>CORTEX MNI</dt><dd>{formatRas(cortical)}</dd>
-              <dt>CORTICAL REGION</dt><dd><ProbabilityList values={corticalRegions} /></dd>
+              <dt>PATH REGIONS</dt><dd><ProbabilityList values={corticalRegions} /></dd>
             </dl>
           </>
         )}

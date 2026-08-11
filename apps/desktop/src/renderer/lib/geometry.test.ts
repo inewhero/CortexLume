@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { LayoutDefinition, LayoutInstance } from '@cortexlume/contracts';
+import * as THREE from 'three';
 import {
   SCALP_RADII,
-  corticalRegionProbabilities,
-  corticalRegionFromRas,
-  deepStructureProbabilities,
+  channelSensitivityPath,
+  distance3,
   effectiveUv,
   findLayoutOverlaps,
   fittedOptodePositions,
   projectScalpSphereCenter,
+  projectToCorticalContact,
   projectToCorticalSurface,
   projectToEllipsoid,
+  rasFromThree,
+  threeFromRas,
 } from './geometry';
 import { FIVE_POINT_LANDMARKS, TEN_TEN_POINTS } from './anatomy';
 
@@ -42,6 +45,10 @@ function ellipsoidEquation([x, y, z]: [number, number, number]): number {
 }
 
 describe('geometric head mapping', () => {
+  it('round-trips RAS+ coordinates through the Three.js axis convention', () => {
+    const ras: [number, number, number] = [-42.25, 18.5, 63.75];
+    expect(rasFromThree(new THREE.Vector3(...threeFromRas(ras)))).toEqual(ras);
+  });
   it('projects points onto the scalp ellipsoid', () => {
     const point = projectToEllipsoid([25, -40, 85]);
     expect(ellipsoidEquation(point)).toBeCloseTo(1, 10);
@@ -51,9 +58,20 @@ describe('geometric head mapping', () => {
     const scalp = projectToEllipsoid([25, -40, 85]);
     const sphereCenter = projectScalpSphereCenter(scalp, 4);
     const pointContact = projectToCorticalSurface(scalp, 0);
+    expect(projectToCorticalContact(scalp)).toEqual(pointContact);
     const sphereContact = projectToCorticalSurface(scalp, 4);
     expect(Math.hypot(...sphereCenter)).toBeGreaterThan(Math.hypot(...scalp));
     expect(Math.hypot(...sphereContact)).toBeGreaterThan(Math.hypot(...pointContact));
+  });
+
+  it('builds a channel path whose midpoint is the requested transmission target', () => {
+    const source = projectToEllipsoid([-20, 60, 75]);
+    const detector = projectToEllipsoid([20, 60, 75]);
+    const path = channelSensitivityPath(source, detector, 3.6, 15, 33);
+    expect(path.points).toHaveLength(33);
+    expect(path.points[16]).toEqual(path.target);
+    expect(distance3(path.points[0]!, projectToCorticalContact(source))).toBeLessThan(1e-8);
+    expect(distance3(path.points[32]!, projectToCorticalContact(detector))).toBeLessThan(1e-8);
   });
 
   it('uses an individual optode override when present', () => {
@@ -74,12 +92,6 @@ describe('geometric head mapping', () => {
     for (const point of [...FIVE_POINT_LANDMARKS, ...TEN_TEN_POINTS]) {
       expect(ellipsoidEquation(point.rasMm)).toBeCloseTo(1, 8);
     }
-  });
-
-  it('returns an English cortical region for MNI coordinates', () => {
-    expect(corticalRegionFromRas([-42, 8, 62])).toBe('Left Precentral Gyrus');
-    expect(corticalRegionProbabilities([-42, 8, 62])).toHaveLength(3);
-    expect(deepStructureProbabilities([-20, -8, 5])).toHaveLength(3);
   });
 
   it('reports overlapping layout instances', () => {

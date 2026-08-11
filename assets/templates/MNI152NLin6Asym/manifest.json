@@ -1,36 +1,73 @@
 {
   "spaceId": "MNI152NLin6Asym",
-  "assetVersion": "cedalion-icbm152-26.5.1",
+  "assetVersion": "templateflow-c906e8d_cedalion-icbm152-26.5.1",
   "coordinateConvention": "RAS+",
   "units": "mm",
-  "verified": false,
+  "verified": true,
   "targetGrid": {
     "shape": [182, 218, 182],
     "voxelSizeMm": [1, 1, 1],
     "originRasMm": [-91, -126, -72]
   },
   "sources": {
-    "templateflow": "https://github.com/templateflow/tpl-MNI152NLin6Asym",
+    "templateflow": {
+      "repository": "https://github.com/templateflow/tpl-MNI152NLin6Asym",
+      "commit": "c906e8d808a34719e5024a4bde61f03a4e411ddd"
+    },
+    "harvardOxford": {
+      "url": "https://www.nitrc.org/frs/download.php/9902/HarvardOxford.tgz",
+      "sha256": "43f3cf29ea8b019d15247428c9a26569045f0637d5c40d144da821a6c324cfcf"
+    },
     "cedalion": "https://github.com/ibs-lab/cedalion/tree/v26.5.1",
     "harvardOxfordLicense": "CC BY-SA 4.0"
   },
   "atlases": {
     "cortical": "HOCPAL",
     "subcortical": "HOSPA",
-    "backendResolutionMm": 1,
-    "previewResolutionMm": 2
+    "queryResolutionMm": 1,
+    "sampling": "nearest_voxel",
+    "probabilities": "original_percent_not_renormalized"
+  },
+  "atlasGate": {
+    "passed": true,
+    "templateFlowGrid": true,
+    "goldenCoordinatesMatchFslAtlasq": true,
+    "note": "TemplateFlow commit c906e8d probability NIfTIs failed numerical validation (HOCPAL empty; HOSPA max 0.01). The equivalent FSL 5.0 authority volumes are losslessly x-flipped into the same 1 mm RAS+ grid and indexed without probability renormalization."
+  },
+  "correspondenceGate": {
+    "passed": true,
+    "mapping": "identity",
+    "vertexMniResidualP95Mm": 0.000689,
+    "brainMaskDice": 0.953731,
+    "targetGridRelation": "target_is_integer_subgrid_of_cedalion",
+    "targetGridOffsetInCedalionVoxels": [5, 6, 76],
+    "note": "Cedalion's official 25,000 vertex MNI table agrees with affine-transformed canonical vertices below 0.001 mm. The locked TemplateFlow grid is an exact 1 mm integer subgrid, so no template-to-template registration is applied."
   },
   "scienceGate": {
-    "passed": false,
+    "passed": true,
     "brainMaskDiceMinimum": 0.95,
     "surfaceDistance95MmMaximum": 3.0,
     "transformRoundTripMmMaximum": 0.5,
-    "notes": "Cedalion ICBM152 scalp, pial and white-matter visualization surfaces are present and checksum pinned. Atlas probability fields remain modeled estimates until the atlas science gate passes."
+    "notes": "The atlas and correspondence gates pass. Runtime cortical contact uses the unsimplified Cedalion canonical mesh whose vertex order is preserved by the official vertex-MNI table and voxel-to-vertex matrix; the denser pial mesh is display-only. No SyN transform is used or required."
   },
   "files": {
     "scalpGlb": { "path": "generated/scalp.glb", "sha256": "28836d0d13d22ccbd16e039e28f49b2357c15fb398a2a9e630ef484d7a95f01d" },
     "grayMatterGlb": { "path": "generated/gray_matter.glb", "sha256": "f812611bfc215c84c1bbfecc60b604e32abaa3fa803c482aaed7785e9bf7eb79" },
     "whiteMatterGlb": { "path": "generated/white_matter.glb", "sha256": "484cc77076651fae92056e579d073e6e0862be95ecf8d7041e99bd3cd0f6bf29" },
-    "landmarks": { "path": "generated/landmarks.json", "sha256": "e285eeaba04ce0ed6d335578f6791a8d2cb6ccb3e5be9b5ff24e98b094de0f16", "count": 73 }
+    "brainScientificGlb": { "path": "generated/brain_scientific.glb", "sha256": "e4c9033a515fd7693eb07fb80708509352b7f8044f860e690acf52cbc98119f1", "vertices": 25000, "faces": 49992, "simplified": false },
+    "brainVertexCoordinates": { "path": "generated/brain_vertex_coordinates.csv", "sha256": "8b5c0e45f58f0e5741b6d16dc6cfcb73d9014fe923eee1d7474b86d3f0e5b92c" },
+    "voxelToVertexBrain": { "path": "generated/voxel_to_vertex_brain.mtx.gz", "sha256": "049a3957ea351b65b20a37794e8801976afbf02ab77a3efe075b67166d904db6" },
+    "cedalionCorrespondenceAssets": { "path": "generated/cedalion-correspondence-assets.json", "sha256": "c05d66898d713ef50c3fc714e5782b961aee21dcfa9ea9a01011955f21967ed4" },
+    "cedalionCorrespondenceQc": { "path": "generated/cedalion-correspondence-qc.json", "sha256": "a2f5b5483a29ec5cf6f4941db8709731b375221e75146e01774e41869ee661e3" },
+    "landmarks": { "path": "generated/landmarks.json", "sha256": "e285eeaba04ce0ed6d335578f6791a8d2cb6ccb3e5be9b5ff24e98b094de0f16", "count": 73 },
+    "templateDescription": { "path": "upstream/template_description.json", "sha256": "4ae55cb140b6f3c38f5e48d50931d599c3bec49750173d8e2a589104e15acb07" },
+    "templateBrainT1w": { "path": "upstream/tpl-MNI152NLin6Asym_res-01_desc-brain_T1w.nii.gz", "sha256": "72f8edc99d7e696da7717db20b73897d8da5909d7f30b1c9a7e2a79e9f64ff2f" },
+    "templateBrainMask": { "path": "upstream/tpl-MNI152NLin6Asym_res-01_desc-brain_mask.nii.gz", "sha256": "6d540075dac093fa5070a929dc5ea52795d54cc9ab57fe1272086dc70314b428" },
+    "corticalProbabilitySource": { "path": "upstream/fsl/data/atlases/HarvardOxford/HarvardOxford-cortl-prob-1mm.nii.gz", "sha256": "c0973f4a32d501a0208d5b87de9ef61d3da6eb3a1d32ffe00b632c8c1505c7f5" },
+    "subcorticalProbabilitySource": { "path": "upstream/fsl/data/atlases/HarvardOxford/HarvardOxford-sub-prob-1mm.nii.gz", "sha256": "86e6f300ddde64f05e4259ffe1624f37adc57789928aca175156a8e21c2dfcee" },
+    "corticalLabels": { "path": "upstream/fsl/data/atlases/HarvardOxford-Cortical-Lateralized.xml", "sha256": "c4dcb7830b9006dc2f1f62ddb29f890122b0638a7418e0f6fb736f85f678f61b" },
+    "subcorticalLabels": { "path": "upstream/fsl/data/atlases/HarvardOxford-Subcortical.xml", "sha256": "576f825bcc51e2afaa5411aef85858091fcaf823e27415f9f263fbca4743ba8b" },
+    "harvardOxfordIndex": { "path": "generated/harvard_oxford_top3_1mm.npz", "sha256": "8591df9e9b37df27748d5ae3c8ca0478201834bac8014950115ba46697c4f6d0" },
+    "harvardOxfordIndexMetadata": { "path": "generated/harvard_oxford_top3_1mm.json", "sha256": "11adfd295a7008d08f81005b40546561e0bddf0b521d4096cbe0b71c931fae6a" }
   }
 }

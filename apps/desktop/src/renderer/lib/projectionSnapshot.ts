@@ -1,31 +1,19 @@
 import type {
-  AtlasLabel,
   CortexLumeProject,
   LayoutInstance,
   ProjectionResult,
   Vec3,
 } from '@cortexlume/contracts';
 import {
-  corticalRegionProbabilities,
+  channelSensitivityPath,
   distance3,
   fittedOptodePositions,
   projectScalpSphereCenter,
-  projectToCorticalSurface,
+  projectToCorticalContact,
 } from './geometry';
 
 function midpoint(a: Vec3, b: Vec3): Vec3 {
   return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
-}
-
-function atlasLabels(
-  atlasId: string,
-  values: Array<{ label: string; probability: number }>,
-): AtlasLabel[] {
-  return values.map((value) => ({
-    atlasId,
-    labelEn: value.label,
-    probability: value.probability,
-  }));
 }
 
 function baseQcFlags(project: CortexLumeProject): string[] {
@@ -57,6 +45,7 @@ function fitQc(
 
 export function materializeProjectionSnapshot(project: CortexLumeProject): CortexLumeProject {
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
+  const transmissionDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
   const projections: ProjectionResult[] = [];
   const instances = project.instances.map((instance) => {
     const layout = project.layouts.find((candidate) => candidate.id === instance.definitionId);
@@ -71,7 +60,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
       const contact = contacts.get(optode.id);
       if (!contact) continue;
       const scalp = projectScalpSphereCenter(contact, radiusMm);
-      const cortex = projectToCorticalSurface(contact, radiusMm);
+      const cortex = projectToCorticalContact(contact);
       scalpCenters.set(optode.id, scalp);
       cortexCenters.set(optode.id, cortex);
       projections.push({
@@ -81,15 +70,12 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         scalpRasMm: scalp,
         corticalRasMm: cortex,
         depthTargetRasMm: null,
-        underlyingCorticalRegions: atlasLabels(
-          'CortexLume-Cortical-Estimate',
-          corticalRegionProbabilities(cortex),
-        ),
+        underlyingCorticalRegions: [],
         deepTargetStructures: [],
         tissueAtTarget: 'cortical gray matter',
         claimLevel: 'geometric',
         status: 'provisional',
-        qcFlags: commonFlags,
+        qcFlags: [...commonFlags, 'atlas_lookup_pending'],
       });
     }
 
@@ -98,9 +84,11 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
     for (const pair of layout.pairs) {
       const sourceScalp = scalpCenters.get(pair.sourceId);
       const detectorScalp = scalpCenters.get(pair.detectorId);
+      const sourceContact = contacts.get(pair.sourceId);
+      const detectorContact = contacts.get(pair.detectorId);
       const sourceCortex = cortexCenters.get(pair.sourceId);
       const detectorCortex = cortexCenters.get(pair.detectorId);
-      if (!sourceScalp || !detectorScalp || !sourceCortex || !detectorCortex) {
+      if (!sourceScalp || !detectorScalp || !sourceCortex || !detectorCortex || !sourceContact || !detectorContact) {
         projections.push({
           instanceId: instance.id,
           subjectKind: 'pair',
@@ -125,7 +113,12 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
       else if (spacingError > 2) flags.push('distance_distortion_gt_2mm');
 
       const scalp = midpoint(sourceScalp, detectorScalp);
-      const cortex = projectToCorticalSurface(scalp, radiusMm);
+      const cortex = channelSensitivityPath(
+        sourceContact,
+        detectorContact,
+        radiusMm,
+        transmissionDepthMm,
+      ).target;
       realizedScalpDistances.push(realizedScalp);
       nominalDistances.push(pair.nominalDistanceMm);
       projections.push({
@@ -135,15 +128,12 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         scalpRasMm: scalp,
         corticalRasMm: cortex,
         depthTargetRasMm: null,
-        underlyingCorticalRegions: atlasLabels(
-          'CortexLume-Cortical-Estimate',
-          corticalRegionProbabilities(cortex),
-        ),
+        underlyingCorticalRegions: [],
         deepTargetStructures: [],
         tissueAtTarget: 'cortical gray matter',
         claimLevel: 'geometric',
         status: 'provisional',
-        qcFlags: flags,
+        qcFlags: [...flags, 'atlas_lookup_pending'],
       });
     }
 

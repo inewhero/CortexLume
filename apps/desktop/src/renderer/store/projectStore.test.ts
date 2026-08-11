@@ -71,6 +71,7 @@ describe('default optode matrix', () => {
   it('starts with an editable Shimadzu LABNIRS BIDS profile', () => {
     useProjectStore.getState().newProject();
     expect(useProjectStore.getState().bidsSettingsExpanded).toBe(false);
+    expect(useProjectStore.getState().project.projectionSettings.defaultDepthMm).toBe(25);
     expect(getMissingBidsFields(useProjectStore.getState().project).map((field) => field.key))
       .toEqual(['samplingFrequencyHz']);
     expect(useProjectStore.getState().project.deviceProfile).toMatchObject({

@@ -117,9 +117,9 @@ export type ProjectionMode = z.infer<typeof ProjectionModeSchema>;
 
 export const ProjectionSettingsSchema = z.object({
   mode: ProjectionModeSchema.default('scalp'),
-  defaultDepthMm: z.number().min(1).max(100).nullable().default(null),
+  defaultDepthMm: z.number().min(1).max(100).nullable().default(25),
   pairDepthOverridesMm: z.record(z.string().uuid(), z.number().min(1).max(100)).default({}),
-  atlasProbabilityThreshold: z.number().min(0).max(1).default(0.1),
+  atlasProbabilityThreshold: z.number().min(0).max(1).default(0),
   optodeRadiusMm: z.number().min(1).max(15).default(3.6),
 });
 export type ProjectionSettings = z.infer<typeof ProjectionSettingsSchema>;
@@ -224,7 +224,10 @@ export interface DesktopApi {
     } | null>;
   };
   science: {
-    health(): Promise<{ ok: boolean; version?: string; templateVerified?: boolean; error?: string }>;
+    health(): Promise<{ ok: boolean; version?: string; templateVerified?: boolean; atlasVerified?: boolean; error?: string }>;
     fitPlacement(request: FitPlacementRequest): Promise<FitPlacementResponse>;
+    atlasLookup(point: Vec3, probabilityThreshold?: number): Promise<AtlasLabel[]>;
+    atlasLookupPath(points: Vec3[], probabilityThreshold?: number): Promise<AtlasLabel[]>;
+    annotateProject(project: CortexLumeProject): Promise<CortexLumeProject>;
   };
 }

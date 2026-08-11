@@ -43,6 +43,10 @@ def inspect_template_gate() -> TemplateGate:
         issues.append("unexpected_space_id")
     if not manifest.get("verified", False):
         issues.append("manifest_not_verified")
+    if not manifest.get("atlasGate", {}).get("passed", False):
+        issues.append("atlas_gate_not_passed")
+    if not manifest.get("correspondenceGate", {}).get("passed", False):
+        issues.append("correspondence_gate_not_passed")
     if not manifest.get("scienceGate", {}).get("passed", False):
         issues.append("science_gate_not_passed")
     for name, record in manifest.get("files", {}).items():

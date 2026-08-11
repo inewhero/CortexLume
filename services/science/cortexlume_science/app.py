@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import os
-from math import exp
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, status
 
 from . import __version__
+from .atlas import atlas_status, query_probability_path, query_probability_volume
 from .geometry import cortex_projection, fit_errors, fitted_positions, inward_depth_target, pair_midpoint
 from .models import (
     AtlasLabel,
+    AtlasPathQueryRequest,
+    AtlasQueryRequest,
     BatchProjectionRequest,
     FitPlacementRequest,
     FitPlacementResponse,
@@ -22,42 +24,6 @@ from .template_gate import inspect_template_gate
 app = FastAPI(title="CortexLume Science", version=__version__, docs_url=None, redoc_url=None)
 
 
-CORTICAL_CENTROIDS = [
-    ("Frontal Pole", (30, 62, 24), (26, 25, 28)),
-    ("Superior Frontal Gyrus", (24, 32, 58), (24, 28, 25)),
-    ("Middle Frontal Gyrus", (42, 34, 32), (23, 27, 26)),
-    ("Precentral Gyrus", (42, 2, 48), (18, 20, 30)),
-    ("Postcentral Gyrus", (44, -20, 50), (18, 20, 30)),
-    ("Superior Parietal Lobule", (30, -48, 58), (24, 26, 25)),
-    ("Supramarginal Gyrus", (52, -38, 32), (20, 24, 25)),
-    ("Superior Temporal Gyrus", (56, -12, 6), (18, 36, 22)),
-    ("Middle Temporal Gyrus", (58, -38, -4), (18, 34, 22)),
-    ("Lateral Occipital Cortex", (38, -78, 24), (28, 26, 32)),
-]
-
-DEEP_CENTROIDS = [
-    ("Thalamus", (12, -18, 8), (11, 13, 11)),
-    ("Caudate", (13, 10, 12), (9, 15, 13)),
-    ("Putamen", (25, 2, 1), (10, 14, 11)),
-    ("Globus Pallidus", (21, -4, 0), (8, 10, 9)),
-    ("Hippocampus", (27, -27, -12), (12, 20, 10)),
-    ("Amygdala", (24, -4, -18), (10, 11, 9)),
-    ("Insular Cortex", (38, -3, 5), (9, 24, 20)),
-]
-
-
-def region_probabilities(point, centroids, atlas_id: str) -> list[AtlasLabel]:
-    scored = []
-    for label, center, spread in centroids:
-        for side, sign in (("Left", -1), ("Right", 1)):
-            candidate = (sign * abs(center[0]), center[1], center[2])
-            squared = sum(((point[index] - candidate[index]) / spread[index]) ** 2 for index in range(3))
-            scored.append((f"{side} {label}", exp(-0.5 * squared)))
-    total = sum(score for _, score in scored) or 1.0
-    scored.sort(key=lambda item: item[1], reverse=True)
-    return [AtlasLabel(atlas_id=atlas_id, label_en=label, probability=score / total) for label, score in scored[:3]]
-
-
 def authorize(authorization: str | None = Header(default=None)) -> None:
     expected = os.environ.get("CORTEXLUME_TOKEN", "development-token")
     if authorization != f"Bearer {expected}":
@@ -68,11 +34,14 @@ def authorize(authorization: str | None = Header(default=None)) -> None:
 def health(_: None = Header(default=None, alias="x-unused"), authorization: str | None = Header(default=None)) -> dict[str, Any]:
     authorize(authorization)
     gate = inspect_template_gate()
+    atlas = atlas_status()
     return {
         "ok": True,
         "version": __version__,
         "templateVerified": gate.passed,
         "templateIssues": list(gate.issues),
+        "atlasVerified": atlas.available,
+        "atlasIssue": atlas.issue,
     }
 
 
@@ -83,11 +52,16 @@ def template_manifest(authorization: str | None = Header(default=None)) -> dict[
     return {"verified": gate.passed, "issues": list(gate.issues), "manifest": gate.manifest}
 
 
-def compute_projections(request: FitPlacementRequest, depth_mm: float | None = None) -> list[ProjectionResult]:
+def compute_projections(
+    request: FitPlacementRequest,
+    depth_mm: float | None = None,
+    probability_threshold: float = 0.0,
+) -> list[ProjectionResult]:
     positions = fitted_positions(request.layout, request.instance)
     status_value = "provisional"
     claim = "geometric"
-    flags: list[str] = []
+    atlas = atlas_status()
+    flags: list[str] = [] if atlas.available else [atlas.issue or "atlas_unavailable"]
     results: list[ProjectionResult] = []
 
     for optode in request.layout.optodes:
@@ -100,7 +74,7 @@ def compute_projections(request: FitPlacementRequest, depth_mm: float | None = N
             scalp_ras_mm=scalp,
             cortical_ras_mm=cortex,
             depth_target_ras_mm=None,
-            underlying_cortical_regions=region_probabilities(cortex, CORTICAL_CENTROIDS, "CortexLume-Cortical-Estimate"),
+            underlying_cortical_regions=query_probability_volume(cortex, "cortical", probability_threshold) if atlas.available else [],
             deep_target_structures=[],
             tissue_at_target=None,
             claim_level=claim,
@@ -136,8 +110,8 @@ def compute_projections(request: FitPlacementRequest, depth_mm: float | None = N
             scalp_ras_mm=scalp_midpoint,
             cortical_ras_mm=cortex,
             depth_target_ras_mm=inward_depth_target(cortex, depth_mm) if depth_mm else None,
-            underlying_cortical_regions=region_probabilities(cortex, CORTICAL_CENTROIDS, "CortexLume-Cortical-Estimate"),
-            deep_target_structures=region_probabilities(inward_depth_target(cortex, depth_mm), DEEP_CENTROIDS, "CortexLume-Deep-Estimate") if depth_mm else [],
+            underlying_cortical_regions=query_probability_volume(cortex, "cortical", probability_threshold) if atlas.available else [],
+            deep_target_structures=query_probability_volume(inward_depth_target(cortex, depth_mm), "subcortical", probability_threshold) if depth_mm and atlas.available else [],
             tissue_at_target="deep target estimate" if depth_mm else "cortical gray matter",
             claim_level=claim,
             status=status_value,
@@ -171,7 +145,7 @@ def fit_placement(request: FitPlacementRequest, authorization: str | None = Head
         project_revision=request.project_revision,
         instance=committed,
         projections=compute_projections(request),
-        template_verified=False if not gate.passed else False,
+        template_verified=gate.passed,
     )
 
 
@@ -189,7 +163,44 @@ def batch_projection(request: BatchProjectionRequest, authorization: str | None 
         "results": [item.model_dump(by_alias=True, mode="json") for item in compute_projections(
             fit_request,
             None,
+            request.settings.atlas_probability_threshold,
         )]
+    }
+
+
+@app.post("/v1/atlas/query-batch")
+def atlas_query_batch(request: AtlasQueryRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    authorize(authorization)
+    atlas = atlas_status()
+    if not atlas.available:
+        return {"atlasVerified": False, "issue": atlas.issue, "results": []}
+    return {
+        "atlasVerified": True,
+        "issue": None,
+        "results": [{
+            "id": point.id,
+            "corticalRegions": [item.model_dump(by_alias=True) for item in query_probability_volume(
+                point.cortical_ras_mm, "cortical", request.probability_threshold
+            )] if point.cortical_ras_mm else [],
+            "deepStructures": [item.model_dump(by_alias=True) for item in query_probability_volume(
+                point.deep_target_ras_mm, "subcortical", request.probability_threshold
+            )] if point.deep_target_ras_mm else [],
+        } for point in request.points],
+    }
+
+
+@app.post("/v1/atlas/query-path")
+def atlas_query_path(request: AtlasPathQueryRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    authorize(authorization)
+    atlas = atlas_status()
+    if not atlas.available:
+        return {"atlasVerified": False, "issue": atlas.issue, "regions": []}
+    return {
+        "atlasVerified": True,
+        "issue": None,
+        "regions": [item.model_dump(by_alias=True) for item in query_probability_path(
+            request.points, "cortical", request.probability_threshold
+        )],
     }
 
 

@@ -47,6 +47,15 @@ describe('project data exports', () => {
     useProjectStore.getState().placeLayout(layoutId);
     const rawProject = structuredClone(useProjectStore.getState().project);
     const project = materializeProjectionSnapshot(rawProject);
+    project.verifiedResults = project.verifiedResults.map((result) => ({
+      ...result,
+      underlyingCorticalRegions: [{
+        atlasId: 'HOCPAL@test-fixture',
+        labelEn: 'Right Superior Parietal Lobule',
+        probability: 0.45,
+      }],
+      qcFlags: result.qcFlags.filter((flag) => flag !== 'atlas_lookup_pending'),
+    }));
 
     const csv = buildCsvExport(project);
     const channel = dataRow(csv.files['cortexlume_channels.csv']!, ',');
@@ -61,7 +70,7 @@ describe('project data exports', () => {
     expect(csv.files['cortexlume_channels.csv']).not.toContain('project_id');
     const metadata = JSON.parse(csv.files['cortexlume_export.json']!);
     expect(metadata.formatVersion).toBe(2);
-    expect(metadata.technical.instances[0].fitQc.flags).toContain('template_unverified');
+    expect(metadata.technical.instances[0].fitQc.flags).not.toContain('template_unverified');
     expect(metadata.technical.projectionResults.length).toBeGreaterThan(0);
 
     const bids = buildBidsGeometryExport(project);
@@ -72,7 +81,7 @@ describe('project data exports', () => {
     expect(bidsChannel.actual_scalp_spacing_mm).not.toBe('n/a');
     expect(bidsChannel.status).toMatch(/good|bad/);
     const bidsTechnical = JSON.parse(bids.files['sourcedata/cortexlume_export.json']!);
-    expect(bidsTechnical.technical.instances[0].fitQc.flags).toContain('template_unverified');
+    expect(bidsTechnical.technical.instances[0].fitQc.flags).not.toContain('template_unverified');
     expect(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']).not.toContain('depth_target');
   });
 

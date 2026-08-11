@@ -25,6 +25,11 @@ const api: DesktopApi = {
     health: () => ipcRenderer.invoke('science:health'),
     fitPlacement: (request: FitPlacementRequest) =>
       ipcRenderer.invoke('science:fit-placement', request),
+    atlasLookup: (point, probabilityThreshold) =>
+      ipcRenderer.invoke('science:atlas-lookup', point, probabilityThreshold),
+    atlasLookupPath: (points, probabilityThreshold) =>
+      ipcRenderer.invoke('science:atlas-lookup-path', points, probabilityThreshold),
+    annotateProject: (project) => ipcRenderer.invoke('science:annotate-project', project),
   },
 };
 

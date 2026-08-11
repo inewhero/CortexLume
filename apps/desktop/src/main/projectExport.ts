@@ -85,7 +85,7 @@ function exportMetadata(project: CortexLumeProject, kind: string, warnings: stri
       convention: project.template.coordinateConvention,
       units: project.template.units,
       scalp: 'Optode sphere centre on the scalp surface.',
-      cortex: 'Optode sphere centre at first gray-matter contact.',
+      cortex: 'First cortical-surface contact; this coordinate is used for probability-volume lookup.',
     },
     technical: {
       template: project.template,

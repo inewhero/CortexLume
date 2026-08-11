@@ -35,6 +35,58 @@ export function projectToCorticalSurface(scalpPoint: Vec3, radiusMm = 0): Vec3 {
   return radiusMm > 0 ? add3(contact, scale3(normalize3(scalpPoint), radiusMm)) : contact;
 }
 
+/**
+ * MNI point where the inward projection first reaches the cortical surface.
+ *
+ * This is deliberately distinct from the sphere centre used to render an
+ * optode in cortex mode. The latter remains outside gray matter by one optode
+ * radius and therefore must never be used for probability-volume lookup.
+ */
+export function projectToCorticalContact(scalpPoint: Vec3): Vec3 {
+  return projectToCorticalSurface(scalpPoint, 0);
+}
+
+export function channelSensitivityPath(
+  sourceScalpPoint: Vec3,
+  detectorScalpPoint: Vec3,
+  optodeRadiusMm = 3.6,
+  transmissionDepthMm = 25,
+  sampleCount = 33,
+): { points: Vec3[]; target: Vec3 } {
+  const source = projectToCorticalContact(sourceScalpPoint);
+  const detector = projectToCorticalContact(detectorScalpPoint);
+  const sourceCenter = projectScalpSphereCenter(sourceScalpPoint, optodeRadiusMm);
+  const detectorCenter = projectScalpSphereCenter(detectorScalpPoint, optodeRadiusMm);
+  const scalpMidpoint: Vec3 = [
+    (sourceCenter[0] + detectorCenter[0]) / 2,
+    (sourceCenter[1] + detectorCenter[1]) / 2,
+    (sourceCenter[2] + detectorCenter[2]) / 2,
+  ];
+  const surfaceMidpoint = projectToCorticalContact(scalpMidpoint);
+  const inward = normalize3(scale3(scalpMidpoint, -1));
+  const firstGrayDistance = distance3(scalpMidpoint, surfaceMidpoint);
+  const target = add3(scalpMidpoint, scale3(inward, Math.max(firstGrayDistance, transmissionDepthMm)));
+  // Choose the control point so t=.5 is exactly the requested channel target.
+  const control: Vec3 = [
+    2 * target[0] - (source[0] + detector[0]) / 2,
+    2 * target[1] - (source[1] + detector[1]) / 2,
+    2 * target[2] - (source[2] + detector[2]) / 2,
+  ];
+  const count = Math.max(3, Math.min(129, Math.round(sampleCount)));
+  const points = Array.from({ length: count }, (_, index): Vec3 => {
+    const t = index / (count - 1);
+    const a = (1 - t) ** 2;
+    const b = 2 * (1 - t) * t;
+    const c = t ** 2;
+    return [
+      a * source[0] + b * control[0] + c * detector[0],
+      a * source[1] + b * control[1] + c * detector[1],
+      a * source[2] + b * control[2] + c * detector[2],
+    ];
+  });
+  return { points, target };
+}
+
 export function add3(a: Vec3, b: Vec3): Vec3 {
   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 }
@@ -123,54 +175,6 @@ export function cortexProjection(scalpRasMm: Vec3): Vec3 {
 export function inwardDepthTarget(corticalRasMm: Vec3, depthMm: number): Vec3 {
   return add3(corticalRasMm, scale3(normalize3(corticalRasMm), -depthMm));
 }
-
-export interface RegionProbability { label: string; probability: number }
-
-interface RegionCentroid { label: string; center: Vec3; spread: Vec3 }
-
-const CORTICAL_CENTROIDS: RegionCentroid[] = [
-  { label: 'Frontal Pole', center: [30, 62, 24], spread: [26, 25, 28] },
-  { label: 'Superior Frontal Gyrus', center: [24, 32, 58], spread: [24, 28, 25] },
-  { label: 'Middle Frontal Gyrus', center: [42, 34, 32], spread: [23, 27, 26] },
-  { label: 'Precentral Gyrus', center: [42, 2, 48], spread: [18, 20, 30] },
-  { label: 'Postcentral Gyrus', center: [44, -20, 50], spread: [18, 20, 30] },
-  { label: 'Superior Parietal Lobule', center: [30, -48, 58], spread: [24, 26, 25] },
-  { label: 'Supramarginal Gyrus', center: [52, -38, 32], spread: [20, 24, 25] },
-  { label: 'Superior Temporal Gyrus', center: [56, -12, 6], spread: [18, 36, 22] },
-  { label: 'Middle Temporal Gyrus', center: [58, -38, -4], spread: [18, 34, 22] },
-  { label: 'Lateral Occipital Cortex', center: [38, -78, 24], spread: [28, 26, 32] },
-];
-
-const DEEP_CENTROIDS: RegionCentroid[] = [
-  { label: 'Thalamus', center: [12, -18, 8], spread: [11, 13, 11] },
-  { label: 'Caudate', center: [13, 10, 12], spread: [9, 15, 13] },
-  { label: 'Putamen', center: [25, 2, 1], spread: [10, 14, 11] },
-  { label: 'Globus Pallidus', center: [21, -4, 0], spread: [8, 10, 9] },
-  { label: 'Hippocampus', center: [27, -27, -12], spread: [12, 20, 10] },
-  { label: 'Amygdala', center: [24, -4, -18], spread: [10, 11, 9] },
-  { label: 'Insular Cortex', center: [38, -3, 5], spread: [9, 24, 20] },
-];
-
-function probabilities(point: Vec3, regions: RegionCentroid[]): RegionProbability[] {
-  const scored = regions.flatMap((region) => {
-    const sides: Array<'Left' | 'Right'> = Math.abs(region.center[0]) < 1 ? ['Right'] : ['Left', 'Right'];
-    return sides.map((side) => {
-      const centerX = side === 'Left' ? -Math.abs(region.center[0]) : Math.abs(region.center[0]);
-      const squared = ((point[0] - centerX) / region.spread[0]) ** 2
-        + ((point[1] - region.center[1]) / region.spread[1]) ** 2
-        + ((point[2] - region.center[2]) / region.spread[2]) ** 2;
-      return { label: `${side} ${region.label}`, score: Math.exp(-0.5 * squared) };
-    });
-  });
-  const total = scored.reduce((sum, item) => sum + item.score, 0) || 1;
-  return scored.map((item) => ({ label: item.label, probability: item.score / total }))
-    .sort((a, b) => b.probability - a.probability).slice(0, 3);
-}
-
-export const corticalRegionProbabilities = (point: Vec3) => probabilities(point, CORTICAL_CENTROIDS);
-export const deepStructureProbabilities = (point: Vec3) => probabilities(point, DEEP_CENTROIDS);
-export const corticalRegionFromRas = (point: Vec3) => corticalRegionProbabilities(point)[0]?.label ?? '—';
-export const deepRegionFromRas = (point: Vec3) => deepStructureProbabilities(point)[0]?.label ?? '—';
 
 export function distance3(a: Vec3, b: Vec3): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);

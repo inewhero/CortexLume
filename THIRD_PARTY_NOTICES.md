@@ -8,10 +8,15 @@ CortexLume application source code is MIT licensed. Scientific template and atla
   `https://doc.ibs.tu-berlin.de/cedalion/datasets/26.5.1/hm_icbm152.zip`, SHA-256
   `91bb99709b6ceadd41674acc0db6cf26d70dccb57e41797b474aa9ce6aeed3e8`.
   CortexLume derives browser-ready scalp, pial gray-matter, white-matter, and
-  73-landmark visualization assets from this archive. Dataset provenance and
-  required citations remain those documented by Cedalion (including ICBM152,
+  73-landmark visualization assets from this archive, and redistributes the
+  official vertex-MNI table and voxel-to-vertex sparse mapping alongside its
+  unsimplified canonical projection mesh. Dataset provenance and required
+  citations remain those documented by Cedalion (including ICBM152,
   FreeSurfer, and the upstream parcellation resources); Cedalion application
   code itself is MIT licensed.
 
-No Harvard–Oxford atlas volume is currently distributed. Region percentages in
-this release are explicitly modeled spatial estimates, not atlas-derived labels.
+CortexLume distributes the FSL 5.0 Harvard–Oxford lateralized cortical and
+subcortical 1 mm probability volumes, their FSL XML labels, and a derived compact
+top-three lookup index. The derivative is an axis-reordered, non-interpolated
+representation in TemplateFlow MNI152NLin6Asym RAS+ coordinates. Atlas values
+remain unchanged integer percentages and are not renormalized by CortexLume.

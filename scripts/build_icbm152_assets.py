@@ -71,6 +71,35 @@ def export_mesh(
     }
 
 
+def export_correspondence_assets(source: Path, output: Path) -> dict[str, object]:
+    """Export Cedalion's canonical surface without changing vertex identity."""
+    mesh = trimesh.load(source / "mask_brain.obj", force="mesh", process=False)
+    if not isinstance(mesh, trimesh.Trimesh) or len(mesh.vertices) != 25_000:
+        raise ValueError("Cedalion canonical brain mesh must contain exactly 25,000 vertices")
+    affine = nib.load(source / "mask_gray.nii").affine
+    ras = nib.affines.apply_affine(affine, np.asarray(mesh.vertices))
+    mesh.vertices = to_three(ras)
+    scientific_glb = output / "brain_scientific.glb"
+    scientific_glb.write_bytes(mesh.export(file_type="glb"))
+
+    correspondence: dict[str, dict[str, str]] = {}
+    for name in ("brain_vertex_coordinates.csv", "voxel_to_vertex_brain.mtx.gz"):
+        destination = output / name
+        shutil.copy2(source / name, destination)
+        correspondence[name] = {"file": name, "sha256": sha256(destination)}
+
+    return {
+        "canonicalMesh": {
+            "file": scientific_glb.name,
+            "sha256": sha256(scientific_glb),
+            "vertices": int(len(mesh.vertices)),
+            "faces": int(len(mesh.faces)),
+            "simplified": False,
+        },
+        "correspondence": correspondence,
+    }
+
+
 def mesh_from_mask(path: Path) -> trimesh.Trimesh:
     image = nib.load(path)
     volume = np.asarray(image.dataobj) > 0
@@ -94,6 +123,7 @@ def build(source: Path, output: Path, renderer: Path | None) -> None:
         "grayMatter": export_mesh(load_mesh(source / "cortex_pial_high.obj"), output / "gray_matter.glb", 150_000, voxel_to_ras),
         "whiteMatter": export_mesh(mesh_from_mask(source / "mask_white.nii"), output / "white_matter.glb", 90_000),
     }
+    scientific = export_correspondence_assets(source, output)
 
     raw_landmarks = json.loads((source / "landmarks.mrk.json").read_text(encoding="utf-8"))
     points = []
@@ -114,6 +144,7 @@ def build(source: Path, output: Path, renderer: Path | None) -> None:
         "sourceArchiveSha256": SOURCE_ARCHIVE_SHA256,
         "coordinateConvention": "MNI/RAS+ mm; GLB vertices transformed to Three [x,z,-y]",
         "meshes": records,
+        "scientificProjection": scientific,
         "landmarks": {"file": landmarks_path.name, "sha256": sha256(landmarks_path), "count": len(points)},
     }
     manifest_path = output / "anatomy-manifest.json"
@@ -121,9 +152,16 @@ def build(source: Path, output: Path, renderer: Path | None) -> None:
 
     if renderer:
         renderer.mkdir(parents=True, exist_ok=True)
-        for path in output.iterdir():
-            if path.is_file():
-                shutil.copy2(path, renderer / path.name)
+        renderer_files = {
+            "scalp.glb",
+            "gray_matter.glb",
+            "white_matter.glb",
+            "brain_scientific.glb",
+            "landmarks.json",
+            "anatomy-manifest.json",
+        }
+        for name in renderer_files:
+            shutil.copy2(output / name, renderer / name)
 
     print(json.dumps(manifest, indent=2))
 

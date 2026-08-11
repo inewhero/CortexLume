@@ -7,12 +7,13 @@ import type { LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contrac
 import { useProjectStore } from '../store/projectStore';
 import {
   add3,
-  corticalRegionProbabilities,
+  channelSensitivityPath,
   effectiveUv,
   findLayoutOverlaps,
   fittedOptodePositions,
   formatRas,
   projectToCorticalSurface,
+  projectToCorticalContact,
   projectScalpSphereCenter,
   projectToScalpSurface,
   rasFromThree,
@@ -27,6 +28,27 @@ interface LandmarkFile {
 }
 
 const anatomyUrl = (name: string) => new URL(`./anatomy/${name}`, window.location.href).href;
+
+function AtlasTopRegion({ point, path }: { point?: Vec3; path?: Vec3[] }) {
+  const threshold = useProjectStore((state) => state.project.projectionSettings.atlasProbabilityThreshold);
+  const [label, setLabel] = useState('NO ATLAS LABEL');
+  useEffect(() => {
+    let current = true;
+    const lookup = path?.length
+      ? window.cortexlume?.science.atlasLookupPath(path, threshold)
+      : point
+        ? window.cortexlume?.science.atlasLookup(point, threshold)
+        : undefined;
+    setLabel('LOCATING REGION…');
+    void lookup?.then((regions) => {
+      if (!current) return;
+      const top = regions[0];
+      setLabel(top ? `${top.labelEn} · ${Math.round(top.probability * 100)}%` : 'NO ATLAS LABEL');
+    }).catch(() => { if (current) setLabel('ATLAS UNAVAILABLE'); });
+    return () => { current = false; };
+  }, [point?.[0], point?.[1], point?.[2], path, threshold]);
+  return <span>{label}</span>;
+}
 
 const anatomyVertexShader = `
   varying vec3 vNormal;
@@ -87,7 +109,7 @@ function ReferenceMarkers({ landmarks }: { landmarks: LandmarkFile['points'] }) 
               />
             </mesh>
             {(isFivePoint || visibility.pointLabels) && (
-              <Html position={[3, 3, 0]} style={{ pointerEvents: 'none' }}>
+              <Html position={[3, 3, 0]} zIndexRange={[1200, 200]} style={{ pointerEvents: 'none' }}>
                 <span className={`reference-label ${isFivePoint ? 'landmark-label' : ''}`}>{point.label}</span>
               </Html>
             )}
@@ -108,14 +130,26 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
   const scalp = useGLTF(anatomyUrl('scalp.glb'), false, false);
   const gray = useGLTF(anatomyUrl('gray_matter.glb'), false, false);
   const white = useGLTF(anatomyUrl('white_matter.glb'), false, false);
+  const scientificBrain = useGLTF(anatomyUrl('brain_scientific.glb'), false, false);
   const scalpGeometry = useMemo(() => geometryFromScene(scalp.scene), [scalp.scene]);
   const grayGeometry = useMemo(() => geometryFromScene(gray.scene), [gray.scene]);
   const whiteGeometry = useMemo(() => geometryFromScene(white.scene), [white.scene]);
+  // This is Cedalion's unsimplified 25k-vertex brain surface. Its vertex order
+  // is preserved by brain_vertex_coordinates.csv and voxel_to_vertex_brain.mtx.gz.
+  // Keep the denser pial mesh above for display only; all projection contacts
+  // must use this correspondence-backed geometry.
+  const scientificBrainGeometry = useMemo(
+    () => geometryFromScene(scientificBrain.scene),
+    [scientificBrain.scene],
+  );
   const scalpBvh = useMemo(() => new MeshBVH(scalpGeometry), [scalpGeometry]);
-  const grayBvh = useMemo(() => new MeshBVH(grayGeometry), [grayGeometry]);
+  const scientificBrainBvh = useMemo(
+    () => new MeshBVH(scientificBrainGeometry),
+    [scientificBrainGeometry],
+  );
 
   useEffect(() => {
-    const grayCenter = grayGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3(0, 12, 0);
+    const brainCenter = scientificBrainGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3(0, 12, 0);
     const scalpCenter = scalpGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3();
     const scalpContact = (rasPoint: Vec3) => {
       const input = new THREE.Vector3(...threeFromRas(rasPoint));
@@ -131,9 +165,10 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
       scalpSphereCenter: (rasPoint, radiusMm) => rasFromThree(scalpSphereCenter(rasPoint, radiusMm)),
       cortex: (rasPoint, radiusMm) => {
         const origin = scalpSphereCenter(rasPoint, radiusMm);
-        const direction = grayCenter.clone().sub(origin).normalize();
+        // CortexLume's geometric projection is explicitly radial in MNI space.
+        const direction = origin.clone().multiplyScalar(-1).normalize();
         if (radiusMm <= 0) {
-          const hit = grayBvh.raycastFirst(new THREE.Ray(origin, direction), THREE.DoubleSide, 0.05, 320);
+          const hit = scientificBrainBvh.raycastFirst(new THREE.Ray(origin, direction), THREE.DoubleSide, 0.05, 320);
           if (hit?.point) return rasFromThree(hit.point);
         } else {
           const reference = Math.abs(direction.y) < 0.9
@@ -156,7 +191,7 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
             const sampleOrigin = origin.clone()
               .addScaledVector(u, sample.x)
               .addScaledVector(v, sample.y);
-            const hit = grayBvh.raycastFirst(new THREE.Ray(sampleOrigin, direction), THREE.DoubleSide, 0.05, 320);
+            const hit = scientificBrainBvh.raycastFirst(new THREE.Ray(sampleOrigin, direction), THREE.DoubleSide, 0.05, 320);
             if (!hit) continue;
             const lateralDistance = Math.hypot(sample.x, sample.y);
             const sphereInset = Math.sqrt(Math.max(0, radiusMm ** 2 - lateralDistance ** 2));
@@ -166,16 +201,16 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
             return rasFromThree(origin.addScaledVector(direction, Math.max(0, firstCenterDistance)));
           }
         }
-        const nearest = grayBvh.closestPointToPoint(origin);
+        const nearest = scientificBrainBvh.closestPointToPoint(origin);
         if (nearest) {
-          const outward = nearest.point.clone().sub(grayCenter).normalize();
+          const outward = nearest.point.clone().sub(brainCenter).normalize();
           return rasFromThree(nearest.point.clone().addScaledVector(outward, radiusMm));
         }
         return rasPoint;
       },
     });
     onReady();
-  }, [grayBvh, grayGeometry, scalpBvh, scalpGeometry]);
+  }, [scientificBrainBvh, scientificBrainGeometry, scalpBvh, scalpGeometry]);
 
   return (
     <group onPointerDown={onBlank}>
@@ -215,6 +250,7 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
 }) {
   const projectionMode = useProjectStore((state) => state.project.projectionSettings.mode);
   const optodeRadiusMm = useProjectStore((state) => state.project.projectionSettings.optodeRadiusMm ?? 3.6);
+  const transmissionDepthMm = useProjectStore((state) => state.project.projectionSettings.defaultDepthMm ?? 25);
   const channelLabels = useProjectStore((state) => state.anatomyVisibility.channelLabels);
   const scalpPositions = useMemo(() => fittedOptodePositions(layout, instance), [layout, instance, surfaceRevision]);
   const positions = useMemo(() => projectionMode === 'scalp'
@@ -233,14 +269,32 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
         const b = positions.get(pair.detectorId);
         if (!a || !b) return null;
         const midpoint: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+        const sourceScalp = scalpPositions.get(pair.sourceId);
+        const detectorScalp = scalpPositions.get(pair.detectorId);
+        const sensitivity = sourceScalp && detectorScalp
+          ? channelSensitivityPath(sourceScalp, detectorScalp, optodeRadiusMm, transmissionDepthMm)
+          : undefined;
+        const channelSelected = selected && selectedHeadPairId === pair.id;
         return <group key={pair.id}>
           <Line points={[threeFromRas(a), threeFromRas(b)]} color={selected ? '#f0c95b' : '#8c989d'} lineWidth={selected ? 1.8 : 1.05} />
-          {channelLabels && <Html center position={threeFromRas(midpoint)} style={{ pointerEvents: 'auto' }}>
+          {channelLabels && <Html center position={threeFromRas(midpoint)} zIndexRange={[2200, 1300]} style={{ pointerEvents: 'auto' }}>
             <button
-              className={`channel-index-3d ${selected && selectedHeadPairId === pair.id ? 'active' : ''}`}
+              className={`channel-index-3d ${channelSelected ? 'active' : ''}`}
               aria-label={`Select channel ${pair.channelNumber ?? 'unassigned'}`}
               onClick={(event) => { event.stopPropagation(); selectChannel(instance.id, pair.id); }}
             >{pair.channelNumber ?? '—'}</button>
+          </Html>}
+          {channelSelected && sensitivity && <Html
+            center
+            position={threeFromRas(midpoint)}
+            zIndexRange={[2147483000, 2147482000]}
+            style={{ pointerEvents: 'none' }}
+          >
+            <div className="head-tooltip foreground-tooltip">
+              <strong>CH{pair.channelNumber ?? '—'}</strong>
+              <span>CORTEX MNI: {formatRas(sensitivity.target)}</span>
+              <AtlasTopRegion path={sensitivity.points} />
+            </div>
           </Html>}
         </group>;
       })}
@@ -248,7 +302,7 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
         const position = positions.get(optode.id)!;
         const isSelected = selected && selectedHeadOptodeId === optode.id;
         const scalp = scalpPositions.get(optode.id) ?? position;
-        const cortical = projectToCorticalSurface(scalp, optodeRadiusMm);
+        const cortical = projectToCorticalContact(scalp);
         return (
           <mesh
             key={optode.id}
@@ -258,12 +312,12 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
             <sphereGeometry args={[isSelected ? optodeRadiusMm * 1.18 : optodeRadiusMm, 18, 16]} />
             <meshStandardMaterial color={optode.type === 'source' ? '#df4b3f' : '#1c83b3'} emissive={isSelected ? '#ffffff' : '#000000'} emissiveIntensity={0.28} />
             {isSelected && (
-              <Html position={[5, 4, 0]} style={{ pointerEvents: 'none' }}>
-                <div className="head-tooltip">
+              <Html position={[5, 4, 0]} zIndexRange={[2147483000, 2147482000]} style={{ pointerEvents: 'none' }}>
+                <div className="head-tooltip foreground-tooltip">
                   <strong>P{String(patchIndex + 1).padStart(2, '0')} · {optode.label}</strong>
                   <span>SCALP MNI: {formatRas(projectScalpSphereCenter(scalp, optodeRadiusMm))}</span>
                   <span>CORTEX MNI: {formatRas(cortical)}</span>
-                  <span>{corticalRegionProbabilities(cortical)[0]?.label}</span>
+                  <AtlasTopRegion point={cortical} />
                 </div>
               </Html>
             )}

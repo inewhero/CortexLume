@@ -59,6 +59,25 @@
       ]
     }
   },
+  "scientificProjection": {
+    "canonicalMesh": {
+      "file": "brain_scientific.glb",
+      "sha256": "e4c9033a515fd7693eb07fb80708509352b7f8044f860e690acf52cbc98119f1",
+      "vertices": 25000,
+      "faces": 49992,
+      "simplified": false
+    },
+    "correspondence": {
+      "brain_vertex_coordinates.csv": {
+        "file": "brain_vertex_coordinates.csv",
+        "sha256": "8b5c0e45f58f0e5741b6d16dc6cfcb73d9014fe923eee1d7474b86d3f0e5b92c"
+      },
+      "voxel_to_vertex_brain.mtx.gz": {
+        "file": "voxel_to_vertex_brain.mtx.gz",
+        "sha256": "049a3957ea351b65b20a37794e8801976afbf02ab77a3efe075b67166d904db6"
+      }
+    }
+  },
   "landmarks": {
     "file": "landmarks.json",
     "sha256": "e285eeaba04ce0ed6d335578f6791a8d2cb6ccb3e5be9b5ff24e98b094de0f16",

@@ -13,6 +13,7 @@ node_modules/
 /release/
 /releases/
 /CortexLume-*.zip
+/hm_icbm152.zip
 
 # Test, analysis, and runtime caches
 __pycache__/
@@ -27,9 +28,20 @@ __pycache__/
 # Local agent/runtime metadata
 /.agents/
 
-# Generated scientific intermediates; keep only the documented placeholder
-/assets/templates/**/generated/
+# Generated scientific intermediates; retain only reviewed release assets
+/assets/templates/**/generated/*
 !/assets/templates/**/generated/.gitkeep
+!/assets/templates/MNI152NLin6Asym/generated/harvard_oxford_top3_1mm.json
+!/assets/templates/MNI152NLin6Asym/generated/harvard_oxford_top3_1mm.npz
+!/assets/templates/MNI152NLin6Asym/generated/scalp.glb
+!/assets/templates/MNI152NLin6Asym/generated/gray_matter.glb
+!/assets/templates/MNI152NLin6Asym/generated/white_matter.glb
+!/assets/templates/MNI152NLin6Asym/generated/landmarks.json
+!/assets/templates/MNI152NLin6Asym/generated/brain_scientific.glb
+!/assets/templates/MNI152NLin6Asym/generated/brain_vertex_coordinates.csv
+!/assets/templates/MNI152NLin6Asym/generated/voxel_to_vertex_brain.mtx.gz
+!/assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-assets.json
+!/assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-qc.json
 
 # OS metadata
 .DS_Store

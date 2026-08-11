@@ -1,0 +1,19 @@
+{
+  "format": "cortexlume-harvard-oxford-top3",
+  "formatVersion": 1,
+  "space": "MNI152NLin6Asym",
+  "coordinateConvention": "RAS+",
+  "resolutionMm": 1,
+  "sampling": "nearest_voxel",
+  "probabilityUnit": "percent",
+  "topK": 3,
+  "subcorticalExcludedChannels": {
+    "0": "Left Cerebral White Matter",
+    "1": "Left Cerebral Cortex",
+    "11": "Right Cerebral White Matter",
+    "12": "Right Cerebral Cortex"
+  },
+  "templateFlowCommit": "c906e8d808a34719e5024a4bde61f03a4e411ddd",
+  "atlasSource": "FSL Harvard-Oxford data package distributed through NITRC (download 9902)",
+  "note": "FSL arrays were x-flipped without interpolation into TemplateFlow's positive-diagonal RAS+ grid."
+}

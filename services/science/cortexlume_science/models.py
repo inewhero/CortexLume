@@ -124,7 +124,7 @@ class ProjectionSettings(ContractModel):
     mode: Literal["scalp", "cortex"] = "scalp"
     default_depth_mm: Annotated[float, Field(ge=1, le=100)] | None = None
     pair_depth_overrides_mm: dict[UUID, Annotated[float, Field(ge=1, le=100)]] = Field(default_factory=dict)
-    atlas_probability_threshold: Annotated[float, Field(ge=0, le=1)] = 0.1
+    atlas_probability_threshold: Annotated[float, Field(ge=0, le=1)] = 0.0
     optode_radius_mm: Annotated[float, Field(ge=1, le=15)] = 3.6
 
 
@@ -137,3 +137,19 @@ class BatchProjectionRequest(ContractModel):
 
 class ProjectValidationRequest(ContractModel):
     project: dict
+
+
+class AtlasQueryPoint(ContractModel):
+    id: str
+    cortical_ras_mm: Vec3 | None = None
+    deep_target_ras_mm: Vec3 | None = None
+
+
+class AtlasQueryRequest(ContractModel):
+    points: list[AtlasQueryPoint]
+    probability_threshold: Annotated[float, Field(ge=0, le=1)] = 0.0
+
+
+class AtlasPathQueryRequest(ContractModel):
+    points: Annotated[list[Vec3], Field(min_length=1, max_length=129)]
+    probability_threshold: Annotated[float, Field(ge=0, le=1)] = 0.0

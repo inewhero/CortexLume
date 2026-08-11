@@ -1,0 +1,53 @@
+index	name	xyz
+0	Left Frontal Pole	63, 86, 49
+1	Right Frontal Pole	21, 86, 33
+2	Left Insular Cortex	64, 69, 32
+3	Right Insular Cortex	26, 70, 32
+4	Left Superior Frontal Gyrus	47, 75, 66
+5	Right Superior Frontal Gyrus	43, 80, 61
+6	Left Middle Frontal Gyrus	65, 78, 55
+7	Right Middle Frontal Gyrus	26, 77, 59
+12	Left Precentral Gyrus	73, 62, 56
+13	Right Precentral Gyrus	14, 65, 50
+14	Left Temporal Pole	57, 67, 19
+15	Right Temporal Pole	33, 68, 19
+32	Left Postcentral Gyrus	77, 57, 50
+33	Right Postcentral Gyrus	12, 58, 46
+34	Left Superior Parietal Lobule	62, 39, 69
+35	Right Superior Parietal Lobule	28, 40, 69
+40	Left Angular Gyrus	74, 35, 47
+41	Right Angular Gyrus	15, 37, 46
+46	Left Intracalcarine Cortex	49, 25, 42
+47	Right Intracalcarine Cortex	39, 27, 41
+48	Left Frontal Medial Cortex	46, 85, 26
+49	Right Frontal Medial Cortex	44, 84, 27
+52	Left Subcallosal Cortex	47, 75, 31
+53	Right Subcallosal Cortex	44, 74, 31
+54	Left Paracingulate Gyrus	47, 81, 52
+55	Right Paracingulate Gyrus	43, 84, 49
+60	Left Precuneous Cortex	46, 33, 58
+61	Right Precuneous Cortex	43, 36, 60
+62	Left Cuneal Cortex	46, 21, 52
+63	Right Cuneal Cortex	43, 22, 49
+64	Left Frontal Orbital Cortex	53, 69, 26
+65	Right Frontal Orbital Cortex	34, 76, 26
+70	Left Lingual Gyrus	53, 39, 32
+71	Right Lingual Gyrus	36, 41, 31
+76	Left Temporal Occipital Fusiform Cortex	61, 37, 27
+77	Right Temporal Occipital Fusiform Cortex	27, 39, 26
+78	Left Occipital Fusiform Gyrus	58, 27, 29
+79	Right Occipital Fusiform Gyrus	31, 27, 29
+80	Left Frontal Operculum Cortex	63, 72, 40
+81	Right Frontal Operculum Cortex	25, 73, 38
+82	Left Central Opercular Cortex	66, 58, 43
+83	Right Central Opercular Cortex	22, 57, 43
+84	Left Parietal Operculum Cortex	67, 47, 45
+85	Right Parietal Operculum Cortex	23, 50, 46
+86	Left Planum Polare	67, 61, 29
+87	Right Planum Polare	23, 63, 28
+90	Left Planum Temporale	66, 46, 41
+91	Right Planum Temporale	22, 48, 43
+92	Left Supracalcarine Cortex	45, 22, 41
+93	Right Supracalcarine Cortex	43, 24, 44
+94	Left Occipital Pole	50, 13, 33
+95	Right Occipital Pole	37, 12, 38
