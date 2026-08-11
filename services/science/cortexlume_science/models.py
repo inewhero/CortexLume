@@ -102,6 +102,7 @@ class ProjectionResult(ContractModel):
     subject_kind: Literal["optode", "pair"]
     subject_id: UUID
     scalp_ras_mm: Vec3 | None
+    display_ras_mm: Vec3 | None = None
     cortical_ras_mm: Vec3 | None
     depth_target_ras_mm: Vec3 | None
     underlying_cortical_regions: list[AtlasLabel]

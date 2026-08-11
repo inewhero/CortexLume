@@ -10,6 +10,9 @@ import {
 import { materializeProjectionSnapshot } from '../lib/projectionSnapshot';
 import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from '../store/projectStore';
+import type { DigitizerImport, Vec3 } from '@cortexlume/contracts';
+import { DigitizerDialog, type MappingScope } from './DigitizerDialog';
+import { FIVE_POINT_LABELS, type FivePointLabel } from '../lib/digitizer';
 
 const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code: string }> = [
   { key: 'scalp', label: 'Scalp envelope', code: 'SCLP' },
@@ -35,12 +38,15 @@ export function Inspector() {
   const [corticalRegions, setCorticalRegions] = useState<Array<{ label: string; probability: number }>>([]);
   const [materialPopup, setMaterialPopup] = useState<keyof AnatomyAppearance | null>(null);
   const materialPopupRef = useRef<HTMLDivElement>(null);
+  const [digitizerDialog, setDigitizerDialog] = useState<{ kind: 'import'; data: DigitizerImport } | { kind: 'manual' } | null>(null);
+  const [fivePointTargets, setFivePointTargets] = useState<Record<FivePointLabel, Vec3> | null>(null);
   const {
     project, projectPath, anatomyVisibility, anatomyAppearance,
     selectedInstanceId, selectedHeadOptodeId, selectedHeadPairId,
     newProject, loadProject, setProjectPath, setProjectName, setToast,
     setProjectionMode, resetInstanceOverride, setAnatomyLayer, setAnatomyAppearance,
     setBidsSettingsExpanded, setDefaultDepth,
+    confirmDigitizerMapping, confirmFivePointCalibration, setDigitizerPreview,
   } = useProjectStore();
   const instance = project.instances.find((item) => item.id === selectedInstanceId);
   const layout = project.layouts.find((item) => item.id === instance?.definitionId);
@@ -67,6 +73,30 @@ export function Inspector() {
   const cortical = channelPath?.target ?? (scalp ? projectToCorticalContact(scalp) : undefined);
   const scalpMni = scalp ? projectScalpSphereCenter(scalp, radiusMm) : undefined;
   const override = instance?.overrides.find((item) => item.optodeId === selectedHeadOptodeId);
+  const mappingScopes = useMemo<MappingScope[]>(() => {
+    const visibleInstances = project.instances.filter((candidate) => candidate.visible !== false);
+    const patches = visibleInstances.flatMap((candidate) => {
+      const index = project.instances.findIndex((instance) => instance.id === candidate.id);
+      const definition = project.layouts.find((item) => item.id === candidate.definitionId);
+      if (!definition) return [];
+      const fitted = fittedOptodePositions(definition, candidate);
+      return [{
+        id: candidate.id,
+        label: `P${String(index + 1).padStart(2, '0')} · ${definition.name}`,
+        targets: definition.optodes.map((item) => ({ instanceId: candidate.id, optodeId: item.id, label: `P${String(index + 1).padStart(2, '0')} · ${item.label}`, type: item.type, rasMm: fitted.get(item.id)! })),
+      }];
+    });
+    return patches.length > 1 ? [...patches, { id: 'all', label: 'ALL LOADED PATCHES', targets: patches.flatMap((patch) => patch.targets) }] : patches;
+  }, [project.instances, project.layouts]);
+
+  useEffect(() => {
+    void fetch(new URL('./anatomy/landmarks.json', window.location.href).href)
+      .then((response) => response.json())
+      .then((data: { points: Array<{ label: string; rasMm: Vec3; system: string }> }) => {
+        const targets = Object.fromEntries(FIVE_POINT_LABELS.map((label) => [label, data.points.find((point) => point.system === 'five-point' && point.label === label)?.rasMm]));
+        if (Object.values(targets).every(Boolean)) setFivePointTargets(targets as Record<FivePointLabel, Vec3>);
+      });
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -175,10 +205,35 @@ export function Inspector() {
     }
   };
 
+  const importDigitizer = async () => {
+    if (project.instances.length === 0) {
+      setToast('Load at least one patch into 3D Align before importing digitizer optodes.');
+      return;
+    }
+    try {
+      const result = await window.cortexlume.input.digitizer();
+      if (result) setDigitizerDialog({ kind: 'import', data: result });
+    } catch (error) {
+      setToast(`Digitizer import error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const openFivePointEntry = () => {
+    if (project.instances.length === 0) {
+      setToast('Load at least one patch into 3D Align before entering five-point calibration.');
+      return;
+    }
+    if (!fivePointTargets) {
+      setToast('Five-point template references are still loading.');
+      return;
+    }
+    setDigitizerDialog({ kind: 'manual' });
+  };
+
   return (
     <div className="inspector-content">
       <section className="control-block project-control">
-        <div className="control-block-title"><span>PROJECT</span></div>
+        <div className="control-block-title"><span>WORKFLOW</span></div>
         <label className="project-name-field">
           <span>PROJECT NAME</span>
           <input
@@ -193,17 +248,32 @@ export function Inspector() {
         <code className="project-file-path" title={projectPath ?? 'This project has not been saved yet.'}>
           {projectPath ?? 'UNSAVED PROJECT'}
         </code>
-        <div className="project-actions">
+        <div className="workflow-row"><span>PROJECT</span><div className="project-actions">
           <button onClick={() => { newProject(); setToast('New project created.'); }}>NEW</button>
           <button onClick={openProject}>OPEN</button>
           <button className="primary" onClick={saveProject}>SAVE</button>
-        </div>
-        <div className="project-actions">
-          <button onClick={exportBrainNet}>EXPORT BRAINNET</button>
-          <button onClick={exportCsv}>EXPORT CSV</button>
-          <button onClick={exportBids}>EXPORT BIDS</button>
-        </div>
+        </div></div>
+        <div className="workflow-row"><span>IMPORT</span><div className="project-actions two">
+          <button onClick={importDigitizer}>DIGITIZER</button>
+          <button onClick={openFivePointEntry}>5-POINT</button>
+        </div></div>
+        <div className="workflow-row"><span>EXPORT</span><div className="project-actions">
+          <button onClick={exportBrainNet}>BRAINNET</button>
+          <button onClick={exportCsv}>CSV</button>
+          <button onClick={exportBids}>BIDS</button>
+        </div></div>
       </section>
+
+      {digitizerDialog && fivePointTargets && <DigitizerDialog
+        mode={digitizerDialog} targets={fivePointTargets} scopes={mappingScopes}
+        onClose={() => { setDigitizerPreview(null); setDigitizerDialog(null); }}
+        onPreview={(session, mappings) => setDigitizerPreview({ session, mappings })}
+        onAccept={(session, mappings, targetInstanceIds) => {
+          if (mappings.length > 0) confirmDigitizerMapping(session, mappings); else confirmFivePointCalibration(session, targetInstanceIds);
+          setDigitizerDialog(null);
+          setToast(mappings.length > 0 ? `Mapped ${mappings.length} digitized optodes · mean correspondence ${(mappings.reduce((sum, mapping) => sum + mapping.distanceMm, 0) / mappings.length).toFixed(1)} mm.` : `Loaded five-point calibration · RMS residual ${session.calibration.rmsResidualMm.toFixed(1)} mm.`);
+        }}
+      />}
 
       <section className="control-block">
         <div className="control-block-title"><span>ANATOMY LAYERS</span><code>VIEW</code></div>

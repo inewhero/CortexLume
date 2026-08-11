@@ -86,4 +86,52 @@ describe('default optode matrix', () => {
     expect(useProjectStore.getState().project.deviceProfile.samplingFrequencyHz).toBe(36);
     expect(getMissingBidsFields(useProjectStore.getState().project)).toEqual([]);
   });
+
+  it('attaches and removes confirmed digitizer geometry from a patch', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const state = useProjectStore.getState();
+    const instance = state.project.instances[0]!;
+    const layout = state.project.layouts.find((candidate) => candidate.id === instance.definitionId)!;
+    const optode = layout.optodes[0]!;
+    const pointId = crypto.randomUUID();
+    const sessionId = crypto.randomUUID();
+    const session = {
+      id: sessionId, name: 'digitizer', importedAt: new Date().toISOString(), source: { format: 'TSV', fileName: 'points.tsv', sha256: 'abc' },
+      points: [{ id: pointId, label: optode.label, kind: optode.type, rawPosition: [0, 0, 0] }],
+      calibratedPoints: [{ pointId, rasMm: [-50, 20, 80] }],
+      calibration: { method: 'five-point-similarity', sourceUnit: 'mm', matrix: Array(16).fill(0), scale: 1, rmsResidualMm: 1, maxResidualMm: 2, residuals: [], calibratedAt: new Date().toISOString() },
+      optodeMappings: [], visible: true,
+    } as never;
+    const mappings = [{ pointId, instanceId: instance.id, optodeId: optode.id, distanceMm: 3 }];
+    useProjectStore.getState().confirmDigitizerMapping(session, mappings);
+    const mappedState = useProjectStore.getState();
+    const derived = mappedState.project.instances.find((candidate) => candidate.derivedFromInstanceId === instance.id)!;
+    expect(mappedState.project.instances.find((candidate) => candidate.id === instance.id)?.visible).toBe(false);
+    expect(derived.digitizerPositions[0]).toMatchObject({ optodeId: optode.id, scalpRasMm: [-50, 20, 80] });
+    expect(mappedState.library.find((candidate) => candidate.id === derived.definitionId)?.name).toBe(`${layout.name}D`);
+    useProjectStore.getState().removeDigitizerSession(sessionId);
+    const restoredState = useProjectStore.getState();
+    expect(restoredState.project.instances).toHaveLength(1);
+    expect(restoredState.project.instances[0]).toMatchObject({ id: instance.id, visible: true, digitizerPositions: [] });
+  });
+
+  it('creates a derived library patch for five-point-only calibration', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const original = useProjectStore.getState().project.instances[0]!;
+    const sessionId = crypto.randomUUID();
+    const session = {
+      id: sessionId, name: 'five-point', importedAt: new Date().toISOString(),
+      source: { format: 'MANUAL', fileName: null, sha256: null }, points: [], calibratedPoints: [],
+      calibration: { method: 'five-point-similarity', sourceUnit: 'mm', matrix: Array(16).fill(0), scale: 1, rmsResidualMm: 1, maxResidualMm: 2, residuals: [], calibratedAt: new Date().toISOString() },
+      optodeMappings: [], visible: true,
+    } as never;
+    useProjectStore.getState().confirmFivePointCalibration(session, [original.id]);
+    const calibrated = useProjectStore.getState();
+    const derived = calibrated.project.instances.find((candidate) => candidate.derivedFromInstanceId === original.id)!;
+    expect(calibrated.project.instances.find((candidate) => candidate.id === original.id)?.visible).toBe(false);
+    expect(derived).toMatchObject({ visible: true, digitizerSessionId: sessionId, digitizerPositions: [] });
+    expect(calibrated.library.some((layout) => layout.id === derived.definitionId)).toBe(true);
+  });
 });

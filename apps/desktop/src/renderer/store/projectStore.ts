@@ -3,6 +3,8 @@ import type {
   BidsSettings,
   CortexLumeProject,
   DeviceProfile,
+  DigitizerSession,
+  DigitizerOptodeMapping,
   LayoutDefinition,
   LayoutInstance,
   OptodeType,
@@ -121,6 +123,7 @@ function createProject(): CortexLumeProject {
       optodeRadiusMm: 3.6,
     },
     verifiedResults: [],
+    digitizerSessions: [],
   };
 }
 
@@ -161,8 +164,17 @@ interface ProjectStore {
   toast: string | null;
   bidsSettingsExpanded: boolean;
   bidsValidationFields: BidsField[];
+  activeDigitizerSessionId: string | null;
+  digitizerPreview: { session: DigitizerSession; mappings: DigitizerOptodeMapping[] } | null;
   setToast(message: string | null): void;
   setBidsSettingsExpanded(expanded: boolean, validationFields?: BidsField[]): void;
+  addDigitizerSession(session: DigitizerSession): void;
+  confirmDigitizerMapping(session: DigitizerSession, mappings: DigitizerOptodeMapping[]): void;
+  confirmFivePointCalibration(session: DigitizerSession, targetInstanceIds: string[]): void;
+  setDigitizerPreview(preview: { session: DigitizerSession; mappings: DigitizerOptodeMapping[] } | null): void;
+  removeDigitizerSession(sessionId: string): void;
+  toggleDigitizerSession(sessionId: string): void;
+  setActiveDigitizerSession(sessionId: string | null): void;
   newProject(): void;
   loadProject(project: CortexLumeProject): void;
   setProjectPath(path: string | null): void;
@@ -267,12 +279,115 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     toast: null,
     bidsSettingsExpanded: false,
     bidsValidationFields: [],
+    activeDigitizerSessionId: null,
+    digitizerPreview: null,
 
     setToast: (toast) => set({ toast }),
     setBidsSettingsExpanded: (bidsSettingsExpanded, bidsValidationFields = []) => set({
       bidsSettingsExpanded,
       bidsValidationFields,
     }),
+    addDigitizerSession: (session) => set((state) => ({
+      project: { ...state.project, updatedAt: now(), digitizerSessions: [...state.project.digitizerSessions, session] },
+      activeDigitizerSessionId: session.id,
+    })),
+    setDigitizerPreview: (digitizerPreview) => set({ digitizerPreview }),
+    confirmDigitizerMapping: (session, mappings) => set((state) => {
+      const pointPositions = new Map(session.calibratedPoints.map((point) => [point.pointId, point.rasMm]));
+      const affected = new Set(mappings.map((mapping) => mapping.instanceId));
+      const clones = state.project.instances.flatMap((original) => {
+        if (!affected.has(original.id)) return [];
+        const sourceLayout = state.project.layouts.find((layout) => layout.id === original.definitionId);
+        if (!sourceLayout) return [];
+        const instanceId = id();
+        const layoutId = id();
+        const clonedLayout: LayoutDefinition = {
+          ...structuredClone(sourceLayout), id: layoutId,
+          name: `${sourceLayout.name}D`, updatedAt: now(),
+        };
+        const remapped = mappings.filter((mapping) => mapping.instanceId === original.id).map((mapping) => ({ ...mapping, instanceId }));
+        const instance: LayoutInstance = {
+          ...structuredClone(original), id: instanceId, definitionId: layoutId, visible: true,
+          digitizerPositions: remapped.map((mapping) => ({ optodeId: mapping.optodeId, digitizerPointId: mapping.pointId, scalpRasMm: pointPositions.get(mapping.pointId)! })),
+          derivedFromInstanceId: original.id, digitizerSessionId: session.id, fitQc: undefined,
+        };
+        return [{ original, layout: clonedLayout, instance, mappings: remapped }];
+      });
+      const confirmedMappings = clones.flatMap((clone) => clone.mappings);
+      return {
+        project: {
+          ...state.project,
+          updatedAt: now(),
+          digitizerSessions: [...state.project.digitizerSessions, { ...session, optodeMappings: confirmedMappings }],
+          layouts: [...state.project.layouts, ...clones.map((clone) => clone.layout)],
+          instances: [
+            ...state.project.instances.map((instance) => affected.has(instance.id) ? { ...instance, visible: false } : instance),
+            ...clones.map((clone) => clone.instance),
+          ],
+          verifiedResults: state.project.verifiedResults.filter((result) => !result.instanceId || !affected.has(result.instanceId)),
+        },
+        library: [...state.library, ...clones.map((clone) => structuredClone(clone.layout))],
+        selectedInstanceId: clones[0]?.instance.id ?? state.selectedInstanceId,
+        activeDigitizerSessionId: session.id,
+        digitizerPreview: null,
+        projectRevision: state.projectRevision + 1,
+      };
+    }),
+    confirmFivePointCalibration: (session, targetInstanceIds) => set((state) => {
+      const affected = new Set(targetInstanceIds);
+      const clones = state.project.instances.flatMap((original) => {
+        if (!affected.has(original.id)) return [];
+        const sourceLayout = state.project.layouts.find((layout) => layout.id === original.definitionId);
+        if (!sourceLayout) return [];
+        const layout: LayoutDefinition = {
+          ...structuredClone(sourceLayout), id: id(),
+          name: `${sourceLayout.name.replace(/\s+P\d+$/i, '')} five-point`, updatedAt: now(),
+        };
+        const instance: LayoutInstance = {
+          ...structuredClone(original), id: id(), definitionId: layout.id, visible: true,
+          digitizerPositions: [], derivedFromInstanceId: original.id, digitizerSessionId: session.id, fitQc: undefined,
+        };
+        return [{ layout, instance }];
+      });
+      return {
+        project: {
+          ...state.project, updatedAt: now(), digitizerSessions: [...state.project.digitizerSessions, session],
+          layouts: [...state.project.layouts, ...clones.map((clone) => clone.layout)],
+          instances: [...state.project.instances.map((instance) => affected.has(instance.id) ? { ...instance, visible: false } : instance), ...clones.map((clone) => clone.instance)],
+        },
+        library: [...state.library, ...clones.map((clone) => structuredClone(clone.layout))],
+        selectedInstanceId: clones[0]?.instance.id ?? state.selectedInstanceId,
+        activeDigitizerSessionId: session.id,
+        projectRevision: state.projectRevision + 1,
+      };
+    }),
+    removeDigitizerSession: (sessionId) => set((state) => {
+      const removed = state.project.digitizerSessions.find((session) => session.id === sessionId);
+      const pointIds = new Set(removed?.calibratedPoints.map((point) => point.pointId) ?? []);
+      const derived = state.project.instances.filter((instance) => instance.digitizerSessionId === sessionId);
+      const derivedIds = new Set(derived.map((instance) => instance.id));
+      const derivedLayoutIds = new Set(derived.map((instance) => instance.definitionId));
+      const originalIds = new Set(derived.flatMap((instance) => instance.derivedFromInstanceId ? [instance.derivedFromInstanceId] : []));
+      return {
+      project: {
+        ...state.project,
+        updatedAt: now(),
+        digitizerSessions: state.project.digitizerSessions.filter((session) => session.id !== sessionId),
+        layouts: state.project.layouts.filter((layout) => !derivedLayoutIds.has(layout.id)),
+        instances: state.project.instances.filter((instance) => !derivedIds.has(instance.id)).map((instance) => originalIds.has(instance.id) ? { ...instance, visible: true } : { ...instance, digitizerPositions: (instance.digitizerPositions ?? []).filter((position) => !pointIds.has(position.digitizerPointId)) }),
+        verifiedResults: state.project.verifiedResults.filter((result) => !result.instanceId || !derivedIds.has(result.instanceId)),
+      },
+      library: state.library.filter((layout) => !derivedLayoutIds.has(layout.id)),
+      activeDigitizerSessionId: state.activeDigitizerSessionId === sessionId
+        ? state.project.digitizerSessions.find((session) => session.id !== sessionId)?.id ?? null
+        : state.activeDigitizerSessionId,
+      selectedInstanceId: derivedIds.has(state.selectedInstanceId ?? '') ? [...originalIds][0] ?? null : state.selectedInstanceId,
+      projectRevision: state.projectRevision + (derived.length ? 1 : 0),
+    }; }),
+    toggleDigitizerSession: (sessionId) => set((state) => ({
+      project: { ...state.project, digitizerSessions: state.project.digitizerSessions.map((session) => session.id === sessionId ? { ...session, visible: !session.visible } : session) },
+    })),
+    setActiveDigitizerSession: (activeDigitizerSessionId) => set({ activeDigitizerSessionId }),
     newProject: () => {
       const project = createProject();
       set({
@@ -290,6 +405,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         futureLayouts: [],
         bidsSettingsExpanded: false,
         bidsValidationFields: [],
+        activeDigitizerSessionId: null,
+        digitizerPreview: null,
       });
     },
     loadProject: (project) => set(() => {
@@ -301,7 +418,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         })),
       };
       const referencedLayoutIds = new Set(hydrated.instances.map((instance) => instance.definitionId));
-      const reusableLayouts = hydrated.layouts.filter((layout) => !referencedLayoutIds.has(layout.id));
+      const calibratedLayoutIds = new Set(hydrated.instances.flatMap((instance) =>
+        instance.digitizerSessionId ? [instance.definitionId] : []));
+      const reusableLayouts = hydrated.layouts.filter((layout) =>
+        !referencedLayoutIds.has(layout.id) || calibratedLayoutIds.has(layout.id));
       const library = (reusableLayouts.length > 0 ? reusableLayouts : hydrated.layouts)
         .map((layout) => structuredClone(layout));
       return {
@@ -318,6 +438,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         futureLayouts: [],
         bidsSettingsExpanded: false,
         bidsValidationFields: [],
+        activeDigitizerSessionId: hydrated.digitizerSessions.at(-1)?.id ?? null,
+        digitizerPreview: null,
       };
     }),
     setProjectPath: (projectPath) => set({ projectPath }),
@@ -547,6 +669,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         visible: true,
         locked: true,
         overrides: [],
+        digitizerPositions: [],
+        derivedFromInstanceId: null,
+        digitizerSessionId: null,
       };
       set((value) => ({
         project: {

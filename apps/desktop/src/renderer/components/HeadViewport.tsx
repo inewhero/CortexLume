@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import type { LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
+import type { DigitizerSession, LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
 import { useProjectStore } from '../store/projectStore';
 import {
   add3,
@@ -90,6 +90,10 @@ function geometryFromScene(scene: THREE.Group): THREE.BufferGeometry {
   prepared.computeVertexNormals();
   prepared.computeBoundingSphere();
   return prepared;
+}
+
+function midpoint3(a: Vec3, b: Vec3): Vec3 {
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
 }
 
 function ReferenceMarkers({ landmarks }: { landmarks: LandmarkFile['points'] }) {
@@ -274,6 +278,9 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
         const sensitivity = sourceScalp && detectorScalp
           ? channelSensitivityPath(sourceScalp, detectorScalp, optodeRadiusMm, transmissionDepthMm)
           : undefined;
+        const channelScalp = sourceScalp && detectorScalp
+          ? midpoint3(projectScalpSphereCenter(sourceScalp, optodeRadiusMm), projectScalpSphereCenter(detectorScalp, optodeRadiusMm))
+          : undefined;
         const channelSelected = selected && selectedHeadPairId === pair.id;
         return <group key={pair.id}>
           <Line points={[threeFromRas(a), threeFromRas(b)]} color={selected ? '#f0c95b' : '#8c989d'} lineWidth={selected ? 1.8 : 1.05} />
@@ -292,6 +299,7 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
           >
             <div className="head-tooltip foreground-tooltip">
               <strong>CH{pair.channelNumber ?? '—'}</strong>
+              <span>SCALP MNI: {formatRas(channelScalp)}</span>
               <span>CORTEX MNI: {formatRas(sensitivity.target)}</span>
               <AtlasTopRegion path={sensitivity.points} />
             </div>
@@ -328,12 +336,84 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
   );
 }
 
+function DigitizerOverlay({ session, active }: { session: DigitizerSession; active: boolean }) {
+  const calibrated = useMemo(() => new Map(session.calibratedPoints.map((point) => [point.pointId, point.rasMm])), [session.calibratedPoints]);
+  return <group>
+    {session.calibration.residuals.map((residual) => <Line
+      key={residual.label}
+      points={[threeFromRas(residual.measuredRasMm), threeFromRas(residual.targetRasMm)]}
+      color="#f0c653" lineWidth={active ? 1.5 : 0.8} dashed dashSize={1.5} gapSize={1.2}
+    />)}
+    {session.points.map((point) => {
+      const ras = calibrated.get(point.id);
+      if (!ras) return null;
+      const color = point.kind === 'source' ? '#df4b3f' : point.kind === 'detector' ? '#1c83b3' : point.kind === 'landmark' ? '#f0c653' : point.kind === 'headshape' ? '#d8dfdc' : '#aa8bc2';
+      const radius = point.kind === 'headshape' ? 1.1 : point.kind === 'landmark' ? 2.4 : 2;
+      return <group key={point.id} position={threeFromRas(ras)}>
+        <mesh renderOrder={5}>
+          <sphereGeometry args={[active ? radius * 1.12 : radius, 12, 10]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={active ? 0.32 : 0.12} depthTest />
+        </mesh>
+        {point.kind === 'landmark' && <Html position={[2.8, 2.8, 0]} zIndexRange={[1500, 800]} style={{ pointerEvents: 'none' }}><span className="digitizer-label">{point.label}</span></Html>}
+      </group>;
+    })}
+  </group>;
+}
+
+function DigitizerMappingPreview() {
+  const { project, digitizerPreview } = useProjectStore();
+  if (!digitizerPreview) return null;
+  const positionByPoint = new Map(digitizerPreview.session.calibratedPoints.map((point) => [point.pointId, point.rasMm]));
+  const radius = project.projectionSettings.optodeRadiusMm ?? 3.6;
+  return <group>
+    {digitizerPreview.mappings.map((mapping) => {
+      const instance = project.instances.find((candidate) => candidate.id === mapping.instanceId);
+      const layout = project.layouts.find((candidate) => candidate.id === instance?.definitionId);
+      const optode = layout?.optodes.find((candidate) => candidate.id === mapping.optodeId);
+      const measured = positionByPoint.get(mapping.pointId);
+      const target = instance && layout ? fittedOptodePositions(layout, instance).get(mapping.optodeId) : undefined;
+      if (!measured || !target || !optode) return null;
+      const measuredCenter = projectScalpSphereCenter(measured, radius);
+      const targetCenter = projectScalpSphereCenter(target, radius);
+      const targetColor = optode.type === 'source' ? '#ff493d' : '#00a6df';
+      const startColor = new THREE.Color('#ffffff');
+      const endColor = new THREE.Color(targetColor);
+      const gradientSteps = 16;
+      const gradientPoints = Array.from({ length: gradientSteps + 1 }, (_, index): Vec3 => {
+        const fraction = index / gradientSteps;
+        return [
+          measuredCenter[0] + (targetCenter[0] - measuredCenter[0]) * fraction,
+          measuredCenter[1] + (targetCenter[1] - measuredCenter[1]) * fraction,
+          measuredCenter[2] + (targetCenter[2] - measuredCenter[2]) * fraction,
+        ];
+      });
+      const renderKey = [mapping.instanceId, mapping.optodeId, mapping.pointId, ...measuredCenter, ...targetCenter].join(':');
+      return <group key={renderKey}>
+        {gradientPoints.slice(0, -1).map((point, index) => {
+          const fraction = (index + 0.5) / gradientSteps;
+          const color = startColor.clone().lerp(endColor, Math.min(1, Math.pow(fraction, 0.55) * 1.15));
+          return <Line
+            key={`${renderKey}:${index}`}
+            points={[threeFromRas(point), threeFromRas(gradientPoints[index + 1]!)]}
+            color={`#${color.getHexString()}`}
+            lineWidth={2.8}
+            depthTest={false}
+            renderOrder={30}
+          />;
+        })}
+        <mesh position={threeFromRas(measuredCenter)} renderOrder={20}><sphereGeometry args={[radius, 16, 13]} /><meshStandardMaterial color="#aab1af" emissive="#ffffff" emissiveIntensity={0.16} /></mesh>
+        <mesh position={threeFromRas(targetCenter)} renderOrder={19}><sphereGeometry args={[radius * 0.42, 12, 10]} /><meshStandardMaterial color={targetColor} emissive={targetColor} emissiveIntensity={0.25} /></mesh>
+      </group>;
+    })}
+  </group>;
+}
+
 function HeadScene({ landmarks, surfaceRevision, onSurfacesReady }: {
   landmarks: LandmarkFile['points'];
   surfaceRevision: number;
   onSurfacesReady(): void;
 }) {
-  const { project, selectedInstanceId, selectInstance } = useProjectStore();
+  const { project, selectedInstanceId, selectInstance, activeDigitizerSessionId } = useProjectStore();
   return (
     <>
       <color attach="background" args={['#151b1d']} />
@@ -348,6 +428,8 @@ function HeadScene({ landmarks, surfaceRevision, onSurfacesReady }: {
         const layout = project.layouts.find((item) => item.id === instance.definitionId);
         return layout ? <OptodePatch key={instance.id} layout={layout} instance={instance} patchIndex={index} surfaceRevision={surfaceRevision} /> : null;
       })}
+      {project.digitizerSessions.filter((session) => session.visible && session.optodeMappings.length === 0).map((session) => <DigitizerOverlay key={session.id} session={session} active={session.id === activeDigitizerSessionId} />)}
+      <DigitizerMappingPreview />
       <gridHelper args={[360, 18, '#3c484c', '#273135']} position={[0, -145, 0]} />
       <OrbitControls makeDefault minDistance={150} maxDistance={430} target={[0, -12, 3]} enableDamping dampingFactor={0.08} />
     </>
@@ -446,6 +528,7 @@ export function HeadViewport() {
       <div className="viewport-overlay bottom-left legend">
         <span><i className="source-dot" /> SOURCE</span><span><i className="detector-dot" /> DETECTOR</span>
         <span>{project.instances.length} PATCH{project.instances.length === 1 ? '' : 'ES'}</span>
+        {project.digitizerSessions.length > 0 && <span>{project.digitizerSessions.reduce((sum, session) => sum + session.points.length, 0)} DIGITIZED PTS</span>}
       </div>
       <Canvas onPointerMissed={() => selectInstance(selectedInstanceId, null)} camera={{ position: [215, 138, -300], fov: 39 }} dpr={[1, 1.6]} gl={{ antialias: true }}>
         <HeadScene landmarks={landmarks} surfaceRevision={surfaceRevision} onSurfacesReady={() => setSurfaceRevision((value) => value + 1)} />

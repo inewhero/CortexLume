@@ -274,6 +274,51 @@ code { color: #4e585c; background: transparent; font: 9px/1.2 "Cascadia Mono", C
 }
 .project-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
 .project-actions.two { grid-template-columns: repeat(2, 1fr); }
+.workflow-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 6px; margin-top: 6px; }
+.workflow-row > span { color: var(--muted); font-size: 7px; font-weight: 800; letter-spacing: .08em; }
+.workflow-row .project-actions { margin-top: 0; }
+.workflow-row button { min-width: 0; padding-inline: 3px; font-size: 7px; white-space: nowrap; }
+.dialog-backdrop { position: fixed; z-index: 2147483600; inset: 0; display: grid; place-items: center end; padding: 28px; pointer-events: none; background: linear-gradient(90deg, transparent 42%, #11181920); }
+.dialog-backdrop.is-centered { place-items: center; background: #11181970; }
+.digitizer-dialog { box-sizing: border-box; width: min(500px, calc(100vw - 40px)); max-height: min(760px, 78vh); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; pointer-events: auto; color: #263033; background: #f2f3f0; border: 1px solid #7e8989; box-shadow: 0 22px 70px #0009; }
+.digitizer-dialog.is-manual { width: min(440px, calc(100vw - 32px)); }
+.digitizer-dialog.is-import { width: min(500px, calc(100vw - 40px)); }
+.digitizer-dialog.is-correspondence { max-height: min(410px, 42vh); }
+.digitizer-dialog > header, .digitizer-dialog > footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 11px 13px; background: #e2e5e2; border-bottom: 1px solid #aeb6b3; }
+.digitizer-dialog > header { cursor: grab; touch-action: none; user-select: none; }
+.digitizer-dialog > header:active { cursor: grabbing; }
+.digitizer-dialog > header strong { font-size: 11px; letter-spacing: .06em; }
+.digitizer-dialog > header button { width: 28px; min-height: 26px; padding: 0; cursor: pointer; font-size: 17px; }
+.dialog-header-actions { display: flex; align-items: center; gap: 5px; }
+.digitizer-dialog > header .mapping-refresh { width: auto; padding: 0 9px; font: 800 8px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: .04em; }
+.digitizer-dialog-body { min-height: 0; overflow: auto; padding: 13px; }
+.digitizer-top-controls { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid #c5cbc8; }
+.digitizer-unit { display: grid; grid-template-columns: 72px minmax(60px, 78px); align-items: center; gap: 7px; min-width: 0; }
+.digitizer-unit span, .grid-head { color: #667174; font-size: 8px; font-weight: 800; letter-spacing: .07em; }
+.mapping-scope { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 7px; min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; }
+.mapping-scope > span { color: #4d595c; font-size: 8px; font-weight: 800; letter-spacing: .07em; }
+.mapping-scope select, .digitizer-unit select { min-width: 0; width: 100%; }
+.five-point-assignments { display: grid; gap: 6px; margin-top: 11px; }
+.five-point-assignments p { margin: 0 0 4px; color: #596568; font-size: 9px; line-height: 1.45; }
+.five-point-assignments label { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 8px; }
+.five-point-grid { display: grid; grid-template-columns: 54px repeat(3, minmax(0, 1fr)); gap: 5px; margin-top: 12px; }
+.five-point-row { display: contents; }
+.five-point-row strong { align-self: center; }
+.five-point-row input { min-width: 0; width: 100%; padding-inline: 7px; }
+.dialog-error { margin-top: 10px; padding: 8px; color: #fff; background: #9b342f; font-size: 9px; }
+.mapping-confirm-list { display: grid; gap: 4px; }
+.mapping-qc { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; margin-bottom: 7px; padding: 10px; color: #eef2ef; background: #273134; }
+.mapping-qc strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.mapping-qc span { color: #f0f3f1; font: 400 10px/1.2 "Cascadia Mono", Consolas, monospace; white-space: nowrap; }
+.mapping-list-head, .mapping-list-row { display: grid; grid-template-columns: 98px minmax(150px, 1fr) 58px; align-items: center; gap: 7px; }
+.mapping-list-head { padding: 4px 6px; color: #657073; font-size: 7px; font-weight: 800; letter-spacing: .07em; }
+.mapping-list-row { min-height: 32px; padding: 4px 6px; border-top: 1px solid #c8cfcc; }
+.mapping-list-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+.mapping-list-row strong.source { color: #b33830; }
+.mapping-list-row strong.detector { color: #14698e; }
+.mapping-list-row code { color: #445154; font-size: 8px; text-align: right; }
+.digitizer-dialog > footer { justify-content: flex-end; border-top: 1px solid #aeb6b3; border-bottom: 0; }
+.digitizer-label { display: inline-block; padding: 1px 3px; color: #171a1b; background: #f0c653e8; border: 1px solid #7c6014; font: 800 7px "Cascadia Mono", Consolas, monospace; white-space: nowrap; }
 .layout-name-editor { min-width: 0; display: grid; gap: 2px; }
 .layout-name-editor input {
   min-width: 0;
@@ -318,7 +363,7 @@ code { color: #4e585c; background: transparent; font: 9px/1.2 "Cascadia Mono", C
 .selection-heading strong { font-size: 12px; }
 .selection-heading span { margin-top: 2px; color: var(--muted); font: 8px "Cascadia Mono", Consolas, monospace; }
 .channel-selection-heading i { width: 24px; height: 18px; display: grid; place-items: center; color: #171b1d; background: var(--accent); border-radius: 0; font: 800 7px "Cascadia Mono", Consolas, monospace; }
-.selection-block dl { display: grid; grid-template-columns: .9fr 1.3fr; gap: 0; margin: 8px 0; border-top: 1px solid #d2d6d3; }
+.selection-block dl { display: grid; grid-template-columns: .9fr 1.3fr; gap: 0; margin: 8px 0; }
 .selection-block dt, .selection-block dd { min-height: 29px; display: flex; align-items: center; margin: 0; border-bottom: 1px solid #d2d6d3; font-size: 9px; }
 .selection-block dt { color: var(--muted); font-weight: 700; letter-spacing: .04em; }
 .selection-block dd { justify-content: flex-end; text-align: right; overflow-wrap: anywhere; font-family: "Cascadia Mono", Consolas, monospace; }

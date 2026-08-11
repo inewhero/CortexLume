@@ -4,7 +4,7 @@
 
 # CortexLume
 
-CortexLume is a scientifically validated, offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp and cortical coordinates in MNI space.
+CortexLume is a scientifically validated, offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp, display, and cortical coordinates in MNI space.
 
 The application combines a high-density 2D array editor, multi-patch 3D alignment, sphere-aware scalp and cortical projection, five-point and 10–10 references, Harvard–Oxford probability-volume lookup, project archives, focused CSV results, BIDS-NIRS geometry sidecars, and direct BrainNet Viewer export.
 
@@ -48,7 +48,7 @@ The bundled `MNI152NLin6Asym` asset manifest is verified and the atlas, correspo
 | Harvard–Oxford atlas | Passed | FSL authority probability volumes mapped losslessly to the locked TemplateFlow RAS+ grid and checked against golden coordinates |
 | Asset integrity | Passed | Every released template, mesh, atlas index, correspondence table, and QC report is SHA-256 checked at runtime |
 
-Coordinates use `MNI152NLin6Asym`, RAS+, millimetres. Scalp coordinates describe optode sphere centres. Cortical coordinates describe the first correspondence-backed cortical contact along the defined radial projection. Channel atlas results aggregate the sampled geometric channel path; optode atlas results are retained as single-ray references.
+Coordinates use `MNI152NLin6Asym`, RAS+, millimetres. Scalp coordinates describe physical optode sphere centres on the head. Display coordinates describe collision-safe sphere centres used internally by the CortexLume cortical renderer, preventing finite-sized nodes from entering deep sulci; they are intermediate, mesh-specific visualization coordinates. Cortical coordinates describe the first correspondence-backed gray-matter contact and remain the portable input to atlas lookup and BrainNet Viewer. Channel atlas results aggregate the sampled geometric channel path; optode atlas results are retained as single-ray references.
 
 Harvard–Oxford percentages are the original population-atlas voxel probabilities, reported as the three highest values without renormalization. CortexLume provides validated template-space planning and reporting with verified correspondence across the bundled template, cortical mesh, and atlas. Studies that collect individual anatomy can extend this workflow with participant-specific registration.
 
@@ -59,8 +59,8 @@ The complete numerical evidence is stored in [`cedalion-correspondence-qc.json`]
 1. **Design a patch.** Create an S/D pattern in **Optode Design**, or generate an `x × y` grid. Adjust optode positions and channel numbering directly on the canvas.
 2. **Place it on the head.** Drag the layout into **3D Align**. Add further patches for bilateral or distributed coverage.
 3. **Align the mapping.** Select one patch, move it over the scalp, and use the rotation controls. Enable single-optode editing only for local corrections.
-4. **Choose the display mode.** **Scalp** keeps optodes on the head surface. **Cortex** displays their first cortical contact. The default channel transmission depth is 25 mm and can be adjusted in **Info Panel**.
-5. **Inspect results.** Select an optode or channel to view scalp MNI, cortical MNI, and the highest-probability cortical region. The Info Panel reports the full top-three atlas result.
+4. **Choose the display mode.** **Scalp** keeps optodes on the head surface. **Cortex** places each finite-sized optode at its collision-safe cortical display position while retaining the underlying gray-matter contact for analysis. The default channel transmission depth is 25 mm and can be adjusted in **Info Panel**.
+5. **Inspect results.** Select an optode or channel to view scalp and cortical MNI together with the highest-probability cortical region. The Info Panel reports the full top-three atlas result. Display MNI remains an export-only visualization coordinate.
 6. **Describe the recording.** Expand **Device** when preparing BIDS output and enter the subject, task, acquisition, run, sampling frequency, and instrument metadata.
 7. **Save or export.** Save the editable workspace as `.cortexlume`, or select CSV, BIDS, or BrainNet Viewer output.
 
@@ -81,11 +81,11 @@ BIDS export creates subject/session NIRS geometry files, coordinate-system metad
 **Export BrainNet** writes:
 
 - the standard CortexLume optode and channel CSV files;
-- `cortexlume_brainnet.node` and `cortexlume_brainnet.edge`;
+- `cortexlume_brainnet.node`;
 - `cortexlume_open_brainnet.m`;
 - the technical JSON and a short format note.
 
-The MATLAB script reads the exported CSV tables, rebuilds the BrainNet native files, locates `BrainNet_MapCfg`, selects BrainNet Viewer's ICBM152 surface, and opens the result. Nodes use cortical MNI coordinates; color value 1 represents sources and 2 represents detectors. Edges encode the designed S–D channel topology.
+The MATLAB script loads the validated node file, locates `BrainNet_MapCfg`, selects BrainNet Viewer's ICBM152 surface, and opens the result with source optodes in red and detectors in blue. `cortexlume_brainnet.node` passes cortical MNI x/y/z (R/A/S) millimetres to BrainNet unchanged. Display MNI remains available in CSV and JSON as a mesh-specific CortexLume visualization coordinate and is not transferred to BrainNet's distinct surface mesh. Labels remain available but are hidden by default. The script saves left, right, anterior, posterior, dorsal, two lateral-oblique and one posterior-dorsal view, plus an array-facing optimized view. It arranges these into an fNIRS-oriented 3×3 mosaic without colorbars or a ventral view, then leaves the interactive viewer on the optimized view. CortexLume does not generate BrainNet edges.
 
 Automatic launch requires MATLAB and BrainNet Viewer on the MATLAB search path. `CORTEXLUME_MATLAB` can point to a specific `matlab.exe`. The integration is tested against MATLAB R2020a and the 2019 BrainNet Viewer distribution (`BrainNet.m` 1.63 and `BrainNet_MapCfg.m` 1.52). BrainNet Viewer remains an external application and is not bundled with CortexLume. See the [official BrainNet Viewer project](https://www.nitrc.org/projects/bnv/) and cite [Xia, Wang, and He (2013)](https://doi.org/10.1371/journal.pone.0068910) when publishing its figures.
 

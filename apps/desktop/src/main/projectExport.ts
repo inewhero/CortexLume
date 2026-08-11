@@ -56,6 +56,12 @@ function instanceCodes(project: CortexLumeProject): Map<string, string> {
   ));
 }
 
+function exportInstances(project: CortexLumeProject): LayoutInstance[] {
+  const superseded = new Set(project.instances.flatMap((instance) =>
+    instance.derivedFromInstanceId ? [instance.derivedFromInstanceId] : []));
+  return project.instances.filter((instance) => !superseded.has(instance.id));
+}
+
 function layoutForInstance(
   project: CortexLumeProject,
   instance: LayoutInstance,
@@ -66,7 +72,7 @@ function layoutForInstance(
 function qualityControl(project: CortexLumeProject) {
   const results = resultMap(project);
   const codes = instanceCodes(project);
-  const channelSpacing = project.instances.flatMap((instance) => {
+  const channelSpacing = exportInstances(project).flatMap((instance) => {
     const layout = layoutForInstance(project, instance);
     if (!layout) return [];
     return layout.pairs.map((pair) => {
@@ -103,7 +109,7 @@ function qualityControl(project: CortexLumeProject) {
 function exportMetadata(project: CortexLumeProject, kind: string, warnings: string[]) {
   return {
     format: 'cortexlume-export',
-    formatVersion: 3,
+    formatVersion: 4,
     kind,
     exportedAt: new Date().toISOString(),
     project: {
@@ -116,12 +122,14 @@ function exportMetadata(project: CortexLumeProject, kind: string, warnings: stri
       layouts: project.layouts.length,
       instances: project.instances.length,
       results: project.verifiedResults.length,
+      digitizerSessions: project.digitizerSessions.length,
     },
     coordinateSystem: {
       space: project.template.id,
       convention: project.template.coordinateConvention,
       units: project.template.units,
       scalp: 'Optode sphere centre on the scalp surface.',
+      display: 'Collision-safe optode sphere centre used internally for CortexLume cortical visualization.',
       cortex: 'First cortical-surface contact; this coordinate is used for probability-volume lookup.',
     },
     technical: {
@@ -130,6 +138,7 @@ function exportMetadata(project: CortexLumeProject, kind: string, warnings: stri
       deviceProfile: project.deviceProfile,
       layouts: project.layouts,
       instances: project.instances,
+      digitizerSessions: project.digitizerSessions,
       projectionResults: project.verifiedResults,
       qualityControl: qualityControl(project),
     },
@@ -144,6 +153,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
   const optodeRows: unknown[][] = [[
     'patch', 'optode', 'type',
     'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
+    'display_mni_r', 'display_mni_a', 'display_mni_s',
     'cortex_mni_r', 'cortex_mni_a', 'cortex_mni_s',
     'cortical_region_1', 'cortical_region_1_percent',
     'cortical_region_2', 'cortical_region_2_percent',
@@ -151,16 +161,17 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
   ]];
   const channelRows: unknown[][] = [[
     'patch', 'channel', 'source', 'detector',
-    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_cortex_spacing_mm',
+    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_display_spacing_mm', 'actual_cortex_spacing_mm',
     'short_channel',
     'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
+    'display_mni_r', 'display_mni_a', 'display_mni_s',
     'cortex_mni_r', 'cortex_mni_a', 'cortex_mni_s',
     'cortical_region_1', 'cortical_region_1_percent',
     'cortical_region_2', 'cortical_region_2_percent',
     'cortical_region_3', 'cortical_region_3_percent',
   ]];
 
-  for (const instance of project.instances) {
+  for (const instance of exportInstances(project)) {
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const code = codes.get(instance.id) ?? '';
@@ -170,6 +181,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
       optodeRows.push([
         code, optode.label, optode.type,
         ...vector(result?.scalpRasMm),
+        ...vector(result?.displayRasMm),
         ...vector(result?.corticalRasMm),
         ...topRegions(result?.underlyingCorticalRegions ?? []),
       ]);
@@ -179,15 +191,17 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
       const sourceResult = results.get(`${instance.id}:${pair.sourceId}`);
       const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
       const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
+      const actualDisplaySpacing = distance3(sourceResult?.displayRasMm, detectorResult?.displayRasMm);
       const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
       channelRows.push([
         code, pair.channelNumber ?? '',
         byId.get(pair.sourceId)?.label ?? pair.sourceId,
         byId.get(pair.detectorId)?.label ?? pair.detectorId,
         Number(pair.nominalDistanceMm.toFixed(3)),
-        actualScalpSpacing, actualCortexSpacing,
+        actualScalpSpacing, actualDisplaySpacing, actualCortexSpacing,
         pair.shortChannel,
         ...vector(result?.scalpRasMm),
+        ...vector(result?.displayRasMm),
         ...vector(result?.corticalRasMm),
         ...topRegions(result?.underlyingCorticalRegions ?? []),
       ]);
@@ -197,7 +211,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
   if (project.instances.length === 0) {
     warnings.push('No 3D patch instances exist; exported coordinate columns are empty.');
   }
-  const expectedResults = project.instances.reduce((total, instance) => {
+  const expectedResults = exportInstances(project).reduce((total, instance) => {
     const layout = layoutForInstance(project, instance);
     return total + (layout ? layout.optodes.length + layout.pairs.length : 0);
   }, 0);
@@ -216,53 +230,67 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
 function brainNetMatlabScript(): string {
   return `${[
     "% CortexLume BrainNet Viewer bridge",
-    "% Rebuilds BrainNet Viewer files from the exported CSV tables and opens them.",
+    "% Opens the validated cortical-MNI node file with CortexLume S/D styling.",
     "root = fileparts(mfilename('fullpath'));",
-    "optodeCsv = fullfile(root, 'cortexlume_optodes.csv');",
-    "channelCsv = fullfile(root, 'cortexlume_channels.csv');",
-    "assert(isfile(optodeCsv), 'CortexLume:MissingOptodesCsv', 'Missing cortexlume_optodes.csv');",
-    "assert(isfile(channelCsv), 'CortexLume:MissingChannelsCsv', 'Missing cortexlume_channels.csv');",
-    "optodes = readtable(optodeCsv);",
-    "channels = readtable(channelCsv);",
-    "requiredOptodeColumns = {'patch','optode','type','cortex_mni_r','cortex_mni_a','cortex_mni_s'};",
-    "assert(all(ismember(requiredOptodeColumns, optodes.Properties.VariableNames)), 'CortexLume:InvalidOptodesCsv', 'CortexLume optode CSV columns are incomplete');",
-    "requiredChannelColumns = {'patch','source','detector'};",
-    "assert(all(ismember(requiredChannelColumns, channels.Properties.VariableNames)), 'CortexLume:InvalidChannelsCsv', 'CortexLume channel CSV columns are incomplete');",
-    "valid = isfinite(optodes.cortex_mni_r) & isfinite(optodes.cortex_mni_a) & isfinite(optodes.cortex_mni_s);",
-    "optodes = optodes(valid, :);",
-    "assert(height(optodes) > 0, 'CortexLume:NoCoordinates', 'No finite cortical MNI coordinates are available');",
-    "labels = strcat(string(optodes.patch), '_', string(optodes.optode));",
-    "labels = regexprep(labels, '\\s+', '_');",
-    "nodeColors = 1 + double(strcmpi(string(optodes.type), 'detector'));",
-    "nodeSizes = repmat(2.0, height(optodes), 1);",
     "nodePath = fullfile(root, 'cortexlume_brainnet.node');",
-    "fid = fopen(nodePath, 'w');",
-    "assert(fid >= 0, 'CortexLume:NodeWriteFailed', 'Cannot create BrainNet node file');",
-    "cleanupNode = onCleanup(@() fclose(fid));",
-    "for row = 1:height(optodes)",
-    "    fprintf(fid, '%.6f %.6f %.6f %d %.3f %s\\n', optodes.cortex_mni_r(row), optodes.cortex_mni_a(row), optodes.cortex_mni_s(row), nodeColors(row), nodeSizes(row), labels(row));",
-    "end",
-    "clear cleanupNode;",
-    "nodeIndex = containers.Map(cellstr(labels), num2cell(1:height(optodes)));",
-    "edgeMatrix = zeros(height(optodes));",
-    "for row = 1:height(channels)",
-    "    sourceKey = char(strcat(string(channels.patch(row)), '_', string(channels.source(row))));",
-    "    detectorKey = char(strcat(string(channels.patch(row)), '_', string(channels.detector(row))));",
-    "    if isKey(nodeIndex, sourceKey) && isKey(nodeIndex, detectorKey)",
-    "        sourceIndex = nodeIndex(sourceKey);",
-    "        detectorIndex = nodeIndex(detectorKey);",
-    "        edgeMatrix(min(sourceIndex, detectorIndex), max(sourceIndex, detectorIndex)) = 1;",
-    "    end",
-    "end",
-    "edgePath = fullfile(root, 'cortexlume_brainnet.edge');",
-    "dlmwrite(edgePath, edgeMatrix, 'delimiter', '\\t', 'precision', '%.6f');",
+    "assert(isfile(nodePath), 'CortexLume:MissingNodeFile', 'Missing cortexlume_brainnet.node');",
     "brainNetMap = which('BrainNet_MapCfg');",
     "assert(~isempty(brainNetMap), 'CortexLume:BrainNetNotFound', 'BrainNet Viewer is not on the MATLAB path');",
     "brainNetRoot = fileparts(brainNetMap);",
     "surfacePath = fullfile(brainNetRoot, 'Data', 'SurfTemplate', 'BrainMesh_ICBM152.nv');",
     "assert(isfile(surfacePath), 'CortexLume:BrainNetSurfaceMissing', 'BrainNet ICBM152 surface was not found');",
-    "fprintf('CortexLume: loading %d cortical optodes and %d channel links into BrainNet Viewer.\\n', height(optodes), nnz(edgeMatrix));",
-    "BrainNet_MapCfg(surfacePath, nodePath, edgePath);",
+    "H = BrainNet_MapCfg(surfacePath, nodePath);",
+    "global EC surf",
+    "% BrainNet receives CortexLume cortical MNI coordinates unchanged.",
+    "% BrainNet defaults to one color and ignores node column 4. Use it as a modular S/D index.",
+    "EC.nod.color = 3;",
+    "EC.nod.ModularNumber = [1; 2];",
+    "EC.nod.CM = [223 75 63; 28 131 179] / 255;",
+    "EC.nod.CMm = EC.nod.CM;",
+    "EC.nod.size = 2;",
+    "EC.nod.size_value = 2;",
+    "EC.nod.size_ratio = 1;",
+    "% An opaque neutral surface preserves sulcal anatomy without a plastic highlight.",
+    "EC.msh.color = [0.82 0.84 0.83];",
+    "EC.msh.color_table = EC.msh.color;",
+    "EC.msh.color_table_tmp = EC.msh.color;",
+    "EC.msh.alpha = 1;",
+    "EC.glb.material = 'dull';",
+    "EC.glb.lighting = 'phong';",
+    "EC.glb.shading = 'interp';",
+    "% Keep dense arrays readable; labels remain in the node file and can be enabled in BrainNet.",
+    "EC.lbl = 2;",
+    "% Build eight standard directions plus one array-facing optimized direction.",
+    "centroid = mean(surf.sphere(:, 1:3), 1);",
+    "optimizedAz = atan2d(centroid(1), -centroid(2));",
+    "optimizedEl = atan2d(centroid(3), hypot(centroid(1), centroid(2)));",
+    "viewAngles = [-90 0; 90 0; 180 0; 0 0; 0 90; -45 25; 45 25; 0 45; optimizedAz optimizedEl];",
+    "viewNames = {'01_left', '02_right', '03_anterior', '04_posterior', '05_dorsal', '06_left_oblique', '07_right_oblique', '08_posterior_dorsal', '09_optimized'};",
+    "viewImages = cell(9, 1);",
+    "viewPaths = cell(9, 1);",
+    "EC.lot.view = 1;",
+    "EC.lot.view_direction = 4;",
+    "set(H, 'Position', [50 50 1200 900], 'PaperPositionMode', 'auto');",
+    "for index = 1:9",
+    "    EC.lot.view_az = viewAngles(index, 1);",
+    "    EC.lot.view_el = viewAngles(index, 2);",
+    "    BrainNet('NV_m_nm_Callback', H);",
+    "    delete(findall(H, 'Type', 'ColorBar'));",
+    "    delete(findall(H, 'Tag', 'Colorbar'));",
+    "    viewPaths{index} = fullfile(root, ['cortexlume_brainnet_' viewNames{index} '.png']);",
+    "    print(H, viewPaths{index}, '-dpng', '-r120');",
+    "    viewImages{index} = imread(viewPaths{index});",
+    "end",
+    "% fNIRS-oriented layout: lateral/dorsal/lateral, oblique/optimized/oblique, anterior/posterior-dorsal/posterior.",
+    "mosaic = [viewImages{1} viewImages{5} viewImages{2}; viewImages{6} viewImages{9} viewImages{7}; viewImages{3} viewImages{8} viewImages{4}];",
+    "imwrite(mosaic, fullfile(root, 'cortexlume_brainnet_10_mosaic.png'));",
+    "% Leave the interactive viewer on the optimized ninth view without a colorbar.",
+    "EC.lot.view_az = optimizedAz;",
+    "EC.lot.view_el = optimizedEl;",
+    "BrainNet('NV_m_nm_Callback', H);",
+    "delete(findall(H, 'Type', 'ColorBar'));",
+    "delete(findall(H, 'Tag', 'Colorbar'));",
+    "fprintf('CortexLume: wrote 8 standard views, 1 optimized view, and 1 mosaic (red source, blue detector).\\n');",
   ].join('\r\n')}\r\n`;
 }
 
@@ -271,9 +299,9 @@ export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
   const warnings = [...csv.warnings];
   const results = resultMap(project);
   const codes = instanceCodes(project);
-  const nodes: Array<{ key: string; label: string; coordinate: Vec3; color: number }> = [];
+  const nodes: Array<{ label: string; coordinate: Vec3; color: number }> = [];
 
-  for (const instance of project.instances) {
+  for (const instance of exportInstances(project)) {
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const patch = codes.get(instance.id) ?? instance.id;
@@ -281,45 +309,36 @@ export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
       const coordinate = results.get(`${instance.id}:${optode.id}`)?.corticalRasMm;
       if (!coordinate?.every(Number.isFinite)) continue;
       nodes.push({
-        key: `${instance.id}:${optode.id}`,
-        label: `${patch}_${optode.label}`.replaceAll(/\s+/g, '_'),
+        label: `${patch}-${optode.label}`.replaceAll(/\s+/g, '-'),
         coordinate,
         color: optode.type === 'source' ? 1 : 2,
       });
     }
   }
   if (nodes.length === 0) warnings.push('BrainNet Viewer output contains no finite cortical optode coordinates.');
-  const nodeIndex = new Map(nodes.map((node, index) => [node.key, index]));
-  const edges = Array.from({ length: nodes.length }, () => Array<number>(nodes.length).fill(0));
-  for (const instance of project.instances) {
-    const layout = layoutForInstance(project, instance);
-    if (!layout) continue;
-    for (const pair of layout.pairs) {
-      const source = nodeIndex.get(`${instance.id}:${pair.sourceId}`);
-      const detector = nodeIndex.get(`${instance.id}:${pair.detectorId}`);
-      if (source == null || detector == null) continue;
-      edges[Math.min(source, detector)]![Math.max(source, detector)] = 1;
-    }
-  }
-
   const files = {
     ...csv.files,
     'cortexlume_export.json': `${JSON.stringify(exportMetadata(project, 'brainnet-viewer', warnings), null, 2)}\n`,
     'cortexlume_brainnet.node': `${nodes.map((node) => [
       ...node.coordinate.map((value) => value.toFixed(6)),
       node.color,
-      '2.000',
+      '4.000',
       node.label,
     ].join(' ')).join('\r\n')}\r\n`,
-    'cortexlume_brainnet.edge': `${edges.map((row) => row.join('\t')).join('\r\n')}\r\n`,
     'cortexlume_open_brainnet.m': brainNetMatlabScript(),
     'README_BRAINNET.txt': `${[
       'CortexLume BrainNet Viewer export',
       '',
-      'Run cortexlume_open_brainnet.m in MATLAB to rebuild the .node and .edge files from the CSV tables and open BrainNet Viewer.',
-      'Nodes use cortical MNI RAS+ coordinates. Node color 1 denotes a source and color 2 denotes a detector.',
-      'Edges encode the designed source-detector channel topology.',
-      'The bundled native files are provided for direct inspection and are regenerated by the MATLAB script before loading.',
+      'Run cortexlume_open_brainnet.m in MATLAB to open the validated .node file in BrainNet Viewer.',
+      'Scalp MNI is the physical optode sphere centre: nearest scalp contact plus one outward optode radius.',
+      'Display MNI is the collision-safe sphere centre reached by sweeping the finite optode inward against the CortexLume cortical mesh; it is mesh-specific and is not used for BrainNet nodes.',
+      'Cortex MNI is the center-ray first contact with the correspondence-backed gray-matter surface and is used for atlas lookup.',
+      'Columns 1-3 are cortical MNI x/y/z (R/A/S) in millimetres; no display-axis conversion is applied.',
+      'Column 4 uses modular index 1 for sources and 2 for detectors. The script enforces red source and blue detector colors.',
+      'Node labels are stored in column 6 but hidden by default in BrainNet Viewer.',
+      'BrainNet receives the exported cortical MNI coordinates unchanged; no snapping, offset, or display-space correction is applied.',
+      'No edge file is generated: CortexLume exports optode locations only.',
+      'The MATLAB script writes eight fNIRS-relevant PNG views, one array-facing optimized PNG, and one logically arranged 3x3 mosaic without colorbars or a ventral view.',
     ].join('\r\n')}\r\n`,
   };
   return { files, warnings };
@@ -347,6 +366,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
   ].filter(Boolean).join('_');
   const optodeRows: unknown[][] = [[
     'name', 'type', 'x', 'y', 'z',
+    'display_x', 'display_y', 'display_z',
     'cortex_x', 'cortex_y', 'cortex_z',
     'cortical_region_1', 'cortical_region_1_percent',
     'cortical_region_2', 'cortical_region_2_percent',
@@ -363,7 +383,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
   let detectorCount = 0;
   let shortChannelCount = 0;
 
-  for (const instance of project.instances) {
+  for (const instance of exportInstances(project)) {
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const code = codes.get(instance.id)!;
@@ -377,6 +397,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
       optodeRows.push([
         name, optode.type,
         ...vector(result?.scalpRasMm, 'n/a'),
+        ...vector(result?.displayRasMm, 'n/a'),
         ...vector(result?.corticalRasMm, 'n/a'),
         ...topRegions(result?.underlyingCorticalRegions ?? [])
           .map((value) => value === '' ? 'n/a' : value),
@@ -384,7 +405,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
     }
   }
 
-  for (const instance of project.instances) {
+  for (const instance of exportInstances(project)) {
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const code = codes.get(instance.id)!;
@@ -453,6 +474,9 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
     }, null, 2)}\n`,
     [`${nirsDirectory}/${sharedPrefix}_optodes.tsv`]: table(optodeRows, '\t'),
     [`${nirsDirectory}/${sharedPrefix}_optodes.json`]: `${JSON.stringify({
+      display_x: { Description: 'Collision-safe CortexLume cortical display sphere centre, right axis', Units: 'mm' },
+      display_y: { Description: 'Collision-safe CortexLume cortical display sphere centre, anterior axis', Units: 'mm' },
+      display_z: { Description: 'Collision-safe CortexLume cortical display sphere centre, superior axis', Units: 'mm' },
       cortex_x: { Description: 'First gray-matter contact, right axis', Units: 'mm' },
       cortex_y: { Description: 'First gray-matter contact, anterior axis', Units: 'mm' },
       cortex_z: { Description: 'First gray-matter contact, superior axis', Units: 'mm' },
@@ -483,6 +507,9 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
     README: `${[
       'CortexLume BIDS-NIRS geometry package.',
       'Add the corresponding SNIRF recording under the generated subject nirs directory.',
+      'Scalp MNI (standard optodes.tsv x/y/z) is the physical optode sphere centre: nearest scalp contact plus one outward optode radius.',
+      'Display MNI (display_x/y/z extension columns) is the collision-safe sphere centre reached by sweeping the finite optode inward against the CortexLume cortical mesh; it is an intermediate visualization coordinate.',
+      'Cortex MNI (cortex_x/y/z extension columns) is the center-ray first contact with the correspondence-backed gray-matter surface and is used for atlas lookup.',
       ...warnings,
     ].join('\r\n')}\r\n`,
   };

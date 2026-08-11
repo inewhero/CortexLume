@@ -35,9 +35,12 @@ const instance: LayoutInstance = {
   rotationRad: 0,
   mappingRotationRad: 0,
   visible: true,
-  locked: true,
-  overrides: [],
-};
+      locked: true,
+      overrides: [],
+      digitizerPositions: [],
+      derivedFromInstanceId: null,
+      digitizerSessionId: null,
+    };
 
 function ellipsoidEquation([x, y, z]: [number, number, number]): number {
   const [rx, ry, rz] = SCALP_RADII;
@@ -84,6 +87,15 @@ describe('geometric head mapping', () => {
     for (const point of points.values()) {
       expect(ellipsoidEquation(point)).toBeCloseTo(1, 10);
     }
+  });
+
+  it('uses confirmed digitizer coordinates as the patch geometry', () => {
+    const measured: [number, number, number] = [-61, 22, 73];
+    const positions = fittedOptodePositions(layout, {
+      ...instance,
+      digitizerPositions: [{ optodeId: 'source-1', digitizerPointId: 'digitizer-1', scalpRasMm: measured }],
+    });
+    expect(positions.get('source-1')).toEqual(measured);
   });
 
   it('provides five landmarks and a dense 10-10 position set on the scalp', () => {

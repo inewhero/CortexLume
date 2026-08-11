@@ -160,7 +160,10 @@ export function fittedOptodePositions(
 ): Map<string, Vec3> {
   const anchor = projectToScalpSurface(instance.anchorRasMm);
   const basis = tangentBasis(anchor, instance.rotationRad + (instance.mappingRotationRad ?? 0));
+  const digitized = new Map((instance.digitizerPositions ?? []).map((position) => [position.optodeId, position.scalpRasMm]));
   return new Map(layout.optodes.map((optode) => {
+    const measured = digitized.get(optode.id);
+    if (measured) return [optode.id, measured] as const;
     const uv = effectiveUv(layout, instance, optode.id);
     const tangentPoint = add3(anchor, add3(scale3(basis.u, uv[0]), scale3(basis.v, uv[1])));
     return [optode.id, projectToScalpSurface(tangentPoint)] as const;

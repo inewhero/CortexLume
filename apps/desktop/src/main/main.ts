@@ -1,7 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { request as httpRequest } from 'node:http';
 import path from 'node:path';
 import {
   CortexLumeProjectSchema,
@@ -14,6 +16,7 @@ import {
 } from '@cortexlume/contracts';
 import { createProjectArchive, readProjectArchive } from './projectArchive';
 import { buildBidsGeometryExport, buildBrainNetExport, buildCsvExport, type ExportBundle } from './projectExport';
+import { parseDigitizerFile } from './digitizerImport';
 
 let mainWindow: BrowserWindow | null = null;
 let scienceProcess: ChildProcessWithoutNullStreams | null = null;
@@ -51,6 +54,13 @@ function resolveScienceCommand(): { command: string; args: string[]; cwd: string
   const configuredPython = process.env.CORTEXLUME_PYTHON;
   if (configuredPython) {
     return { command: configuredPython, args: [script], cwd: path.dirname(script) };
+  }
+  const builtExecutable = path.resolve(
+    app.getAppPath(), '..', '..', 'services', 'science', 'dist',
+    'cortexlume-science', 'cortexlume-science.exe',
+  );
+  if (existsSync(builtExecutable)) {
+    return { command: builtExecutable, args: [], cwd: path.dirname(builtExecutable) };
   }
   return { command: 'py', args: ['-3.12', script], cwd: path.dirname(script) };
 }
@@ -105,19 +115,42 @@ function startScienceSidecar(): Promise<void> {
 async function scienceRequest<T>(pathname: string, payload?: unknown): Promise<T> {
   await startScienceSidecar();
   if (!sciencePort) throw new Error('Science sidecar did not provide a port');
-  const requestInit: RequestInit = {
-    method: payload === undefined ? 'GET' : 'POST',
-    headers: {
-      Authorization: `Bearer ${scienceToken}`,
-      ...(payload === undefined ? {} : { 'Content-Type': 'application/json' }),
-    },
-  };
-  if (payload !== undefined) requestInit.body = JSON.stringify(payload);
-  const response = await fetch(`http://127.0.0.1:${sciencePort}${pathname}`, requestInit);
-  if (!response.ok) {
-    throw new Error(`Science service ${response.status}: ${await response.text()}`);
-  }
-  return (await response.json()) as T;
+  const body = payload === undefined ? undefined : JSON.stringify(payload);
+  return new Promise<T>((resolve, reject) => {
+    const request = httpRequest({
+      hostname: '127.0.0.1',
+      port: sciencePort!,
+      path: pathname,
+      method: body === undefined ? 'GET' : 'POST',
+      headers: {
+        Authorization: `Bearer ${scienceToken}`,
+        ...(body === undefined ? {} : {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        }),
+      },
+      timeout: 30_000,
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        const status = response.statusCode ?? 500;
+        if (status < 200 || status >= 300) {
+          reject(new Error(`Science service ${status}: ${text}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(text) as T);
+        } catch (error) {
+          reject(new Error(`Science service returned invalid JSON: ${(error as Error).message}`));
+        }
+      });
+    });
+    request.on('timeout', () => request.destroy(new Error('Science service request timed out')));
+    request.on('error', reject);
+    request.end(body);
+  });
 }
 
 async function createWindow(): Promise<void> {
@@ -301,6 +334,19 @@ function registerIpc(): void {
     },
   );
 
+  ipcMain.handle('input:digitizer', async () => {
+    const selection = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Import 3D digitizer points', properties: ['openFile'],
+      filters: [
+        { name: 'Digitizer data', extensions: ['csv', 'tsv', 'txt', 'json', 'pos', 'hsp', 'elp', 'eeg'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    const selectedPath = selection.filePaths[0];
+    if (selection.canceled || !selectedPath) return null;
+    return parseDigitizerFile(selectedPath, new Uint8Array(await readFile(selectedPath)));
+  });
+
   ipcMain.handle('export:csv', async (_event, rawProject: CortexLumeProject) => {
     const project = CortexLumeProjectSchema.parse(rawProject);
     const directory = await chooseExportDirectory('Export CortexLume CSV files');
@@ -316,6 +362,16 @@ function registerIpc(): void {
     const directory = await chooseExportDirectory('Export and open in BrainNet Viewer');
     if (!directory) return null;
     await mkdir(directory, { recursive: true });
+    const legacyAndGenerated = [
+      'cortexlume_brainnet.edge',
+      'cortexlume_brainnet_display.node',
+      ...[
+        '01_left', '02_right', '03_anterior', '04_posterior', '05_dorsal',
+        '06_ventral', '06_left_oblique', '07_left_oblique', '07_right_oblique',
+        '08_right_oblique', '08_posterior_dorsal', '09_optimized', '10_mosaic',
+      ].map((name) => `cortexlume_brainnet_${name}.png`),
+    ];
+    await Promise.all(legacyAndGenerated.map((filename) => rm(path.join(directory, filename), { force: true })));
     const bundle = buildBrainNetExport(project);
     const files = await writeExportBundle(directory, bundle);
     const command = matlabCommand();

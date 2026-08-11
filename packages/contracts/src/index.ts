@@ -70,6 +70,13 @@ export const LayoutInstanceSchema = z.object({
   visible: z.boolean().default(true),
   locked: z.boolean().default(true),
   overrides: z.array(OptodeOverrideSchema),
+  digitizerPositions: z.array(z.object({
+    optodeId: z.string().uuid(),
+    digitizerPointId: z.string().uuid(),
+    scalpRasMm: Vec3Schema,
+  })).default([]),
+  derivedFromInstanceId: z.string().uuid().nullable().default(null),
+  digitizerSessionId: z.string().uuid().nullable().default(null),
   fitQc: FitQcSchema.optional(),
 });
 export type LayoutInstance = z.infer<typeof LayoutInstanceSchema>;
@@ -136,6 +143,7 @@ export const ProjectionResultSchema = z.object({
   subjectKind: z.enum(['optode', 'pair']),
   subjectId: z.string().uuid(),
   scalpRasMm: Vec3Schema.nullable(),
+  displayRasMm: Vec3Schema.nullable().default(null),
   corticalRasMm: Vec3Schema.nullable(),
   depthTargetRasMm: Vec3Schema.nullable(),
   underlyingCorticalRegions: z.array(AtlasLabelSchema),
@@ -160,6 +168,68 @@ export const TemplateRefSchema = z.object({
 });
 export type TemplateRef = z.infer<typeof TemplateRefSchema>;
 
+export const DigitizerPointKindSchema = z.enum(['source', 'detector', 'landmark', 'headshape', 'unknown']);
+export type DigitizerPointKind = z.infer<typeof DigitizerPointKindSchema>;
+
+export const DigitizerPointSchema = z.object({
+  id: z.string().uuid(),
+  label: z.string().min(1),
+  kind: DigitizerPointKindSchema,
+  rawPosition: Vec3Schema,
+});
+export type DigitizerPoint = z.infer<typeof DigitizerPointSchema>;
+
+export const DigitizerCalibrationSchema = z.object({
+  method: z.literal('five-point-similarity'),
+  sourceUnit: z.enum(['mm', 'cm', 'm']),
+  matrix: z.array(z.number()).length(16),
+  scale: z.number().positive(),
+  rmsResidualMm: z.number().nonnegative(),
+  maxResidualMm: z.number().nonnegative(),
+  residuals: z.array(z.object({
+    label: z.enum(['Nz', 'Iz', 'LPA', 'RPA', 'Cz']),
+    measuredRasMm: Vec3Schema,
+    targetRasMm: Vec3Schema,
+    residualMm: z.number().nonnegative(),
+  })).length(5),
+  calibratedAt: z.string().datetime(),
+});
+export type DigitizerCalibration = z.infer<typeof DigitizerCalibrationSchema>;
+
+export const DigitizerOptodeMappingSchema = z.object({
+  pointId: z.string().uuid(),
+  instanceId: z.string().uuid(),
+  optodeId: z.string().uuid(),
+  distanceMm: z.number().nonnegative(),
+});
+export type DigitizerOptodeMapping = z.infer<typeof DigitizerOptodeMappingSchema>;
+
+export const DigitizerSessionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1),
+  importedAt: z.string().datetime(),
+  source: z.object({
+    format: z.string().min(1),
+    fileName: z.string().nullable(),
+    sha256: z.string().nullable(),
+  }),
+  points: z.array(DigitizerPointSchema).min(5),
+  calibratedPoints: z.array(z.object({ pointId: z.string().uuid(), rasMm: Vec3Schema })),
+  calibration: DigitizerCalibrationSchema,
+  optodeMappings: z.array(DigitizerOptodeMappingSchema).default([]),
+  visible: z.boolean().default(true),
+});
+export type DigitizerSession = z.infer<typeof DigitizerSessionSchema>;
+
+export const DigitizerImportSchema = z.object({
+  fileName: z.string(),
+  format: z.string(),
+  sha256: z.string(),
+  suggestedUnit: z.enum(['mm', 'cm', 'm']),
+  points: z.array(DigitizerPointSchema),
+});
+export type DigitizerImport = z.infer<typeof DigitizerImportSchema>;
+
 export const CortexLumeProjectSchema = z.object({
   format: z.literal('cortexlume-project'),
   formatVersion: z.literal(1),
@@ -180,6 +250,7 @@ export const CortexLumeProjectSchema = z.object({
   }),
   projectionSettings: ProjectionSettingsSchema,
   verifiedResults: z.array(ProjectionResultSchema),
+  digitizerSessions: z.array(DigitizerSessionSchema).default([]),
 });
 export type CortexLumeProject = z.infer<typeof CortexLumeProjectSchema>;
 
@@ -210,6 +281,9 @@ export interface DesktopApi {
   project: {
     open(): Promise<{ project: CortexLumeProject; path: string } | null>;
     save(project: CortexLumeProject, currentPath?: string): Promise<{ path: string } | null>;
+  };
+  input: {
+    digitizer(): Promise<DigitizerImport | null>;
   };
   export: {
     csv(project: CortexLumeProject): Promise<{

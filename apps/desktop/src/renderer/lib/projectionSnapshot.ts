@@ -10,6 +10,7 @@ import {
   fittedOptodePositions,
   projectScalpSphereCenter,
   projectToCorticalContact,
+  projectToCorticalSurface,
 } from './geometry';
 
 function midpoint(a: Vec3, b: Vec3): Vec3 {
@@ -47,13 +48,17 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
   const transmissionDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
   const projections: ProjectionResult[] = [];
+  const superseded = new Set(project.instances.flatMap((instance) =>
+    instance.derivedFromInstanceId ? [instance.derivedFromInstanceId] : []));
   const projectionStatus: ProjectionResult['status'] = project.template.verified ? 'verified' : 'provisional';
   const instances = project.instances.map((instance) => {
+    if (superseded.has(instance.id)) return instance;
     const layout = project.layouts.find((candidate) => candidate.id === instance.definitionId);
     if (!layout) return instance;
 
     const contacts = fittedOptodePositions(layout, instance);
     const scalpCenters = new Map<string, Vec3>();
+    const displayCenters = new Map<string, Vec3>();
     const cortexCenters = new Map<string, Vec3>();
     const commonFlags = baseQcFlags(project);
 
@@ -61,14 +66,17 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
       const contact = contacts.get(optode.id);
       if (!contact) continue;
       const scalp = projectScalpSphereCenter(contact, radiusMm);
+      const display = projectToCorticalSurface(contact, radiusMm);
       const cortex = projectToCorticalContact(contact);
       scalpCenters.set(optode.id, scalp);
+      displayCenters.set(optode.id, display);
       cortexCenters.set(optode.id, cortex);
       projections.push({
         instanceId: instance.id,
         subjectKind: 'optode',
         subjectId: optode.id,
         scalpRasMm: scalp,
+        displayRasMm: display,
         corticalRasMm: cortex,
         depthTargetRasMm: null,
         underlyingCorticalRegions: [],
@@ -89,12 +97,16 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
       const detectorContact = contacts.get(pair.detectorId);
       const sourceCortex = cortexCenters.get(pair.sourceId);
       const detectorCortex = cortexCenters.get(pair.detectorId);
-      if (!sourceScalp || !detectorScalp || !sourceCortex || !detectorCortex || !sourceContact || !detectorContact) {
+      const sourceDisplay = displayCenters.get(pair.sourceId);
+      const detectorDisplay = displayCenters.get(pair.detectorId);
+      if (!sourceScalp || !detectorScalp || !sourceDisplay || !detectorDisplay
+        || !sourceCortex || !detectorCortex || !sourceContact || !detectorContact) {
         projections.push({
           instanceId: instance.id,
           subjectKind: 'pair',
           subjectId: pair.id,
           scalpRasMm: null,
+          displayRasMm: null,
           corticalRasMm: null,
           depthTargetRasMm: null,
           underlyingCorticalRegions: [],
@@ -114,6 +126,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
       else if (spacingError > 2) flags.push('distance_distortion_gt_2mm');
 
       const scalp = midpoint(sourceScalp, detectorScalp);
+      const display = midpoint(sourceDisplay, detectorDisplay);
       const cortex = channelSensitivityPath(
         sourceContact,
         detectorContact,
@@ -127,6 +140,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         subjectKind: 'pair',
         subjectId: pair.id,
         scalpRasMm: scalp,
+        displayRasMm: display,
         corticalRasMm: cortex,
         depthTargetRasMm: null,
         underlyingCorticalRegions: [],

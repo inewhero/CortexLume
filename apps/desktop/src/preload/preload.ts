@@ -16,6 +16,9 @@ const api: DesktopApi = {
     save: (project: CortexLumeProject, currentPath?: string) =>
       ipcRenderer.invoke('project:save', project, currentPath),
   },
+  input: {
+    digitizer: () => ipcRenderer.invoke('input:digitizer'),
+  },
   export: {
     csv: (project: CortexLumeProject) => ipcRenderer.invoke('export:csv', project),
     brainNet: (project: CortexLumeProject) => ipcRenderer.invoke('export:brainnet', project),
