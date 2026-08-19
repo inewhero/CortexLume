@@ -1,0 +1,2943 @@
+[
+  {
+    "aliases": [
+      "short-term memory",
+      "short term memory",
+      "WM",
+      "n-back",
+      "n back"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:working-memory",
+    "label": "working memory",
+    "laterality": "bilateral",
+    "mapSha256": "9823d8263e1af9025755bd3dcd6a445d00a2309baad4e685c59cdaa1d7de1bc6",
+    "nonzeroVertexCount": 3661,
+    "studyCount": 1091,
+    "subdomain": "Working Memory",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.382568359375,
+      7.73828125
+    ]
+  },
+  {
+    "aliases": [
+      "memory processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:memory",
+    "label": "memory",
+    "laterality": "bilateral",
+    "mapSha256": "fa11401c546715b8f07a4eb4b249ee04c19e2765ce92ac257dc96a43be989f85",
+    "nonzeroVertexCount": 8407,
+    "studyCount": 2744,
+    "subdomain": "General Memory",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3984375,
+      7.75
+    ]
+  },
+  {
+    "aliases": [
+      "encoding memory"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:memory-encoding",
+    "label": "memory encoding",
+    "laterality": "bilateral",
+    "mapSha256": "17188cf7fbbff4280d72ac60184c7de1da8e834ac59a71dc66c051133c180c34",
+    "nonzeroVertexCount": 1311,
+    "studyCount": 146,
+    "subdomain": "Encoding",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.36376953125,
+      7.1796875
+    ]
+  },
+  {
+    "aliases": [
+      "retrieving memories"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:memory-retrieval",
+    "label": "memory retrieval",
+    "laterality": "left",
+    "mapSha256": "1dee8cf7271f5a8e3e1022cde416f84148f0f663c5fa5056c6d516a9a71e2554",
+    "nonzeroVertexCount": 5004,
+    "studyCount": 228,
+    "subdomain": "Retrieval",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3955078125,
+      7.46875
+    ]
+  },
+  {
+    "aliases": [
+      "event memory"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:episodic-memory",
+    "label": "episodic memory",
+    "laterality": "left",
+    "mapSha256": "eebfebce0fb9434312b060c78055bde894f04c31c7fec0135f9d114ff845e64c",
+    "nonzeroVertexCount": 5265,
+    "studyCount": 332,
+    "subdomain": "Long-term Memory",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3505859375,
+      7.6484375
+    ]
+  },
+  {
+    "aliases": [
+      "conceptual memory"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:semantic-memory",
+    "label": "semantic memory",
+    "laterality": "left",
+    "mapSha256": "6be58dde92230ba38445a220a54f13bda30efbf794136ed16f2676edffce2c69",
+    "nonzeroVertexCount": 3169,
+    "studyCount": 123,
+    "subdomain": "Long-term Memory",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.387451171875,
+      7.125
+    ]
+  },
+  {
+    "aliases": [
+      "personal memory"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:autobiographical-memory",
+    "label": "autobiographical memory",
+    "laterality": "bilateral",
+    "mapSha256": "7ed6bbad5ab07e644cb74c3208cd8cdcedc4b31abd96b8a51ff178d19be7aef5",
+    "nonzeroVertexCount": 5145,
+    "studyCount": 84,
+    "subdomain": "Long-term Memory",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.34716796875,
+      7.58984375
+    ]
+  },
+  {
+    "aliases": [
+      "recognition"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:recognition-memory",
+    "label": "recognition memory",
+    "laterality": "left",
+    "mapSha256": "79e3c518214e5259633dd88576ce52620f399c3f5affdddd72ba3866fe27fa5d",
+    "nonzeroVertexCount": 2245,
+    "studyCount": 148,
+    "subdomain": "Recognition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.364013671875,
+      6.49609375
+    ]
+  },
+  {
+    "aliases": [
+      "subsequent memory effect"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:subsequent-memory",
+    "label": "subsequent memory",
+    "laterality": "left",
+    "mapSha256": "8f6c865b2d808e32a81ae73aaee83e3572f52ec957ac5621e39f212bd0e69db4",
+    "nonzeroVertexCount": 1526,
+    "studyCount": 116,
+    "subdomain": "Encoding",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.29541015625,
+      7.24609375
+    ]
+  },
+  {
+    "aliases": [],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:encoding",
+    "label": "encoding",
+    "laterality": "bilateral",
+    "mapSha256": "2bcba8f2a9ca2895b0b9b6338685728f3f4d7b0f7776c067f2589fa446ebc63c",
+    "nonzeroVertexCount": 4519,
+    "studyCount": 882,
+    "subdomain": "Encoding",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.334716796875,
+      7.6328125
+    ]
+  },
+  {
+    "aliases": [
+      "recall process"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:retrieval",
+    "label": "retrieval",
+    "laterality": "left",
+    "mapSha256": "23aa771eada0d244ebfafc423d7eac8890f7303511be32332e8e418a5d089734",
+    "nonzeroVertexCount": 8728,
+    "studyCount": 872,
+    "subdomain": "Retrieval",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3134765625,
+      7.73046875
+    ]
+  },
+  {
+    "aliases": [
+      "skill learning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:learning",
+    "label": "learning",
+    "laterality": "bilateral",
+    "mapSha256": "774aa581ae51950a7c0787adc2643ae33014bfdc9dfc10c6e5f2a64381e8a7d9",
+    "nonzeroVertexCount": 793,
+    "studyCount": 1144,
+    "subdomain": "Learning",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.46875,
+      5.23828125
+    ]
+  },
+  {
+    "aliases": [
+      "classical conditioning",
+      "fear conditioning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:conditioning",
+    "label": "conditioning",
+    "laterality": "bilateral",
+    "mapSha256": "4338a12a5b13c76a2ad0a9471f019a4567d9a97ce62f73acde67ed2e29d35f6f",
+    "nonzeroVertexCount": 1190,
+    "studyCount": 160,
+    "subdomain": "Associative Learning",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.404296875,
+      7.4296875
+    ]
+  },
+  {
+    "aliases": [
+      "extinction learning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:extinction",
+    "label": "extinction",
+    "laterality": "right",
+    "mapSha256": "473112910fa99d4f9b24966933b20204489a32a97249def87110b31844bb8957",
+    "nonzeroVertexCount": 669,
+    "studyCount": 81,
+    "subdomain": "Associative Learning",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.34423828125,
+      6.01953125
+    ]
+  },
+  {
+    "aliases": [
+      "free recall"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:recall",
+    "label": "recall",
+    "laterality": "bilateral",
+    "mapSha256": "fc6ced3b26540785689f8e69ee5bce2ab9085679a6d7768df7418882103ad639",
+    "nonzeroVertexCount": 2352,
+    "studyCount": 244,
+    "subdomain": "Retrieval",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.345947265625,
+      7.2734375
+    ]
+  },
+  {
+    "aliases": [
+      "remembering"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:recollection",
+    "label": "recollection",
+    "laterality": "left",
+    "mapSha256": "3daefa28656645159182f14e85017c80c953ebb7e12782d86e62f950ba050c44",
+    "nonzeroVertexCount": 4168,
+    "studyCount": 157,
+    "subdomain": "Recognition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.318359375,
+      7.44140625
+    ]
+  },
+  {
+    "aliases": [
+      "familiarity judgment"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Memory & Learning",
+    "id": "neurosynth:familiarity",
+    "label": "familiarity",
+    "laterality": "bilateral",
+    "mapSha256": "2b746e8b47ab2a8ba2880ffd6bf44a03a56676cfc4040f0aab2ef55ac9ae07fe",
+    "nonzeroVertexCount": 2021,
+    "studyCount": 188,
+    "subdomain": "Recognition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.317138671875,
+      4.6640625
+    ]
+  },
+  {
+    "aliases": [
+      "attentional processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:attention",
+    "label": "attention",
+    "laterality": "right",
+    "mapSha256": "3e559f28306f9834da3fabdfd1b104c2c1fa49ae64a480e77ac70ca27371f625",
+    "nonzeroVertexCount": 2557,
+    "studyCount": 1831,
+    "subdomain": "Attention",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.336669921875,
+      7.36328125
+    ]
+  },
+  {
+    "aliases": [
+      "focused attention"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:selective-attention",
+    "label": "selective attention",
+    "laterality": "bilateral",
+    "mapSha256": "ccf2df8c0d671f10b0d15c3e566daf133159bfac2c1725bb0038a4ead1f997ba",
+    "nonzeroVertexCount": 379,
+    "studyCount": 146,
+    "subdomain": "Attention",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.434814453125,
+      5.15625
+    ]
+  },
+  {
+    "aliases": [
+      "vigilance"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:sustained-attention",
+    "label": "sustained attention",
+    "laterality": "right",
+    "mapSha256": "d4dfe252b0687dfed4e30db11a9053a5c6750eb1c5171481f283195a2e796afb",
+    "nonzeroVertexCount": 4,
+    "studyCount": 74,
+    "subdomain": "Attention",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      1.80859375,
+      2.224609375
+    ]
+  },
+  {
+    "aliases": [
+      "spatial orienting"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:spatial-attention",
+    "label": "spatial attention",
+    "laterality": "right",
+    "mapSha256": "6b1eb4903df5100db40e5cdce80ac7e2e75ce98b1de3d3413f1f3349e9d2249d",
+    "nonzeroVertexCount": 1673,
+    "studyCount": 149,
+    "subdomain": "Attention",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.390625,
+      7.1328125
+    ]
+  },
+  {
+    "aliases": [
+      "attention control"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:attentional-control",
+    "label": "attentional control",
+    "laterality": "right",
+    "mapSha256": "8cc6f7e8512ead70d42613cad69d8652295f6adf29ab1bcf571caa6f287b8599",
+    "nonzeroVertexCount": 331,
+    "studyCount": 142,
+    "subdomain": "Attention",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.496337890625,
+      3.966796875
+    ]
+  },
+  {
+    "aliases": [],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:attention-network",
+    "label": "attention network",
+    "laterality": "bilateral",
+    "mapSha256": "780fed7fa5d241f32c88a0d9cfcf2bdf920575e3ae4a95c583655d1da8d084ed",
+    "nonzeroVertexCount": 1425,
+    "studyCount": 168,
+    "subdomain": "Attention Networks",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.40771484375,
+      6.87890625
+    ]
+  },
+  {
+    "aliases": [
+      "dorsal attention network",
+      "DAN"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:dorsal-attention",
+    "label": "dorsal attention",
+    "laterality": "bilateral",
+    "mapSha256": "3e1e0e0383aa0c761379aeeeefecb9b16b374eab6bce880c44c13fb0cdd6cfd6",
+    "nonzeroVertexCount": 1376,
+    "studyCount": 99,
+    "subdomain": "Attention Networks",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.345947265625,
+      7.125
+    ]
+  },
+  {
+    "aliases": [
+      "suppression"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:inhibition",
+    "label": "inhibition",
+    "laterality": "right",
+    "mapSha256": "53a528a9ae66749626295335d2c30faa5549980e14a8d5878fab5a9e8e34164d",
+    "nonzeroVertexCount": 809,
+    "studyCount": 601,
+    "subdomain": "Inhibitory Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.422119140625,
+      5.79296875
+    ]
+  },
+  {
+    "aliases": [
+      "behavioral inhibition"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:inhibitory-control",
+    "label": "inhibitory control",
+    "laterality": "right",
+    "mapSha256": "9edc1564c87e9437613756424990a5be3f19eedcc4409ebae960e4c85a877ab8",
+    "nonzeroVertexCount": 140,
+    "studyCount": 143,
+    "subdomain": "Inhibitory Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.52685546875,
+      3.462890625
+    ]
+  },
+  {
+    "aliases": [
+      "response suppression",
+      "stop-signal",
+      "stop signal",
+      "go/no-go",
+      "go no go"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:response-inhibition",
+    "label": "response inhibition",
+    "laterality": "right",
+    "mapSha256": "81eea967cbf6da87c2598211f4346a5f7649800770126ecfa8622460f0436c8a",
+    "nonzeroVertexCount": 1367,
+    "studyCount": 218,
+    "subdomain": "Inhibitory Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.52587890625,
+      7.11328125
+    ]
+  },
+  {
+    "aliases": [
+      "top-down control",
+      "top down control"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:cognitive-control",
+    "label": "cognitive control",
+    "laterality": "right",
+    "mapSha256": "2ada5d3a536ae0cab2b5a288420b7dc0036a4f32ce9d72ff449ceb5044b65094",
+    "nonzeroVertexCount": 2073,
+    "studyCount": 598,
+    "subdomain": "Cognitive Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.330078125,
+      6.54296875
+    ]
+  },
+  {
+    "aliases": [
+      "executive processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:executive",
+    "label": "executive",
+    "laterality": "bilateral",
+    "mapSha256": "196bd44021689995c5588e0d22ae092fb045a54c3c3657707863381f24c00c33",
+    "nonzeroVertexCount": 2803,
+    "studyCount": 786,
+    "subdomain": "Executive Function",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.37890625,
+      6.92578125
+    ]
+  },
+  {
+    "aliases": [
+      "executive attention"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:executive-control",
+    "label": "executive control",
+    "laterality": "bilateral",
+    "mapSha256": "b1d9244f01ae323edc1a79f1542c675796f485759f21b594e2eb00b6fafdad2f",
+    "nonzeroVertexCount": 531,
+    "studyCount": 230,
+    "subdomain": "Executive Function",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.345458984375,
+      3.037109375
+    ]
+  },
+  {
+    "aliases": [
+      "executive functions"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:executive-function",
+    "label": "executive function",
+    "laterality": "right",
+    "mapSha256": "ba4e4b61759ef67a07f6c7382f50eef1ee236e1f6de3d6dd362e1896be18b954",
+    "nonzeroVertexCount": 57,
+    "studyCount": 154,
+    "subdomain": "Executive Function",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.45458984375,
+      3.630859375
+    ]
+  },
+  {
+    "aliases": [
+      "conflict monitoring"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:conflict",
+    "label": "conflict",
+    "laterality": "bilateral",
+    "mapSha256": "2bbb08082014e59912b3bb97e1b86d23520bc7471b72f45e3b81795facf8c990",
+    "nonzeroVertexCount": 908,
+    "studyCount": 337,
+    "subdomain": "Conflict Monitoring",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.396240234375,
+      7.28125
+    ]
+  },
+  {
+    "aliases": [
+      "Stroop task",
+      "color-word interference"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:stroop",
+    "label": "stroop",
+    "laterality": "bilateral",
+    "mapSha256": "65122573dee6276982e83d54ab3abc3a6f6945d8a501550c8ff40f9378b0503d",
+    "nonzeroVertexCount": 560,
+    "studyCount": 225,
+    "subdomain": "Conflict Monitoring",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.4326171875,
+      4.98828125
+    ]
+  },
+  {
+    "aliases": [
+      "task switching",
+      "set shifting"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:switching",
+    "label": "switching",
+    "laterality": "left",
+    "mapSha256": "abdc3424f698f8c22121ecc9898e03afe79b363abb0ba7fcebc21fdccf4b0302",
+    "nonzeroVertexCount": 897,
+    "studyCount": 193,
+    "subdomain": "Cognitive Flexibility",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.427001953125,
+      5.35546875
+    ]
+  },
+  {
+    "aliases": [
+      "action planning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:planning",
+    "label": "planning",
+    "laterality": "bilateral",
+    "mapSha256": "60ba10ff51e919c1323c50b0dfa8cf67bafde71a5d74539f45ed9e6f05e88509",
+    "nonzeroVertexCount": 2992,
+    "studyCount": 258,
+    "subdomain": "Higher Cognition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.37451171875,
+      7.3359375
+    ]
+  },
+  {
+    "aliases": [
+      "logical reasoning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Attention & Executive Control",
+    "id": "neurosynth:reasoning",
+    "label": "reasoning",
+    "laterality": "left",
+    "mapSha256": "3c34e2bf1f6f25198e59c2fe73446882ca4220dd8f71889233eea573d89a978e",
+    "nonzeroVertexCount": 804,
+    "studyCount": 182,
+    "subdomain": "Higher Cognition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3359375,
+      5.25
+    ]
+  },
+  {
+    "aliases": [
+      "linguistic processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:language",
+    "label": "language",
+    "laterality": "left",
+    "mapSha256": "c2e707ad05eaf4368b3afb7b016ef7142154e20c9933dc4304573288845f559e",
+    "nonzeroVertexCount": 3943,
+    "studyCount": 1101,
+    "subdomain": "General Language",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.37158203125,
+      7.796875
+    ]
+  },
+  {
+    "aliases": [
+      "language understanding"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:language-comprehension",
+    "label": "language comprehension",
+    "laterality": "left",
+    "mapSha256": "74c5c74ac3e4c3cfcbf30c72ccd0c44bde1a7d526900ede9800508ce0c1d2c76",
+    "nonzeroVertexCount": 1558,
+    "studyCount": 107,
+    "subdomain": "Comprehension",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.394775390625,
+      7.296875
+    ]
+  },
+  {
+    "aliases": [],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:language-network",
+    "label": "language network",
+    "laterality": "left",
+    "mapSha256": "66154d8b43f4713e773aef335d5fd62c23a7084ded15431f0aa4768927bf1106",
+    "nonzeroVertexCount": 1641,
+    "studyCount": 83,
+    "subdomain": "General Language",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.310302734375,
+      7.3203125
+    ]
+  },
+  {
+    "aliases": [
+      "spoken language"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:speech",
+    "label": "speech",
+    "laterality": "bilateral",
+    "mapSha256": "84adc03773bf217f5902d015da726dd89342dbf8ec847495cf489537312afe89",
+    "nonzeroVertexCount": 2689,
+    "studyCount": 642,
+    "subdomain": "Speech",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.459716796875,
+      7.7890625
+    ]
+  },
+  {
+    "aliases": [
+      "spoken-word perception"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:speech-perception",
+    "label": "speech perception",
+    "laterality": "bilateral",
+    "mapSha256": "724a7eb15eab17d9b92c9f2494260883bcb57aa159cce8897f3f25340f3f6a83",
+    "nonzeroVertexCount": 1354,
+    "studyCount": 97,
+    "subdomain": "Speech",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.453125,
+      7.6171875
+    ]
+  },
+  {
+    "aliases": [
+      "speaking",
+      "articulation"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:speech-production",
+    "label": "speech production",
+    "laterality": "bilateral",
+    "mapSha256": "ba57590d3aec6ed838d5286abbee671b7b25524dec096caf378401124fd4bfd8",
+    "nonzeroVertexCount": 2178,
+    "studyCount": 107,
+    "subdomain": "Speech",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.45166015625,
+      7.6171875
+    ]
+  },
+  {
+    "aliases": [
+      "word generation",
+      "semantic fluency",
+      "phonemic fluency"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:verbal-fluency",
+    "label": "verbal fluency",
+    "laterality": "left",
+    "mapSha256": "0c59980fb50bd72df82d8332761fdba31b3750d092da37282b2227813fb76f20",
+    "nonzeroVertexCount": 261,
+    "studyCount": 84,
+    "subdomain": "Production",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.45849609375,
+      3.89453125
+    ]
+  },
+  {
+    "aliases": [
+      "phonological processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:phonological",
+    "label": "phonological",
+    "laterality": "left",
+    "mapSha256": "2e07b3b55723c1b946c88f39b41fa9cd6982aa740847fe7cbfecdf88114c0208",
+    "nonzeroVertexCount": 3591,
+    "studyCount": 377,
+    "subdomain": "Phonology",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.450927734375,
+      7.72265625
+    ]
+  },
+  {
+    "aliases": [
+      "written language"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:reading",
+    "label": "reading",
+    "laterality": "left",
+    "mapSha256": "b392e9c2d2d07ef536409a05f7b847f4c02eff86bb9dc4c249c6497d8a456232",
+    "nonzeroVertexCount": 3765,
+    "studyCount": 521,
+    "subdomain": "Reading",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.353271484375,
+      7.71484375
+    ]
+  },
+  {
+    "aliases": [
+      "word processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:word",
+    "label": "word",
+    "laterality": "left",
+    "mapSha256": "2cbd0a045f283865095199855a7e7cc33163c866eb59433dff66d961c9f9730d",
+    "nonzeroVertexCount": 4171,
+    "studyCount": 944,
+    "subdomain": "Lexical Processing",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.31005859375,
+      7.7421875
+    ]
+  },
+  {
+    "aliases": [
+      "visual word recognition"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:word-recognition",
+    "label": "word recognition",
+    "laterality": "left",
+    "mapSha256": "17fb453c2905ac09c20004f30bd11333f4056895fffc124597c2fba06054cb4d",
+    "nonzeroVertexCount": 628,
+    "studyCount": 87,
+    "subdomain": "Lexical Processing",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.419677734375,
+      7.0234375
+    ]
+  },
+  {
+    "aliases": [
+      "visual word form"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:word-form",
+    "label": "word form",
+    "laterality": "left",
+    "mapSha256": "d949ea03577eed110104ce7edbeac9db87709764c76e569808d055f6c60b3553",
+    "nonzeroVertexCount": 1671,
+    "studyCount": 93,
+    "subdomain": "Reading",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.362060546875,
+      7.61328125
+    ]
+  },
+  {
+    "aliases": [
+      "sentence processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:sentence",
+    "label": "sentence",
+    "laterality": "left",
+    "mapSha256": "ef8c06269b86d8235804e78f596818f36afc6ab74e5050c4bc968f3e51663961",
+    "nonzeroVertexCount": 2244,
+    "studyCount": 307,
+    "subdomain": "Sentence Processing",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.34716796875,
+      7.70703125
+    ]
+  },
+  {
+    "aliases": [
+      "sentence understanding"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:sentence-comprehension",
+    "label": "sentence comprehension",
+    "laterality": "left",
+    "mapSha256": "f406b71b7ed63470519d7c83668a2117b1157308d1a9cff912041090983e8fac",
+    "nonzeroVertexCount": 915,
+    "studyCount": 77,
+    "subdomain": "Comprehension",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.406494140625,
+      7.453125
+    ]
+  },
+  {
+    "aliases": [
+      "semantic processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:semantic",
+    "label": "semantic",
+    "laterality": "left",
+    "mapSha256": "298eccc6505f430b15ff9663c69f0010ac8a69e88c5ddfbccd68ee1b2cd12be0",
+    "nonzeroVertexCount": 5629,
+    "studyCount": 1031,
+    "subdomain": "Semantics",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.318359375,
+      7.76953125
+    ]
+  },
+  {
+    "aliases": [
+      "meaning processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:semantics",
+    "label": "semantics",
+    "laterality": "left",
+    "mapSha256": "5e654905cdb27641925fc3c5340516c48aa5fce07b49f12311b72c36dcabb81a",
+    "nonzeroVertexCount": 576,
+    "studyCount": 84,
+    "subdomain": "Semantics",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3642578125,
+      6.38671875
+    ]
+  },
+  {
+    "aliases": [
+      "understanding"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:comprehension",
+    "label": "comprehension",
+    "laterality": "left",
+    "mapSha256": "87940b7b9dacb48dc56faf67bc3df40bab4b983b04a79d471b7dfdaf68987b76",
+    "nonzeroVertexCount": 2881,
+    "studyCount": 424,
+    "subdomain": "Comprehension",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.400390625,
+      7.74609375
+    ]
+  },
+  {
+    "aliases": [
+      "lexical decision task"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Language",
+    "id": "neurosynth:lexical-decision",
+    "label": "lexical decision",
+    "laterality": "left",
+    "mapSha256": "c568d7afa785dd16dac038dc1063beefa8ec13e1efd2bbb4b12c04094a18d1d2",
+    "nonzeroVertexCount": 710,
+    "studyCount": 84,
+    "subdomain": "Lexical Processing",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.29443359375,
+      4.81640625
+    ]
+  },
+  {
+    "aliases": [
+      "visual processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:visual",
+    "label": "visual",
+    "laterality": "bilateral",
+    "mapSha256": "1bc115e913f0a98540e43c7811bb1ce3c2d9e03b89037ebe743886324e1494a1",
+    "nonzeroVertexCount": 6042,
+    "studyCount": 3110,
+    "subdomain": "Vision",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3359375,
+      7.87890625
+    ]
+  },
+  {
+    "aliases": [
+      "visual system"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:vision",
+    "label": "vision",
+    "laterality": "bilateral",
+    "mapSha256": "edda6d07ae88826fa61c78b58b60ab74b0699b15fe3eab88ee51e1ce4b3c2977",
+    "nonzeroVertexCount": 1876,
+    "studyCount": 137,
+    "subdomain": "Vision",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.38134765625,
+      7.2421875
+    ]
+  },
+  {
+    "aliases": [
+      "attended vision"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:visual-attention",
+    "label": "visual attention",
+    "laterality": "bilateral",
+    "mapSha256": "6a14eb73aee9320b849dfc81606336f7570ab78bd124b7433a5e8a89e17c78d4",
+    "nonzeroVertexCount": 735,
+    "studyCount": 124,
+    "subdomain": "Visual Attention",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3212890625,
+      4.9921875
+    ]
+  },
+  {
+    "aliases": [
+      "seeing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:visual-perception",
+    "label": "visual perception",
+    "laterality": "right",
+    "mapSha256": "81e9aec742d427709cdc337dae817ada1107cb2a150a293598c801f34cc66cbc",
+    "nonzeroVertexCount": 715,
+    "studyCount": 83,
+    "subdomain": "Vision",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.424072265625,
+      6.796875
+    ]
+  },
+  {
+    "aliases": [
+      "motion perception",
+      "optic flow"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:visual-motion",
+    "label": "visual motion",
+    "laterality": "left",
+    "mapSha256": "eedf99718af4b06f491aaf0b64b430ea2573ad167dda5a3ae0af610ecd4159aa",
+    "nonzeroVertexCount": 1171,
+    "studyCount": 76,
+    "subdomain": "Motion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.4052734375,
+      7.5703125
+    ]
+  },
+  {
+    "aliases": [
+      "early vision"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:early-visual",
+    "label": "early visual",
+    "laterality": "bilateral",
+    "mapSha256": "734e9b3abf3b6c9190fe9df7aa9a89f0ffafccb515301bfc33f11f73ec0561f1",
+    "nonzeroVertexCount": 1351,
+    "studyCount": 136,
+    "subdomain": "Vision",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.336669921875,
+      7.07421875
+    ]
+  },
+  {
+    "aliases": [
+      "visual pathway"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:visual-stream",
+    "label": "visual stream",
+    "laterality": "bilateral",
+    "mapSha256": "3cee897319542379db0ab94652c2039f27df25469f459e10aad5b65ed50bb58c",
+    "nonzeroVertexCount": 1291,
+    "studyCount": 80,
+    "subdomain": "Vision",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.466552734375,
+      6.01953125
+    ]
+  },
+  {
+    "aliases": [
+      "hearing",
+      "sound",
+      "acoustic"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:auditory",
+    "label": "auditory",
+    "laterality": "bilateral",
+    "mapSha256": "edac7763779d633fc91538c3d3ac663be6ae09792005a4cd7e1b8bd37b9524fe",
+    "nonzeroVertexCount": 2508,
+    "studyCount": 1252,
+    "subdomain": "Audition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.411865234375,
+      7.80859375
+    ]
+  },
+  {
+    "aliases": [
+      "sounds"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:auditory-stimuli",
+    "label": "auditory stimuli",
+    "laterality": "right",
+    "mapSha256": "e5f50e7c3bc36aa9c6ca6b01d3e491a33ee971f67f24d9f015cb02369f003ac2",
+    "nonzeroVertexCount": 717,
+    "studyCount": 115,
+    "subdomain": "Audition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.450927734375,
+      7.49609375
+    ]
+  },
+  {
+    "aliases": [
+      "audio-visual",
+      "multisensory integration"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:audiovisual",
+    "label": "audiovisual",
+    "laterality": "bilateral",
+    "mapSha256": "569af2475b622c5cf4b96c22231f238dc5ce13f3b4451a325a40d9b5ee2cd162",
+    "nonzeroVertexCount": 1408,
+    "studyCount": 118,
+    "subdomain": "Multisensory",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.426513671875,
+      7.609375
+    ]
+  },
+  {
+    "aliases": [
+      "sensory perception"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:perception",
+    "label": "perception",
+    "laterality": "bilateral",
+    "mapSha256": "a48ff9c3fbce76eb5f9161d119b7c49a4ab206bba658c3efa0085a06a17d993e",
+    "nonzeroVertexCount": 2652,
+    "studyCount": 1278,
+    "subdomain": "General Perception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.302490234375,
+      7.4140625
+    ]
+  },
+  {
+    "aliases": [
+      "face processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:face",
+    "label": "face",
+    "laterality": "right",
+    "mapSha256": "155c4ec7f4e87013b6d1218a1f7fd34ffe826324e6497d6a5e0be3cd10c78975",
+    "nonzeroVertexCount": 3344,
+    "studyCount": 896,
+    "subdomain": "Face Perception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3642578125,
+      7.74609375
+    ]
+  },
+  {
+    "aliases": [
+      "facial recognition"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:face-recognition",
+    "label": "face recognition",
+    "laterality": "right",
+    "mapSha256": "a2a8c0e8a22241fbe43121a48ead629cb3c5dce0798f1ed6f5c9f7c8ac221f38",
+    "nonzeroVertexCount": 956,
+    "studyCount": 79,
+    "subdomain": "Face Perception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.368408203125,
+      7.45703125
+    ]
+  },
+  {
+    "aliases": [
+      "object processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:object",
+    "label": "object",
+    "laterality": "bilateral",
+    "mapSha256": "b2774a2bb8bd6152e176612943ec17fcb36f136b3677e045490b5da995d5ed44",
+    "nonzeroVertexCount": 4025,
+    "studyCount": 851,
+    "subdomain": "Object Perception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.371826171875,
+      7.6484375
+    ]
+  },
+  {
+    "aliases": [
+      "visual object recognition"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:object-recognition",
+    "label": "object recognition",
+    "laterality": "bilateral",
+    "mapSha256": "b5f0c993c9b16ea6e61ab7d00222aeec931f30e108e26dc0c1cb70e25e4e8840",
+    "nonzeroVertexCount": 687,
+    "studyCount": 86,
+    "subdomain": "Object Perception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.421875,
+      6.6953125
+    ]
+  },
+  {
+    "aliases": [
+      "colour",
+      "color perception"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:color",
+    "label": "color",
+    "laterality": "left",
+    "mapSha256": "f70e84c32543b08949ef06bd96d8f36954f7854f339e4acde1a6d10a6ceb54fd",
+    "nonzeroVertexCount": 1616,
+    "studyCount": 236,
+    "subdomain": "Vision",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.399658203125,
+      5.91796875
+    ]
+  },
+  {
+    "aliases": [
+      "music perception",
+      "music listening"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:music",
+    "label": "music",
+    "laterality": "bilateral",
+    "mapSha256": "6f251feab36d0c5f31aa659f342b9546cf3482903075c16d74a082322d5408af",
+    "nonzeroVertexCount": 1239,
+    "studyCount": 163,
+    "subdomain": "Music",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.38671875,
+      7.59375
+    ]
+  },
+  {
+    "aliases": [
+      "visual-spatial",
+      "visual spatial"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Perception",
+    "id": "neurosynth:visuospatial",
+    "label": "visuospatial",
+    "laterality": "right",
+    "mapSha256": "5464817d051e4a943c072039375f560fe3478b2ede598ddaa4562468df21b4f0",
+    "nonzeroVertexCount": 1900,
+    "studyCount": 267,
+    "subdomain": "Spatial Perception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.416015625,
+      7.2265625
+    ]
+  },
+  {
+    "aliases": [
+      "motor execution"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:motor",
+    "label": "motor",
+    "laterality": "bilateral",
+    "mapSha256": "f1b86cce5a485a1dd5bcd4de2c0bc970310cdca4d863c79ead78092533782f9e",
+    "nonzeroVertexCount": 6260,
+    "studyCount": 2565,
+    "subdomain": "Motor Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.496826171875,
+      7.94140625
+    ]
+  },
+  {
+    "aliases": [
+      "movement control"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:motor-control",
+    "label": "motor control",
+    "laterality": "left",
+    "mapSha256": "40666921aa8d1782112852c762e91b1de65f1996fdd844aec80f91a2ea88a34e",
+    "nonzeroVertexCount": 1731,
+    "studyCount": 214,
+    "subdomain": "Motor Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.363037109375,
+      7.3671875
+    ]
+  },
+  {
+    "aliases": [
+      "movement imagery",
+      "imagined movement"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:motor-imagery",
+    "label": "motor imagery",
+    "laterality": "bilateral",
+    "mapSha256": "d509e1e65655cf2aa49553544e4c6c8115207222ed919f374520fefd0dd31267",
+    "nonzeroVertexCount": 4310,
+    "studyCount": 104,
+    "subdomain": "Motor Imagery",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.367431640625,
+      7.6640625
+    ]
+  },
+  {
+    "aliases": [
+      "motor functioning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:motor-function",
+    "label": "motor function",
+    "laterality": "bilateral",
+    "mapSha256": "f0aedb9229fee2eccd026892ac3761f36482e0a919dd0a266384b2a5a1cd2305",
+    "nonzeroVertexCount": 970,
+    "studyCount": 74,
+    "subdomain": "Motor Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.36669921875,
+      6.3125
+    ]
+  },
+  {
+    "aliases": [
+      "movement performance"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:motor-performance",
+    "label": "motor performance",
+    "laterality": "bilateral",
+    "mapSha256": "011734255777bbb2497d6f9f5a58510c93d5d854d556f42ab6c114f247b50740",
+    "nonzeroVertexCount": 2021,
+    "studyCount": 77,
+    "subdomain": "Motor Control",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.37548828125,
+      7.42578125
+    ]
+  },
+  {
+    "aliases": [
+      "motion execution"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:movement",
+    "label": "movement",
+    "laterality": "bilateral",
+    "mapSha256": "788278534f4d7c0ad3b20936fd65dce5f789067b9f672fe40e93aa3e1efb258c",
+    "nonzeroVertexCount": 4866,
+    "studyCount": 670,
+    "subdomain": "Movement",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.428955078125,
+      7.8125
+    ]
+  },
+  {
+    "aliases": [
+      "finger tapping",
+      "finger movement"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:finger-movements",
+    "label": "finger movements",
+    "laterality": "bilateral",
+    "mapSha256": "f7d5fa783e065f87cbb54ac0c20022029275c78b714b06480fa58e4a8d9ba828",
+    "nonzeroVertexCount": 2809,
+    "studyCount": 83,
+    "subdomain": "Hand Movement",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.418701171875,
+      7.64453125
+    ]
+  },
+  {
+    "aliases": [
+      "hand movement"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:hand-movements",
+    "label": "hand movements",
+    "laterality": "left",
+    "mapSha256": "bed751181423897b81e7240a88215f0b7b06a0ae9f17ad38509c63892e9c44dd",
+    "nonzeroVertexCount": 1727,
+    "studyCount": 89,
+    "subdomain": "Hand Movement",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.346923828125,
+      7.42578125
+    ]
+  },
+  {
+    "aliases": [
+      "action execution"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:action",
+    "label": "action",
+    "laterality": "bilateral",
+    "mapSha256": "9f7cccefb439f5bc19ab89a1fbadded75bd616bdb28c5db7d89ff180870c8dcc",
+    "nonzeroVertexCount": 4286,
+    "studyCount": 886,
+    "subdomain": "Action",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.36279296875,
+      7.65625
+    ]
+  },
+  {
+    "aliases": [
+      "observed action"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:action-observation",
+    "label": "action observation",
+    "laterality": "bilateral",
+    "mapSha256": "a6c286968671cedfc9c130e0ccb49bec6261f0ee40a5071ef0cbd5ddedafec77",
+    "nonzeroVertexCount": 3730,
+    "studyCount": 118,
+    "subdomain": "Action Observation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.407958984375,
+      7.60546875
+    ]
+  },
+  {
+    "aliases": [
+      "imitative action"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:imitation",
+    "label": "imitation",
+    "laterality": "bilateral",
+    "mapSha256": "9b5d78b25645bfb9aacd4f6824c710406985b797977c4bf92e74fefa9d5e1c20",
+    "nonzeroVertexCount": 2006,
+    "studyCount": 84,
+    "subdomain": "Action Observation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.38525390625,
+      5.7890625
+    ]
+  },
+  {
+    "aliases": [
+      "sensory-motor",
+      "sensory motor"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:sensorimotor",
+    "label": "sensorimotor",
+    "laterality": "bilateral",
+    "mapSha256": "66bce6c08d76cc4e2667fb32c4e49bc97ef4f7942749654442fa35bd2cf8f5d5",
+    "nonzeroVertexCount": 4760,
+    "studyCount": 684,
+    "subdomain": "Sensorimotor Integration",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.36669921875,
+      7.8125
+    ]
+  },
+  {
+    "aliases": [
+      "body sensation"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:somatosensory",
+    "label": "somatosensory",
+    "laterality": "bilateral",
+    "mapSha256": "33e412b57d0770ff603c52e7a73d45db89dd4d7723fbde9b26685ffeecdf9426",
+    "nonzeroVertexCount": 4780,
+    "studyCount": 674,
+    "subdomain": "Somatosensation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.371337890625,
+      7.8359375
+    ]
+  },
+  {
+    "aliases": [
+      "touch",
+      "tactile perception"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:tactile",
+    "label": "tactile",
+    "laterality": "bilateral",
+    "mapSha256": "50b5f6bc1188791e79c0a266fe3a60f31afbf98fb293b52981bd433530a647d0",
+    "nonzeroVertexCount": 2574,
+    "studyCount": 225,
+    "subdomain": "Somatosensation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.34326171875,
+      7.67578125
+    ]
+  },
+  {
+    "aliases": [
+      "visual-motor"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:visuomotor",
+    "label": "visuomotor",
+    "laterality": "left",
+    "mapSha256": "ffb73d9252ded172660ff168e602f7a708ce5969ff769490245b0e24d1f19d76",
+    "nonzeroVertexCount": 1986,
+    "studyCount": 153,
+    "subdomain": "Sensorimotor Integration",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.4140625,
+      7.27734375
+    ]
+  },
+  {
+    "aliases": [
+      "oculomotor",
+      "eye movement"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:eye-movements",
+    "label": "eye movements",
+    "laterality": "bilateral",
+    "mapSha256": "9f9cda31687e9c2aa5fc6bc08a779b93ae94f8de88f99c11313006b973a8f8f7",
+    "nonzeroVertexCount": 2503,
+    "studyCount": 116,
+    "subdomain": "Oculomotor",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.33349609375,
+      7.55859375
+    ]
+  },
+  {
+    "aliases": [
+      "saccadic eye movements",
+      "saccade"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Sensorimotor",
+    "id": "neurosynth:saccades",
+    "label": "saccades",
+    "laterality": "bilateral",
+    "mapSha256": "726f94c80ac2fdb0e7111a4c7dabdd7e616391ade5cb08f133265f2f60c91990",
+    "nonzeroVertexCount": 1311,
+    "studyCount": 73,
+    "subdomain": "Oculomotor",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.5068359375,
+      7.37890625
+    ]
+  },
+  {
+    "aliases": [
+      "emotional processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:emotion",
+    "label": "emotion",
+    "laterality": "bilateral",
+    "mapSha256": "af5fc7fb17ee00b56825a3b63898839a02a4c4f6bcb3dd335bb18f2663b4ebd9",
+    "nonzeroVertexCount": 3893,
+    "studyCount": 1037,
+    "subdomain": "Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.345703125,
+      7.63671875
+    ]
+  },
+  {
+    "aliases": [
+      "affect regulation",
+      "emotional regulation"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:emotion-regulation",
+    "label": "emotion regulation",
+    "laterality": "left",
+    "mapSha256": "6458c14915a76cf00379e6e215381e10aeff8929313944e40252a49472699b29",
+    "nonzeroVertexCount": 1382,
+    "studyCount": 247,
+    "subdomain": "Emotion Regulation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.391357421875,
+      7.30859375
+    ]
+  },
+  {
+    "aliases": [
+      "valence"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:emotional-valence",
+    "label": "emotional valence",
+    "laterality": "bilateral",
+    "mapSha256": "c8081d790eb7d702527372fc3b6b3a5e4996d04cba5fb96ad48aed8c258cfa88",
+    "nonzeroVertexCount": 410,
+    "studyCount": 101,
+    "subdomain": "Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.409912109375,
+      5.66015625
+    ]
+  },
+  {
+    "aliases": [
+      "emotional face processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:emotional-faces",
+    "label": "emotional faces",
+    "laterality": "bilateral",
+    "mapSha256": "4e8ceaa4a4118b85c663a2ff8d7320bbe20a10ea0a71b093e69035f46133770f",
+    "nonzeroVertexCount": 561,
+    "studyCount": 100,
+    "subdomain": "Face & Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.583984375,
+      7.26953125
+    ]
+  },
+  {
+    "aliases": [
+      "affective processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:affect",
+    "label": "affect",
+    "laterality": "bilateral",
+    "mapSha256": "ef658415ac7b7065ac41ecb3ed8d5b133340f50a9e2245bc25d03c05f6e51988",
+    "nonzeroVertexCount": 507,
+    "studyCount": 625,
+    "subdomain": "Affect",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.471435546875,
+      5.25390625
+    ]
+  },
+  {
+    "aliases": [
+      "negative emotion"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:negative-affect",
+    "label": "negative affect",
+    "laterality": "bilateral",
+    "mapSha256": "1433becf14d73d0f4c706451f1b563d067e3ad4893cd329127ed64a41c2668f5",
+    "nonzeroVertexCount": 969,
+    "studyCount": 97,
+    "subdomain": "Affect",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.466064453125,
+      5.73046875
+    ]
+  },
+  {
+    "aliases": [
+      "threat processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:fear",
+    "label": "fear",
+    "laterality": "bilateral",
+    "mapSha256": "f0d418b3d32e2cebd0f9f4fe2a1ea8c01b4b41cb97dd38474896f9b4fd444b03",
+    "nonzeroVertexCount": 1838,
+    "studyCount": 363,
+    "subdomain": "Discrete Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.44140625,
+      7.62890625
+    ]
+  },
+  {
+    "aliases": [
+      "anxious affect"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:anxiety",
+    "label": "anxiety",
+    "laterality": "bilateral",
+    "mapSha256": "a5582e57b8cc8facdd6b7249b92a1da0f66049892e60dba850495570927943bb",
+    "nonzeroVertexCount": 981,
+    "studyCount": 449,
+    "subdomain": "Discrete Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.336669921875,
+      7.48828125
+    ]
+  },
+  {
+    "aliases": [
+      "angry emotion"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:anger",
+    "label": "anger",
+    "laterality": "bilateral",
+    "mapSha256": "ef7cc0a233ba99c440c54aacdfbae5fbc8e2bd088f31f4d5f88393a25d68ea64",
+    "nonzeroVertexCount": 464,
+    "studyCount": 89,
+    "subdomain": "Discrete Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.4150390625,
+      4.80859375
+    ]
+  },
+  {
+    "aliases": [
+      "empathic processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:empathy",
+    "label": "empathy",
+    "laterality": "bilateral",
+    "mapSha256": "e59b3247e2145663bc863c49686dbf2323d02d741dd0817ddcc054e352162496",
+    "nonzeroVertexCount": 2796,
+    "studyCount": 187,
+    "subdomain": "Social Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.34033203125,
+      7.03125
+    ]
+  },
+  {
+    "aliases": [
+      "social processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:social",
+    "label": "social",
+    "laterality": "bilateral",
+    "mapSha256": "8a372fd571d4c18f783de34dc1e0813ad078640341741613e1e14ee96c74dbae",
+    "nonzeroVertexCount": 5843,
+    "studyCount": 1302,
+    "subdomain": "Social Cognition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.36767578125,
+      7.671875
+    ]
+  },
+  {
+    "aliases": [
+      "social cognitive processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:social-cognition",
+    "label": "social cognition",
+    "laterality": "bilateral",
+    "mapSha256": "14de4b6ed9866cc637ffc4fea2a696f8aee373fb2fb035e8b901eaf19981dc41",
+    "nonzeroVertexCount": 2321,
+    "studyCount": 220,
+    "subdomain": "Social Cognition",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.46875,
+      7.21875
+    ]
+  },
+  {
+    "aliases": [
+      "interpersonal interaction"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:social-interaction",
+    "label": "social interaction",
+    "laterality": "right",
+    "mapSha256": "cadeb9f40f8cf4337a772614b3d296890965686e4652839e20fbd3d8d79fb11a",
+    "nonzeroVertexCount": 1099,
+    "studyCount": 117,
+    "subdomain": "Social Interaction",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.357177734375,
+      5.52734375
+    ]
+  },
+  {
+    "aliases": [
+      "theory of mind",
+      "ToM",
+      "mind reading"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:mentalizing",
+    "label": "mentalizing",
+    "laterality": "bilateral",
+    "mapSha256": "da7f64cd92e0c2e85068159d4d447fbd48f12f0648e831772f5029b69d636085",
+    "nonzeroVertexCount": 3794,
+    "studyCount": 151,
+    "subdomain": "Mentalizing",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.380126953125,
+      7.5859375
+    ]
+  },
+  {
+    "aliases": [
+      "facial emotion",
+      "emotion recognition"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:facial-expressions",
+    "label": "facial expressions",
+    "laterality": "right",
+    "mapSha256": "31db57ea916462ab96d656ce1524037910a57234c38164ed4552590cdd5c8619",
+    "nonzeroVertexCount": 1165,
+    "studyCount": 250,
+    "subdomain": "Face & Emotion",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.4287109375,
+      7.5234375
+    ]
+  },
+  {
+    "aliases": [
+      "self processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:self",
+    "label": "self",
+    "laterality": "bilateral",
+    "mapSha256": "a696466400fe40c97de9c14b271d0cffd7f8d4bdadbdaf67931cc5cf64f11e90",
+    "nonzeroVertexCount": 3499,
+    "studyCount": 1206,
+    "subdomain": "Self Processing",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.33984375,
+      7.453125
+    ]
+  },
+  {
+    "aliases": [
+      "self-referential processing",
+      "self reference"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:self-referential",
+    "label": "self referential",
+    "laterality": "left",
+    "mapSha256": "eb1e5d7f7814bb3773628549be20696d6f265afc09eb60b39f56d53e527af9f6",
+    "nonzeroVertexCount": 2279,
+    "studyCount": 166,
+    "subdomain": "Self Processing",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.349365234375,
+      7.33984375
+    ]
+  },
+  {
+    "aliases": [
+      "moral judgment",
+      "moral reasoning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:moral",
+    "label": "moral",
+    "laterality": "bilateral",
+    "mapSha256": "d8677aef5bda0d92255d20dd005554d615f71e859775e0e917cfac3f8765a267",
+    "nonzeroVertexCount": 1062,
+    "studyCount": 87,
+    "subdomain": "Social Judgment",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.54541015625,
+      5.78125
+    ]
+  },
+  {
+    "aliases": [
+      "mirror neuron system",
+      "MNS"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Emotion & Social Cognition",
+    "id": "neurosynth:mirror-neuron",
+    "label": "mirror neuron",
+    "laterality": "bilateral",
+    "mapSha256": "f210877fd17a90c5112d9ee2cb0b7f0d4e0c9723259c03be01837df21a7286f5",
+    "nonzeroVertexCount": 1894,
+    "studyCount": 102,
+    "subdomain": "Social Perception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.406005859375,
+      6.55859375
+    ]
+  },
+  {
+    "aliases": [
+      "reinforcement",
+      "incentive"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:reward",
+    "label": "reward",
+    "laterality": "bilateral",
+    "mapSha256": "67c3896289b3f4479c905251e36b9ae8641314173a63db313f779ac7c8d03376",
+    "nonzeroVertexCount": 3103,
+    "studyCount": 922,
+    "subdomain": "Reward",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.392578125,
+      7.76171875
+    ]
+  },
+  {
+    "aliases": [
+      "financial reward"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:monetary-reward",
+    "label": "monetary reward",
+    "laterality": "right",
+    "mapSha256": "dd0d9c23dcb22713f80c2a69d154580b71775dcd4ec3bb5364745e496600e4ac",
+    "nonzeroVertexCount": 616,
+    "studyCount": 97,
+    "subdomain": "Reward",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.39501953125,
+      7.53125
+    ]
+  },
+  {
+    "aliases": [
+      "anticipatory reward"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:reward-anticipation",
+    "label": "reward anticipation",
+    "laterality": "bilateral",
+    "mapSha256": "3a6d4cb01c9217d32a81547e49f494465862a370c1813e63078dbe20d332bda3",
+    "nonzeroVertexCount": 505,
+    "studyCount": 92,
+    "subdomain": "Reward",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.48583984375,
+      7.58984375
+    ]
+  },
+  {
+    "aliases": [
+      "RL",
+      "reward learning"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:reinforcement-learning",
+    "label": "reinforcement learning",
+    "laterality": "bilateral",
+    "mapSha256": "ba44a0ef6d004ee7a1103df44b34170c74488578dab21a65567d815e433f00ce",
+    "nonzeroVertexCount": 269,
+    "studyCount": 72,
+    "subdomain": "Learning",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.52099609375,
+      6.10546875
+    ]
+  },
+  {
+    "aliases": [
+      "valuation",
+      "subjective value"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:value",
+    "label": "value",
+    "laterality": "bilateral",
+    "mapSha256": "98f234b6961c5ae68c50e09fff47524ed0d764f2a79e9ef7eb6bc54821e415fa",
+    "nonzeroVertexCount": 1497,
+    "studyCount": 470,
+    "subdomain": "Valuation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.477294921875,
+      7.515625
+    ]
+  },
+  {
+    "aliases": [
+      "risk processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:risk",
+    "label": "risk",
+    "laterality": "right",
+    "mapSha256": "57c1a19fd4a885a3fd91a1187a1d924995a2baae4e15e0863bd28eb8732306d9",
+    "nonzeroVertexCount": 241,
+    "studyCount": 708,
+    "subdomain": "Risk",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.49169921875,
+      4.04296875
+    ]
+  },
+  {
+    "aliases": [
+      "risk-taking",
+      "risky choice"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:risk-taking",
+    "label": "risk taking",
+    "laterality": "right",
+    "mapSha256": "45e9a109db6dbf81a2466627ada1084643fdecdbafa0978332ffaedb29b00d89",
+    "nonzeroVertexCount": 698,
+    "studyCount": 82,
+    "subdomain": "Risk",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.4501953125,
+      7.0703125
+    ]
+  },
+  {
+    "aliases": [
+      "choice behavior"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:choice",
+    "label": "choice",
+    "laterality": "bilateral",
+    "mapSha256": "3864ca0e366999fc4c307dff7ec23344bfdaa5fb8c7bf7f966c33166aa54acc0",
+    "nonzeroVertexCount": 982,
+    "studyCount": 326,
+    "subdomain": "Choice",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.457275390625,
+      5.4921875
+    ]
+  },
+  {
+    "aliases": [
+      "decision process"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:decision",
+    "label": "decision",
+    "laterality": "bilateral",
+    "mapSha256": "fa02c4c55e6418c05e443ddc12612b15eaa489c1b1aa8461a0aecb4b3afa5842",
+    "nonzeroVertexCount": 1484,
+    "studyCount": 800,
+    "subdomain": "Decision Making",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.428466796875,
+      6.92578125
+    ]
+  },
+  {
+    "aliases": [
+      "decision-making"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:decision-making",
+    "label": "decision making",
+    "laterality": "bilateral",
+    "mapSha256": "8bf1d3cdb4f629c5b049dc9882cca7e7cb05198af5b0405cc2264d1a179463c0",
+    "nonzeroVertexCount": 1728,
+    "studyCount": 509,
+    "subdomain": "Decision Making",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.322265625,
+      6.91796875
+    ]
+  },
+  {
+    "aliases": [
+      "decision-making task"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:decision-task",
+    "label": "decision task",
+    "laterality": "left",
+    "mapSha256": "2d328f4e5a8ecce8574086b8bc5fa18c4797e2360479704f4cafc62006637c2d",
+    "nonzeroVertexCount": 926,
+    "studyCount": 106,
+    "subdomain": "Decision Making",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.293701171875,
+      4.85546875
+    ]
+  },
+  {
+    "aliases": [
+      "motivational processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:motivation",
+    "label": "motivation",
+    "laterality": "bilateral",
+    "mapSha256": "76152083412de1e591a8fd2bb8e106f7f4d1adb0e19c52d13d7302918873466a",
+    "nonzeroVertexCount": 883,
+    "studyCount": 189,
+    "subdomain": "Motivation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.4287109375,
+      7.5546875
+    ]
+  },
+  {
+    "aliases": [
+      "anticipatory processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:anticipation",
+    "label": "anticipation",
+    "laterality": "bilateral",
+    "mapSha256": "6476a74485999ea9db53d8c32e36b6441638536b8a62e16ae054fb1f2c2b80ac",
+    "nonzeroVertexCount": 1058,
+    "studyCount": 301,
+    "subdomain": "Anticipation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.455810546875,
+      7.62109375
+    ]
+  },
+  {
+    "aliases": [
+      "loss processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Reward & Decision",
+    "id": "neurosynth:loss",
+    "label": "loss",
+    "laterality": "bilateral",
+    "mapSha256": "cca87da3e1608ecaf44031005343aca46b44b532942dce3d0b016080b0d05d26",
+    "nonzeroVertexCount": 197,
+    "studyCount": 396,
+    "subdomain": "Loss",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.54931640625,
+      5.1875
+    ]
+  },
+  {
+    "aliases": [
+      "nociception"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:pain",
+    "label": "pain",
+    "laterality": "bilateral",
+    "mapSha256": "c9fdc58310c51e7cfaa334e9f3494fa7b9a2643cd758eb407031c2ee8b176b58",
+    "nonzeroVertexCount": 5222,
+    "studyCount": 516,
+    "subdomain": "Pain",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.320556640625,
+      7.8046875
+    ]
+  },
+  {
+    "aliases": [
+      "persistent pain"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:chronic-pain",
+    "label": "chronic pain",
+    "laterality": "right",
+    "mapSha256": "a223400082ed6107244e285ebdab5aa020bea42eecd4994f3e31f1e41e652bc4",
+    "nonzeroVertexCount": 469,
+    "studyCount": 92,
+    "subdomain": "Pain",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.38037109375,
+      6.296875
+    ]
+  },
+  {
+    "aliases": [
+      "painful stimulation"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:painful",
+    "label": "painful",
+    "laterality": "bilateral",
+    "mapSha256": "50ca7f780c7b34aecf49a41536f0cb1f5fbaacf221b0e64d894b3ba1630d96bd",
+    "nonzeroVertexCount": 3626,
+    "studyCount": 189,
+    "subdomain": "Pain",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.46142578125,
+      7.67578125
+    ]
+  },
+  {
+    "aliases": [
+      "nociceptive processing"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:nociceptive",
+    "label": "nociceptive",
+    "laterality": "right",
+    "mapSha256": "e54c0da59a9feeac7d4bafa96ae7a45760cdc707a53b4a3ae02ff5e2e5194c8c",
+    "nonzeroVertexCount": 2345,
+    "studyCount": 73,
+    "subdomain": "Nociception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.43798828125,
+      7.46484375
+    ]
+  },
+  {
+    "aliases": [
+      "interoception",
+      "internal bodily sensation"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:interoceptive",
+    "label": "interoceptive",
+    "laterality": "right",
+    "mapSha256": "d032af744932d955dea3dc527b0683bcddada96dec767f7e21f0b7862b903207",
+    "nonzeroVertexCount": 108,
+    "studyCount": 81,
+    "subdomain": "Interoception",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.38232421875,
+      2.81640625
+    ]
+  },
+  {
+    "aliases": [
+      "gustatory",
+      "gustation"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:taste",
+    "label": "taste",
+    "laterality": "bilateral",
+    "mapSha256": "19b99be1e7c60d313654eccb5dd3633265efdb7167fa43b18c5434ca79284996",
+    "nonzeroVertexCount": 946,
+    "studyCount": 80,
+    "subdomain": "Chemosensation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.482421875,
+      6.5390625
+    ]
+  },
+  {
+    "aliases": [
+      "smell",
+      "olfaction"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:olfactory",
+    "label": "olfactory",
+    "laterality": "bilateral",
+    "mapSha256": "8f1078a1bf771d1b32525c4f41a024e037bc99c878c438834f7a685c5b277edc",
+    "nonzeroVertexCount": 632,
+    "studyCount": 74,
+    "subdomain": "Chemosensation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.3486328125,
+      6.7578125
+    ]
+  },
+  {
+    "aliases": [
+      "autonomic nervous system"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:autonomic",
+    "label": "autonomic",
+    "laterality": "right",
+    "mapSha256": "5bdabf3fa0483202a9e970d64cc6bc101caca427369d086323339334d0684bfa",
+    "nonzeroVertexCount": 2079,
+    "studyCount": 117,
+    "subdomain": "Autonomic Regulation",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.300537109375,
+      5.328125
+    ]
+  },
+  {
+    "aliases": [
+      "physiological arousal"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:arousal",
+    "label": "arousal",
+    "laterality": "bilateral",
+    "mapSha256": "4e24e5cedd32e60c9ff59c35f15335c23f159cf13276418e130de71016a71705",
+    "nonzeroVertexCount": 2063,
+    "studyCount": 295,
+    "subdomain": "Arousal",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.390625,
+      7.4453125
+    ]
+  },
+  {
+    "aliases": [
+      "conscious state"
+    ],
+    "description": "Positive FDR-corrected Neurosynth association z map",
+    "domain": "Pain & Interoception",
+    "id": "neurosynth:consciousness",
+    "label": "consciousness",
+    "laterality": "right",
+    "mapSha256": "ca28ec53c8eace340dc8b4237e6556f330b21f748910383e889c5e4465696cb8",
+    "nonzeroVertexCount": 6,
+    "studyCount": 74,
+    "subdomain": "Conscious State",
+    "threshold": {
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
+    },
+    "valueRange": [
+      0.67333984375,
+      2.09375
+    ]
+  }
+]

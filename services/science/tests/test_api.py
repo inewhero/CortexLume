@@ -1,21 +1,56 @@
 import os
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from cortexlume_science.app import app
 from cortexlume_science.atlas import atlas_status, query_probability_path, query_probability_volume
+from cortexlume_science.quick_targets import load_quick_target_pack
 from .test_geometry import fixture_layout
 
 
 os.environ["CORTEXLUME_TOKEN"] = "test-token"
 client = TestClient(app)
 headers = {"Authorization": "Bearer test-token"}
+QUICK_TARGET_FIXTURE = Path(__file__).parent / "fixtures" / "quick_targets"
 
 
 def test_health_reports_verified_template() -> None:
     response = client.get("/v1/health", headers=headers)
     assert response.status_code == 200
     assert response.json()["templateVerified"] is True
+
+
+def test_quick_target_search_and_map_endpoints(monkeypatch) -> None:
+    monkeypatch.setenv("CORTEXLUME_QUICK_TARGET_DIR", str(QUICK_TARGET_FIXTURE))
+    monkeypatch.setenv("CORTEXLUME_ALLOW_QUICK_TARGET_FIXTURE", "1")
+    load_quick_target_pack.cache_clear()
+    try:
+        search = client.get("/v1/targets", headers=headers, params={"q": "working mem"})
+        assert search.status_code == 200
+        assert search.json()["targets"][0]["id"] == "neurosynth:working-memory"
+
+        synonym = client.get("/v1/targets", headers=headers, params={"q": "short-term memory"})
+        assert synonym.status_code == 200
+        assert synonym.json()["targets"][0]["id"] == "neurosynth:working-memory"
+
+        typo = client.get("/v1/targets", headers=headers, params={"q": "langauge"})
+        assert typo.status_code == 200
+        assert typo.json()["targets"][0]["id"] == "neurosynth:language"
+
+        response = client.get("/v1/targets/neurosynth:working-memory", headers=headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["vertexCount"] == 25_000
+        assert len(body["vertexIndices"]) == len(body["values"]) > 0
+        assert body["provenance"]["sourceKind"] == "neurosynth-quick"
+        assert body["provenance"]["targetSurface"] == "Cedalion-ICBM152-25k"
+        assert len(body["provenance"]["mapSha256"]) == 64
+
+        missing = client.get("/v1/targets/neurosynth:missing", headers=headers)
+        assert missing.status_code == 404
+    finally:
+        load_quick_target_pack.cache_clear()
 
 
 def test_fit_returns_geometric_coordinates_and_region_labels() -> None:

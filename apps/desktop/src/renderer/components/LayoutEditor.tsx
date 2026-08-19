@@ -8,6 +8,7 @@ import {
   uvFromScreen,
 } from '../lib/editorGrid';
 import { useProjectStore } from '../store/projectStore';
+import { QuickTargetController } from './QuickTarget';
 
 export function LayoutEditor() {
   const shellRef = useRef<HTMLDivElement>(null);
@@ -20,6 +21,7 @@ export function LayoutEditor() {
   const [zoom, setZoom] = useState(1);
   const [editingPairId, setEditingPairId] = useState<string | null>(null);
   const [editingChannel, setEditingChannel] = useState('');
+  const [channelIndexExpanded, setChannelIndexExpanded] = useState(false);
   const [layoutNameDraft, setLayoutNameDraft] = useState('');
   const {
     project, activeLayoutId, editorTool, selectedOptodeId, pastLayouts, futureLayouts,
@@ -96,6 +98,7 @@ export function LayoutEditor() {
 
   return (
     <div className="layout-editor-content">
+      <QuickTargetController />
       <div className="module-summary">
         <div className="layout-name-editor">
           <input
@@ -266,8 +269,8 @@ export function LayoutEditor() {
           <label><span>PITCH MM</span><input type="number" min={1} max={100} value={gridPitch} onChange={(event) => setGridPitch(Number(event.target.value))} /></label>
         </div>
         <div className="button-row">
-          <button className="primary" onClick={() => generateGrid(gridColumns, gridRows, gridPitch)}>BUILD {gridColumns}×{gridRows}</button>
           <button onClick={reverseOptodeTypes}>REVERSE S / D</button>
+          <button className="primary" onClick={() => generateGrid(gridColumns, gridRows, gridPitch)}>BUILD {gridColumns}×{gridRows}</button>
         </div>
       </section>
 
@@ -284,19 +287,29 @@ export function LayoutEditor() {
         </div>
       </section>
 
-      <section className="control-block channel-table-block">
-        <div className="control-block-title"><span>CHANNEL INDEX</span><code>{layout.pairs.length}</code></div>
-        <div className="channel-table">
-          {layout.pairs
-            .slice()
-            .sort((a, b) => (a.channelNumber ?? 999) - (b.channelNumber ?? 999))
-            .map((pair) => (
-              <div className="channel-row" key={pair.id}>
-                <label>CH<input type="number" min={1} value={pair.channelNumber ?? ''} onChange={(event) => updatePairChannelNumber(pair.id, Number(event.target.value) || 1)} /></label>
-                <strong>{byId.get(pair.sourceId)?.label}—{byId.get(pair.detectorId)?.label}</strong>
-                <span>{pair.nominalDistanceMm.toFixed(1)} mm</span>
-              </div>
-            ))}
+      <section className={`control-block channel-table-block collapsible-control${channelIndexExpanded ? ' is-expanded' : ' is-collapsed'}`}>
+        <button
+          type="button"
+          className="control-block-title collapsible-control-toggle"
+          aria-expanded={channelIndexExpanded}
+          onClick={() => setChannelIndexExpanded((value) => !value)}
+        >
+          <span>CHANNEL INDEX</span>
+          <code>{layout.pairs.length} · {channelIndexExpanded ? '−' : '+'}</code>
+        </button>
+        <div className="collapsible-control-body">
+          <div className="channel-table">
+            {layout.pairs
+              .slice()
+              .sort((a, b) => (a.channelNumber ?? 999) - (b.channelNumber ?? 999))
+              .map((pair) => (
+                <div className="channel-row" key={pair.id}>
+                  <label>CH<input type="number" min={1} value={pair.channelNumber ?? ''} onChange={(event) => updatePairChannelNumber(pair.id, Number(event.target.value) || 1)} /></label>
+                  <strong>{byId.get(pair.sourceId)?.label}—{byId.get(pair.detectorId)?.label}</strong>
+                  <span>{pair.nominalDistanceMm.toFixed(1)} mm</span>
+                </div>
+              ))}
+          </div>
         </div>
       </section>
 

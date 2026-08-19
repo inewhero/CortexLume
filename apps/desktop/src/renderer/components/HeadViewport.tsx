@@ -22,6 +22,7 @@ import {
   tangentBasis,
   threeFromRas,
 } from '../lib/geometry';
+import { getSurfaceGraph, interpolateSurfaceValues } from '../lib/surfaceInterpolation';
 
 interface LandmarkFile {
   points: Array<{ label: string; rasMm: Vec3; threeMm: Vec3; system: 'five-point' | '10-10' }>;
@@ -80,6 +81,230 @@ function AnatomyMaterial({ color, opacity = 1, depthWrite = true }: { color: str
   />;
 }
 
+const targetVertexShader = `
+  attribute float targetWeight;
+  varying float vTargetWeight;
+  varying vec3 vNormal;
+  void main() {
+    vTargetWeight = targetWeight;
+    vNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const targetFragmentShader = `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  varying float vTargetWeight;
+  varying vec3 vNormal;
+  vec3 heat(float value) {
+    vec3 violet = vec3(0.26, 0.10, 0.48);
+    vec3 coral = vec3(0.92, 0.25, 0.22);
+    vec3 amber = vec3(1.00, 0.84, 0.20);
+    return value < 0.55
+      ? mix(violet, coral, value / 0.55)
+      : mix(coral, amber, (value - 0.55) / 0.45);
+  }
+  void main() {
+    vec3 lightDirection = normalize(vec3(-0.35, 0.72, 0.58));
+    float diffuse = 0.34 + 0.66 * abs(dot(normalize(vNormal), lightDirection));
+    vec3 anatomy = uColor * diffuse;
+    float heatMix = vTargetWeight <= 0.002
+      ? 0.0
+      : 0.34 + 0.64 * smoothstep(0.02, 0.24, vTargetWeight);
+    gl_FragColor = vec4(mix(anatomy, heat(vTargetWeight) * diffuse, heatMix), uOpacity);
+  }
+`;
+
+const scientificVertexMapCache = new WeakMap<
+  THREE.BufferGeometry,
+  WeakMap<THREE.BufferGeometry, ScientificVertexMap>
+>();
+
+interface ScientificVertexMap {
+  indices: Uint32Array;
+  surfaceValidityMask: Uint8Array;
+  interiorValidityMask: Uint8Array;
+}
+
+// The locked GM mesh is entirely within 5.8 mm of the official Cedalion
+// surface. Twelve millimetres retains 90% of the display WM surface while
+// rejecting the cerebellum/brainstem, whose median separation is about 28 mm.
+const MAX_TARGET_TRANSFER_DISTANCE_MM = 12;
+const INTERIOR_OUTWARD_TOLERANCE_MM = 0.5;
+
+function vertexCellKey(x: number, y: number, z: number, cellSize: number) {
+  return `${Math.floor(x / cellSize)},${Math.floor(y / cellSize)},${Math.floor(z / cellSize)}`;
+}
+
+/**
+ * The Cedalion target values are attached to its official 25k vertices, while
+ * CortexLume deliberately uses denser meshes for anatomical display. Transfer
+ * each display vertex to its nearest official vertex without ever borrowing
+ * the scientific mesh topology. This keeps the heatmap coincident with the
+ * selected GM/WM surface and preserves the official value correspondence.
+ */
+function nearestScientificVertexMap(
+  scientificGeometry: THREE.BufferGeometry,
+  displayGeometry: THREE.BufferGeometry,
+  scientificBvh: MeshBVH,
+  includeInteriorValidity: boolean,
+) {
+  let displayCache = scientificVertexMapCache.get(scientificGeometry);
+  if (!displayCache) {
+    displayCache = new WeakMap<THREE.BufferGeometry, ScientificVertexMap>();
+    scientificVertexMapCache.set(scientificGeometry, displayCache);
+  }
+  const cached = displayCache.get(displayGeometry);
+  if (cached) return cached;
+
+  const scientific = scientificGeometry.getAttribute('position');
+  const display = displayGeometry.getAttribute('position');
+  const cellSize = 6;
+  const buckets = new Map<string, number[]>();
+
+  for (let index = 0; index < scientific.count; index += 1) {
+    const key = vertexCellKey(scientific.getX(index), scientific.getY(index), scientific.getZ(index), cellSize);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(index);
+    else buckets.set(key, [index]);
+  }
+
+  const mapping = new Uint32Array(display.count);
+  const surfaceValidityMask = new Uint8Array(display.count);
+  const interiorValidityMask = new Uint8Array(display.count);
+  const scientificIndex = scientificGeometry.getIndex();
+  const queryPoint = new THREE.Vector3();
+  const faceA = new THREE.Vector3();
+  const faceB = new THREE.Vector3();
+  const faceC = new THREE.Vector3();
+  const faceNormal = new THREE.Vector3();
+  const surfaceOffset = new THREE.Vector3();
+  for (let displayIndex = 0; displayIndex < display.count; displayIndex += 1) {
+    const x = display.getX(displayIndex);
+    const y = display.getY(displayIndex);
+    const z = display.getZ(displayIndex);
+    const cellX = Math.floor(x / cellSize);
+    const cellY = Math.floor(y / cellSize);
+    const cellZ = Math.floor(z / cellSize);
+    let nearestIndex = 0;
+    let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+
+    // GM is normally found in the first shell; WM needs at most two for the
+    // locked ICBM152 assets. Four shells retain a safe fallback at boundaries.
+    for (let shell = 0; shell <= 4; shell += 1) {
+      for (let dx = -shell; dx <= shell; dx += 1) {
+        for (let dy = -shell; dy <= shell; dy += 1) {
+          for (let dz = -shell; dz <= shell; dz += 1) {
+            if (shell > 0 && Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== shell) continue;
+            const bucket = buckets.get(`${cellX + dx},${cellY + dy},${cellZ + dz}`);
+            if (!bucket) continue;
+            for (const scientificIndex of bucket) {
+              const deltaX = x - scientific.getX(scientificIndex);
+              const deltaY = y - scientific.getY(scientificIndex);
+              const deltaZ = z - scientific.getZ(scientificIndex);
+              const distanceSquared = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
+              if (distanceSquared < nearestDistanceSquared) {
+                nearestDistanceSquared = distanceSquared;
+                nearestIndex = scientificIndex;
+              }
+            }
+          }
+        }
+      }
+      if (nearestDistanceSquared <= (shell * cellSize) ** 2) break;
+    }
+    mapping[displayIndex] = nearestIndex;
+    const closest = includeInteriorValidity
+      ? scientificBvh.closestPointToPoint(queryPoint.set(x, y, z))
+      : null;
+    const withinSurfaceRange = includeInteriorValidity
+      ? Boolean(closest && closest.distance <= MAX_TARGET_TRANSFER_DISTANCE_MM)
+      : nearestDistanceSquared <= MAX_TARGET_TRANSFER_DISTANCE_MM ** 2;
+    surfaceValidityMask[displayIndex] = withinSurfaceRange ? 1 : 0;
+    if (withinSurfaceRange && closest && scientificIndex && closest.faceIndex != null) {
+      const triangleOffset = closest.faceIndex * 3;
+      faceA.fromBufferAttribute(scientific, scientificIndex.getX(triangleOffset));
+      faceB.fromBufferAttribute(scientific, scientificIndex.getX(triangleOffset + 1));
+      faceC.fromBufferAttribute(scientific, scientificIndex.getX(triangleOffset + 2));
+      THREE.Triangle.getNormal(faceA, faceB, faceC, faceNormal);
+      const signedSurfaceOffset = surfaceOffset.set(x, y, z).sub(closest.point).dot(faceNormal);
+      interiorValidityMask[displayIndex] = signedSurfaceOffset <= INTERIOR_OUTWARD_TOLERANCE_MM ? 1 : 0;
+    }
+  }
+  const result = { indices: mapping, surfaceValidityMask, interiorValidityMask };
+  displayCache.set(displayGeometry, result);
+  return result;
+}
+
+function FunctionalTargetSurface({
+  geometry,
+  scientificVertexCount,
+  scientificVertexMap,
+  requireInterior,
+  color,
+  opacity,
+  depthWrite,
+  renderOrder,
+}: {
+  geometry: THREE.BufferGeometry;
+  scientificVertexCount: number;
+  scientificVertexMap: ScientificVertexMap;
+  requireInterior: boolean;
+  color: string;
+  opacity: number;
+  depthWrite: boolean;
+  renderOrder: number;
+}) {
+  const target = useProjectStore((state) => state.functionalTarget);
+  const uniforms = useMemo(() => ({
+    uColor: { value: new THREE.Color(color) },
+    uOpacity: { value: opacity },
+  }), [color, opacity]);
+  const weightedGeometry = useMemo(() => {
+    if (!target || target.vertexCount !== scientificVertexCount
+      || geometry.getAttribute('position').count !== scientificVertexMap.indices.length) return null;
+    const prepared = geometry.clone();
+    const scientificWeights = new Float32Array(target.vertexCount);
+    target.vertexIndices.forEach((vertexIndex, index) => {
+      scientificWeights[vertexIndex] = target.values[index] ?? 0;
+    });
+    const sorted = [...target.values].sort((a, b) => a - b);
+    const ceiling = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.98))] ?? 1;
+    const span = Math.max(ceiling, 1e-6);
+    const validityMask = requireInterior
+      ? scientificVertexMap.interiorValidityMask
+      : scientificVertexMap.surfaceValidityMask;
+    const displayWeights = new Float32Array(scientificVertexMap.indices.length);
+    for (let index = 0; index < scientificVertexMap.indices.length; index += 1) {
+      if (!validityMask[index]) continue;
+      const value = scientificWeights[scientificVertexMap.indices[index]!] ?? 0;
+      displayWeights[index] = value <= 0 ? 0 : Math.min(1, value / span);
+    }
+    const interpolatedWeights = interpolateSurfaceValues(geometry, displayWeights, {
+      validityMask,
+    });
+    prepared.setAttribute('targetWeight', new THREE.BufferAttribute(interpolatedWeights, 1));
+    return prepared;
+  }, [geometry, requireInterior, scientificVertexCount, scientificVertexMap, target]);
+
+  useEffect(() => () => weightedGeometry?.dispose(), [weightedGeometry]);
+  if (!weightedGeometry) return null;
+  return (
+    <mesh geometry={weightedGeometry} renderOrder={renderOrder}>
+      <shaderMaterial
+        uniforms={uniforms}
+        vertexShader={targetVertexShader}
+        fragmentShader={targetFragmentShader}
+        transparent={opacity < 1}
+        depthWrite={depthWrite}
+        depthTest
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
 function geometryFromScene(scene: THREE.Group): THREE.BufferGeometry {
   let geometry: THREE.BufferGeometry | undefined;
   scene.traverse((object) => {
@@ -131,6 +356,7 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
 }) {
   const visibility = useProjectStore((state) => state.anatomyVisibility);
   const appearance = useProjectStore((state) => state.anatomyAppearance);
+  const functionalTarget = useProjectStore((state) => state.functionalTarget);
   const scalp = useGLTF(anatomyUrl('scalp.glb'), false, false);
   const gray = useGLTF(anatomyUrl('gray_matter.glb'), false, false);
   const white = useGLTF(anatomyUrl('white_matter.glb'), false, false);
@@ -151,6 +377,32 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
     () => new MeshBVH(scientificBrainGeometry),
     [scientificBrainGeometry],
   );
+  const targetDisplayGeometry = visibility.grayMatter
+    ? grayGeometry
+    : visibility.whiteMatter
+      ? whiteGeometry
+      : null;
+  const scientificVertexMap = useMemo(() => (
+    functionalTarget && targetDisplayGeometry
+      ? nearestScientificVertexMap(
+          scientificBrainGeometry,
+          targetDisplayGeometry,
+          scientificBrainBvh,
+          targetDisplayGeometry === whiteGeometry,
+        )
+      : null
+  ), [Boolean(functionalTarget), scientificBrainBvh, scientificBrainGeometry, targetDisplayGeometry]);
+
+  useEffect(() => {
+    const warmMappings = () => {
+      nearestScientificVertexMap(scientificBrainGeometry, grayGeometry, scientificBrainBvh, false);
+      nearestScientificVertexMap(scientificBrainGeometry, whiteGeometry, scientificBrainBvh, true);
+      getSurfaceGraph(grayGeometry);
+      getSurfaceGraph(whiteGeometry);
+    };
+    const requestId = window.requestIdleCallback(warmMappings, { timeout: 1200 });
+    return () => window.cancelIdleCallback(requestId);
+  }, [grayGeometry, scientificBrainBvh, scientificBrainGeometry, whiteGeometry]);
 
   useEffect(() => {
     const brainCenter = scientificBrainGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3(0, 12, 0);
@@ -219,22 +471,44 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
   return (
     <group onPointerDown={onBlank}>
       {visibility.whiteMatter && (
-        <mesh geometry={whiteGeometry} renderOrder={0}>
-          <AnatomyMaterial
-            color={appearance.whiteMatter.color}
-            opacity={appearance.whiteMatter.opacity}
-            depthWrite={appearance.whiteMatter.opacity >= 0.98}
-          />
-        </mesh>
+        functionalTarget && targetDisplayGeometry === whiteGeometry && scientificVertexMap
+          ? <FunctionalTargetSurface
+              geometry={whiteGeometry}
+              scientificVertexCount={scientificBrainGeometry.getAttribute('position').count}
+              scientificVertexMap={scientificVertexMap}
+              requireInterior
+              color={appearance.whiteMatter.color}
+              opacity={appearance.whiteMatter.opacity}
+              depthWrite={appearance.whiteMatter.opacity >= 0.98}
+              renderOrder={0}
+            />
+          : <mesh geometry={whiteGeometry} renderOrder={0}>
+              <AnatomyMaterial
+                color={appearance.whiteMatter.color}
+                opacity={appearance.whiteMatter.opacity}
+                depthWrite={appearance.whiteMatter.opacity >= 0.98}
+              />
+            </mesh>
       )}
       {visibility.grayMatter && (
-        <mesh geometry={grayGeometry} renderOrder={1}>
-          <AnatomyMaterial
-            color={appearance.grayMatter.color}
-            opacity={appearance.grayMatter.opacity}
-            depthWrite={appearance.grayMatter.opacity >= 0.98 && !visibility.whiteMatter}
-          />
-        </mesh>
+        functionalTarget && targetDisplayGeometry === grayGeometry && scientificVertexMap
+          ? <FunctionalTargetSurface
+              geometry={grayGeometry}
+              scientificVertexCount={scientificBrainGeometry.getAttribute('position').count}
+              scientificVertexMap={scientificVertexMap}
+              requireInterior={false}
+              color={appearance.grayMatter.color}
+              opacity={appearance.grayMatter.opacity}
+              depthWrite={appearance.grayMatter.opacity >= 0.98}
+              renderOrder={1}
+            />
+          : <mesh geometry={grayGeometry} renderOrder={1}>
+              <AnatomyMaterial
+                color={appearance.grayMatter.color}
+                opacity={appearance.grayMatter.opacity}
+                depthWrite={appearance.grayMatter.opacity >= 0.98}
+              />
+            </mesh>
       )}
       {visibility.scalp && (
         <mesh geometry={scalpGeometry} renderOrder={2}>
@@ -444,6 +718,7 @@ export function HeadViewport() {
     placeLayout, selectInstance, setInstanceEditMode, updateInstanceAnchor,
     updateInstanceOverride, rotateMapping, toggleInstanceVisibility, removeInstance,
     toast, setToast,
+    functionalTarget,
   } = useProjectStore();
   const selected = project.instances.find((instance) => instance.id === selectedInstanceId);
   const selectedLayout = project.layouts.find((layout) => layout.id === selected?.definitionId);
@@ -451,6 +726,11 @@ export function HeadViewport() {
   const overlaps = useMemo(() => findLayoutOverlaps(
     project.layouts, project.instances.filter((instance) => instance.visible !== false),
   ), [project.layouts, project.instances, surfaceRevision]);
+  const targetDisplayRange = useMemo(() => {
+    if (!functionalTarget) return null;
+    const values = [...functionalTarget.values].sort((a, b) => a - b);
+    return [values[0]!, values[Math.min(values.length - 1, Math.floor(values.length * 0.98))]!] as const;
+  }, [functionalTarget]);
 
   useEffect(() => {
     void fetch(anatomyUrl('landmarks.json')).then((response) => response.json()).then((data: LandmarkFile) => setLandmarks(data.points));
@@ -474,7 +754,7 @@ export function HeadViewport() {
   };
 
   return (
-    <div className="head-viewport" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+    <div className={`head-viewport ${functionalTarget ? 'has-target-map' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
       event.preventDefault();
       const layoutId = event.dataTransfer.getData('application/x-cortexlume-layout');
       if (layoutId) placeLayout(layoutId);
@@ -530,6 +810,14 @@ export function HeadViewport() {
         <span>{project.instances.length} PATCH{project.instances.length === 1 ? '' : 'ES'}</span>
         {project.digitizerSessions.length > 0 && <span>{project.digitizerSessions.reduce((sum, session) => sum + session.points.length, 0)} DIGITIZED PTS</span>}
       </div>
+      {functionalTarget && (
+        <div className="viewport-overlay target-map-legend">
+          <strong>{functionalTarget.target.label}</strong>
+          <span>{functionalTarget.provenance.statistic.toUpperCase()}</span>
+          <i aria-hidden="true" />
+          <div className="target-map-range"><small>{targetDisplayRange?.[0].toFixed(2)}</small><small>{targetDisplayRange?.[1].toFixed(2)}</small></div>
+        </div>
+      )}
       <Canvas onPointerMissed={() => selectInstance(selectedInstanceId, null)} camera={{ position: [215, 138, -300], fov: 39 }} dpr={[1, 1.6]} gl={{ antialias: true }}>
         <HeadScene landmarks={landmarks} surfaceRevision={surfaceRevision} onSurfacesReady={() => setSurfaceRevision((value) => value + 1)} />
       </Canvas>

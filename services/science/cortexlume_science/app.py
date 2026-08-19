@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 from typing import Any
 
@@ -19,6 +21,8 @@ from .models import (
     ProjectValidationRequest,
     ProjectionResult,
 )
+from .quick_targets import QuickTargetError, load_quick_target_pack, quick_target_status
+from .target_map_import import MAX_COMPRESSED_BYTES, process_target_map_import
 from .template_gate import inspect_template_gate
 
 app = FastAPI(title="CortexLume Science", version=__version__, docs_url=None, redoc_url=None)
@@ -35,6 +39,7 @@ def health(_: None = Header(default=None, alias="x-unused"), authorization: str 
     authorize(authorization)
     gate = inspect_template_gate()
     atlas = atlas_status()
+    targets = quick_target_status()
     return {
         "ok": True,
         "version": __version__,
@@ -42,7 +47,67 @@ def health(_: None = Header(default=None, alias="x-unused"), authorization: str 
         "templateIssues": list(gate.issues),
         "atlasVerified": atlas.available,
         "atlasIssue": atlas.issue,
+        "quickTargetsAvailable": targets.available,
+        "quickTargetsIssue": targets.issue,
+        "quickTargetPackId": targets.pack_id,
     }
+
+
+@app.get("/v1/targets")
+def search_quick_targets(
+    q: str = "",
+    limit: int = 20,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    authorize(authorization)
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=422, detail="limit must be between 1 and 100")
+    try:
+        pack = load_quick_target_pack()
+    except (OSError, ValueError, KeyError, QuickTargetError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return {
+        "targets": pack.search(q, limit),
+        "provenance": pack.provenance(),
+    }
+
+
+@app.get("/v1/targets/{target_id}")
+def get_quick_target(
+    target_id: str,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    authorize(authorization)
+    try:
+        pack = load_quick_target_pack()
+    except (OSError, ValueError, KeyError, QuickTargetError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    target = pack.get(target_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Quick Target not found")
+    return target
+
+
+@app.post("/v1/targets/import")
+def import_functional_target(
+    payload: dict[str, Any],
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    authorize(authorization)
+    file_name = payload.get("fileName")
+    declared_space = payload.get("declaredSpace")
+    encoded = payload.get("dataBase64")
+    if not isinstance(file_name, str) or not isinstance(encoded, str):
+        raise HTTPException(status_code=422, detail="fileName and dataBase64 are required")
+    if declared_space not in ("MNI152NLin6Asym", "NeurosynthMNI152-2mm"):
+        raise HTTPException(status_code=422, detail="Unsupported declared target space")
+    if len(encoded) > ((MAX_COMPRESSED_BYTES + 2) // 3) * 4:
+        raise HTTPException(status_code=413, detail="Target map exceeds the import size limit")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise HTTPException(status_code=422, detail="Target map payload is not valid base64") from error
+    return process_target_map_import(raw, file_name, declared_space)
 
 
 @app.get("/v1/template-manifest")

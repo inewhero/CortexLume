@@ -1,0 +1,56 @@
+[
+  {
+    "aliases": [],
+    "description": "Synthetic interaction-test field; not a Neurosynth result",
+    "id": "neurosynth:working-memory",
+    "label": "working memory",
+    "laterality": "bilateral",
+    "mapSha256": "89527692a4654a7adb2d3e78dfafb356c88af0d160ee21919143254a71dfdf12",
+    "nonzeroVertexCount": 2668,
+    "studyCount": 0,
+    "threshold": {
+      "kind": "positive",
+      "minimumExclusive": 0
+    },
+    "valueRange": [
+      0.50048828125,
+      5.8671875
+    ]
+  },
+  {
+    "aliases": [],
+    "description": "Synthetic interaction-test field; not a Neurosynth result",
+    "id": "neurosynth:language",
+    "label": "language",
+    "laterality": "left",
+    "mapSha256": "d3ea34f180493e2f74c227c4a53e3f82a8036493790e79ef1bd52acde771cdb2",
+    "nonzeroVertexCount": 1867,
+    "studyCount": 0,
+    "threshold": {
+      "kind": "positive",
+      "minimumExclusive": 0
+    },
+    "valueRange": [
+      0.50048828125,
+      5.85546875
+    ]
+  },
+  {
+    "aliases": [],
+    "description": "Synthetic interaction-test field; not a Neurosynth result",
+    "id": "neurosynth:motor",
+    "label": "motor",
+    "laterality": "bilateral",
+    "mapSha256": "76eec45829c24f1286941b4ab59ab3e20aa40355547a442600c14a353e677a32",
+    "nonzeroVertexCount": 1782,
+    "studyCount": 0,
+    "threshold": {
+      "kind": "positive",
+      "minimumExclusive": 0
+    },
+    "valueRange": [
+      0.5,
+      5.90234375
+    ]
+  }
+]

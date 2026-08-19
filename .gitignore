@@ -57,6 +57,8 @@ __pycache__/
 !/assets/templates/MNI152NLin6Asym/generated/voxel_to_vertex_brain.mtx.gz
 !/assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-assets.json
 !/assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-qc.json
+!/assets/templates/MNI152NLin6Asym/generated/quick_targets/
+!/assets/templates/MNI152NLin6Asym/generated/quick_targets/**
 
 # OS metadata
 .DS_Store

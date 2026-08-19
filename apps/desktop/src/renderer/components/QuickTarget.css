@@ -1,0 +1,61 @@
+.quick-target { margin-bottom: 10px; border: 1px solid var(--line-strong); background: #edf0ed; }
+.quick-target-toggle { width: 100%; min-height: 34px; display: grid; grid-template-columns: 1fr minmax(0, auto) 14px; align-items: center; gap: 9px; padding: 6px 9px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #dfe2df; text-align: left; }
+.quick-target-toggle:hover:not(:disabled) { color: var(--ink); background: #d5d9d6; border-color: var(--line-strong); }
+.quick-target-toggle > strong { font-size: 10px; letter-spacing: .1em; }
+.quick-target-toggle > span { overflow: hidden; color: #6a7376; font: 9px "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.quick-target.has-target .quick-target-toggle > span { color: #216848; font-weight: 800; }
+.quick-target-toggle > code { text-align: right; }
+.quick-target-body { max-height: 760px; overflow: hidden; opacity: 1; visibility: visible; transform: translateY(0); transition: max-height 320ms cubic-bezier(.22, .72, .18, 1), opacity 180ms ease 60ms, transform 240ms ease, visibility 0s; }
+.quick-target.is-collapsed .quick-target-toggle { border-bottom-color: transparent; }
+.quick-target.is-collapsed .quick-target-body { max-height: 0; opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-5px); transition: max-height 280ms cubic-bezier(.4, 0, .2, 1), opacity 120ms ease, transform 180ms ease, visibility 0s 280ms; }
+.quick-target-picker { padding: 11px; }
+.target-picker-intro { display: flex; align-items: start; justify-content: space-between; gap: 9px; margin-bottom: 10px; }
+.target-picker-intro > p { margin: 0; color: #4f595c; font-size: 10.5px; line-height: 1.5; }
+.target-picker-intro > button { flex: 0 0 auto; min-height: 26px; padding: 4px 8px; font-size: 9px; }
+.quick-target-picker form { display: grid; grid-template-columns: minmax(0, 1fr) 82px; gap: 6px; }
+.quick-target-picker form input { width: 100%; min-height: 34px; font-size: 12px; }
+.quick-target-picker form button { min-height: 34px; font-size: 10.5px; }
+.target-status { padding: 15px 6px 7px; color: #3c484b; text-align: center; font: 9.5px/1.4 "Cascadia Mono", Consolas, monospace; letter-spacing: .035em; }
+.target-status.is-muted { color: #7a8284; }
+.target-results { max-height: 280px; overflow-y: auto; margin-top: 8px; border-top: 1px solid #c5cbc8; scrollbar-width: thin; }
+.target-results > button { width: 100%; min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 9px; border: 0; border-bottom: 1px solid #c8cfcc; background: #f5f6f3; text-align: left; }
+.target-results > button:hover:not(:disabled), .target-results > button:focus-visible { color: #172024; background: #e7c967; box-shadow: inset 3px 0 #283134; }
+.target-results span, .target-results strong, .target-results small { min-width: 0; display: block; }
+.target-results strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.target-results small { margin-top: 3px; overflow: hidden; color: #697275; text-overflow: ellipsis; white-space: nowrap; font: 9px/1.3 "Cascadia Mono", Consolas, monospace; }
+.target-results code { flex: 0 0 auto; font-size: 8.5px; }
+.quick-target-active { padding: 11px; }
+.target-active-head { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.target-active-head > div { min-width: 0; }
+.target-active-head strong { display: block; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.target-active-head span { display: block; margin-top: 3px; color: #626d70; font: 9.5px "Cascadia Mono", Consolas, monospace; }
+.target-active-head button { min-height: 26px; padding: 4px 8px; font-size: 9px; }
+.target-description { margin: 9px 0 0; color: #515c5f; font-size: 10.5px; line-height: 1.5; }
+.target-description a { font: inherit; }
+.target-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 10px 0 0; border: 1px solid #c2c9c6; }
+.target-facts > div { min-width: 0; padding: 7px 8px; border-right: 1px solid #c2c9c6; }
+.target-facts > div:last-child { border-right: 0; }
+.target-facts dt { color: #6b7477; font-size: 8.5px; font-weight: 800; letter-spacing: .07em; }
+.target-facts dd { margin: 3px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 10.5px "Cascadia Mono", Consolas, monospace; }
+.target-regions { margin-top: 10px; }
+.target-regions > span { color: #687275; font-size: 8.5px; font-weight: 800; letter-spacing: .08em; }
+.target-regions ol { margin: 4px 0 0; padding: 0; list-style: none; border-top: 1px solid #c7ceca; }
+.target-regions li { min-height: 30px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #c7ceca; font-size: 10.5px; }
+.target-regions li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.target-guidance { margin: 10px 0 0; color: #4b5659; font-size: 10.5px; line-height: 1.5; }
+.target-guidance b { color: #20292c; }
+.target-change { width: 100%; min-height: 32px; margin-top: 10px; }
+.target-error { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 9px 11px; color: #fff; background: #9b342f; font-size: 9.5px; }
+.target-error span { min-width: 0; overflow-wrap: anywhere; }
+.target-error button { flex: 0 0 auto; min-height: 26px; padding: 4px 8px; color: #fff; border-color: #e6b5b1; background: transparent; font-size: 9px; }
+
+@media (max-width: 1180px) {
+  .target-facts { grid-template-columns: 1fr; }
+  .target-facts > div { display: flex; justify-content: space-between; border-right: 0; border-bottom: 1px solid #c2c9c6; }
+  .target-facts > div:last-child { border-bottom: 0; }
+  .target-facts dd { margin: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .target-results > button { scroll-behavior: auto; }
+}

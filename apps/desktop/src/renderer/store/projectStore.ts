@@ -5,6 +5,7 @@ import type {
   DeviceProfile,
   DigitizerSession,
   DigitizerOptodeMapping,
+  FunctionalTargetMap,
   LayoutDefinition,
   LayoutInstance,
   OptodeType,
@@ -166,12 +167,14 @@ interface ProjectStore {
   bidsValidationFields: BidsField[];
   activeDigitizerSessionId: string | null;
   digitizerPreview: { session: DigitizerSession; mappings: DigitizerOptodeMapping[] } | null;
+  functionalTarget: FunctionalTargetMap | null;
   setToast(message: string | null): void;
   setBidsSettingsExpanded(expanded: boolean, validationFields?: BidsField[]): void;
   addDigitizerSession(session: DigitizerSession): void;
   confirmDigitizerMapping(session: DigitizerSession, mappings: DigitizerOptodeMapping[]): void;
   confirmFivePointCalibration(session: DigitizerSession, targetInstanceIds: string[]): void;
   setDigitizerPreview(preview: { session: DigitizerSession; mappings: DigitizerOptodeMapping[] } | null): void;
+  setFunctionalTarget(target: FunctionalTargetMap | null): void;
   removeDigitizerSession(sessionId: string): void;
   toggleDigitizerSession(sessionId: string): void;
   setActiveDigitizerSession(sessionId: string | null): void;
@@ -270,8 +273,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       channelLabels: true,
     },
     anatomyAppearance: {
-      grayMatter: { color: '#b97d72', opacity: 1 },
-      whiteMatter: { color: '#ddd5be', opacity: 1 },
+      grayMatter: { color: '#e3e3e3', opacity: 1 },
+      whiteMatter: { color: '#fffbf0', opacity: 1 },
     },
     projectRevision: 0,
     pastLayouts: [],
@@ -281,6 +284,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     bidsValidationFields: [],
     activeDigitizerSessionId: null,
     digitizerPreview: null,
+    functionalTarget: null,
 
     setToast: (toast) => set({ toast }),
     setBidsSettingsExpanded: (bidsSettingsExpanded, bidsValidationFields = []) => set({
@@ -292,6 +296,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       activeDigitizerSessionId: session.id,
     })),
     setDigitizerPreview: (digitizerPreview) => set({ digitizerPreview }),
+    setFunctionalTarget: (functionalTarget) => set({ functionalTarget }),
     confirmDigitizerMapping: (session, mappings) => set((state) => {
       const pointPositions = new Map(session.calibratedPoints.map((point) => [point.pointId, point.rasMm]));
       const affected = new Set(mappings.map((mapping) => mapping.instanceId));
@@ -330,6 +335,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         selectedInstanceId: clones[0]?.instance.id ?? state.selectedInstanceId,
         activeDigitizerSessionId: session.id,
         digitizerPreview: null,
+        functionalTarget: null,
         projectRevision: state.projectRevision + 1,
       };
     }),
@@ -407,6 +413,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         bidsValidationFields: [],
         activeDigitizerSessionId: null,
         digitizerPreview: null,
+        functionalTarget: null,
       });
     },
     loadProject: (project) => set(() => {

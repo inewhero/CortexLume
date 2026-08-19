@@ -13,6 +13,7 @@ import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from 
 import type { DigitizerImport, Vec3 } from '@cortexlume/contracts';
 import { DigitizerDialog, type MappingScope } from './DigitizerDialog';
 import { FIVE_POINT_LABELS, type FivePointLabel } from '../lib/digitizer';
+import { TargetMapImportDialog } from './TargetMapImportDialog';
 
 const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code: string }> = [
   { key: 'scalp', label: 'Scalp envelope', code: 'SCLP' },
@@ -39,6 +40,7 @@ export function Inspector() {
   const [materialPopup, setMaterialPopup] = useState<keyof AnatomyAppearance | null>(null);
   const materialPopupRef = useRef<HTMLDivElement>(null);
   const [digitizerDialog, setDigitizerDialog] = useState<{ kind: 'import'; data: DigitizerImport } | { kind: 'manual' } | null>(null);
+  const [targetMapDialog, setTargetMapDialog] = useState(false);
   const [fivePointTargets, setFivePointTargets] = useState<Record<FivePointLabel, Vec3> | null>(null);
   const {
     project, projectPath, anatomyVisibility, anatomyAppearance,
@@ -47,6 +49,7 @@ export function Inspector() {
     setProjectionMode, resetInstanceOverride, setAnatomyLayer, setAnatomyAppearance,
     setBidsSettingsExpanded, setDefaultDepth,
     confirmDigitizerMapping, confirmFivePointCalibration, setDigitizerPreview,
+    setFunctionalTarget,
   } = useProjectStore();
   const instance = project.instances.find((item) => item.id === selectedInstanceId);
   const layout = project.layouts.find((item) => item.id === instance?.definitionId);
@@ -253,9 +256,10 @@ export function Inspector() {
           <button onClick={openProject}>OPEN</button>
           <button className="primary" onClick={saveProject}>SAVE</button>
         </div></div>
-        <div className="workflow-row"><span>IMPORT</span><div className="project-actions two">
+        <div className="workflow-row"><span>IMPORT</span><div className="project-actions">
           <button onClick={importDigitizer}>DIGITIZER</button>
           <button onClick={openFivePointEntry}>5-POINT</button>
+          <button onClick={() => setTargetMapDialog(true)}>TARGET MAP</button>
         </div></div>
         <div className="workflow-row"><span>EXPORT</span><div className="project-actions">
           <button onClick={exportBrainNet}>BRAINNET</button>
@@ -273,6 +277,16 @@ export function Inspector() {
           setDigitizerDialog(null);
           setToast(mappings.length > 0 ? `Mapped ${mappings.length} digitized optodes · mean correspondence ${(mappings.reduce((sum, mapping) => sum + mapping.distanceMm, 0) / mappings.length).toFixed(1)} mm.` : `Loaded five-point calibration · RMS residual ${session.calibration.rmsResidualMm.toFixed(1)} mm.`);
         }}
+      />}
+
+      {targetMapDialog && <TargetMapImportDialog
+        importMap={(declaredSpace) => window.cortexlume.input.targetNifti(declaredSpace)}
+        onApply={(map) => {
+          setFunctionalTarget(map);
+          setToast(`Functional target ${map.target.label} is active in 3D Align.`);
+        }}
+        onClose={() => setTargetMapDialog(false)}
+        onToast={setToast}
       />}
 
       <section className="control-block">

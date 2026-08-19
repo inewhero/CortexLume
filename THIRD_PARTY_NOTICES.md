@@ -2,6 +2,14 @@
 
 CortexLume application source code is MIT licensed. Scientific template and atlas assets remain under their respective upstream licenses and are distributed as separate aggregated data files.
 
+Quick Target release data are derived from Neurosynth database release 0.7
+(`neurosynth/neurosynth-data`, pinned by each pack manifest). Neurosynth data are
+licensed under the Open Database License (ODbL) 1.0. Generated Quick Target data
+remain a separately attributed database asset and are not relicensed under the
+CortexLume source-code license. The synthetic pack under
+`services/science/tests/fixtures` contains no Neurosynth data and is not a
+release asset.
+
 - TemplateFlow MNI152NLin6Asym: see the license and citations in the upstream template repository.
 - Harvard–Oxford cortical and subcortical atlases: CC BY-SA 4.0 according to the FSL standard-space atlas license notice. Adapted/resampled atlas files and their transformation scripts must remain available under compatible terms.
 - Cedalion ICBM152 head model v26.5.1: source archive
@@ -23,7 +31,7 @@ remain unchanged integer percentages and are not renormalized by CortexLume.
 
 BrainNet Viewer is an external GPL-licensed MATLAB application and is not
 bundled with CortexLume. The BrainNet export generates interoperable CSV,
-`.node`, `.edge`, and MATLAB script files, then calls the user's independently
+`.node`, and MATLAB script files, then calls the user's independently
 installed `BrainNet_MapCfg` entry point. Users should cite Xia, Wang, and He
 (2013), *BrainNet Viewer: A Network Visualization Tool for Human Brain
 Connectomics*, PLOS ONE 8:e68910 when publishing BrainNet Viewer figures.

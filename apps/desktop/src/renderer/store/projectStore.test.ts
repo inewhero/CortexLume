@@ -3,6 +3,13 @@ import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore } from './projectStore';
 
 describe('default optode matrix', () => {
+  it('starts with neutral gray- and white-matter materials', () => {
+    expect(useProjectStore.getState().anatomyAppearance).toEqual({
+      grayMatter: { color: '#e3e3e3', opacity: 1 },
+      whiteMatter: { color: '#fffbf0', opacity: 1 },
+    });
+  });
+
   it('numbers optodes down columns and channels across rows', () => {
     const layout = useProjectStore.getState().project.layouts[0]!;
     const byCoordinate = new Map(layout.optodes.map((optode) => [optode.uvMm.join(','), optode]));

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BidsSettingsSchema,
   DeviceProfileSchema,
+  FunctionalTargetMapSchema,
   LayoutDefinitionSchema,
   ProjectionSettingsSchema,
 } from './index';
@@ -45,5 +46,25 @@ describe('LayoutDefinitionSchema', () => {
       subjectLabel: '01',
       taskLabel: 'layout',
     });
+  });
+
+  it('accepts only ordered finite positive values on the locked 25k target surface', () => {
+    const base = {
+      target: { id: 'memory', label: 'Memory' },
+      vertexCount: 25_000,
+      vertexIndices: [4, 17],
+      values: [2.1, 4.8],
+      provenance: {
+        sourceKind: 'neurosynth-quick',
+        sourceSpace: 'MNI152',
+        targetSpace: 'MNI152NLin6Asym',
+        targetSurface: 'Cedalion-ICBM152-25k',
+        statistic: 'association-test z',
+        mapSha256: 'fixture',
+      },
+    };
+    expect(FunctionalTargetMapSchema.parse(base).vertexIndices).toEqual([4, 17]);
+    expect(FunctionalTargetMapSchema.safeParse({ ...base, vertexIndices: [17, 4] }).success).toBe(false);
+    expect(FunctionalTargetMapSchema.safeParse({ ...base, values: [2.1, Number.NaN] }).success).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "cortexlume",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "packageManager": "pnpm@10.30.0",
   "engines": {

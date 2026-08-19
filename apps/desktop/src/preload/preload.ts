@@ -3,6 +3,7 @@ import type {
   CortexLumeProject,
   DesktopApi,
   FitPlacementRequest,
+  TargetImportSpace,
 } from '@cortexlume/contracts';
 
 const api: DesktopApi = {
@@ -18,6 +19,8 @@ const api: DesktopApi = {
   },
   input: {
     digitizer: () => ipcRenderer.invoke('input:digitizer'),
+    targetNifti: (declaredSpace: TargetImportSpace) =>
+      ipcRenderer.invoke('input:target-nifti', declaredSpace),
   },
   export: {
     csv: (project: CortexLumeProject) => ipcRenderer.invoke('export:csv', project),
@@ -34,6 +37,10 @@ const api: DesktopApi = {
     atlasLookupPath: (points, probabilityThreshold) =>
       ipcRenderer.invoke('science:atlas-lookup-path', points, probabilityThreshold),
     annotateProject: (project) => ipcRenderer.invoke('science:annotate-project', project),
+    quickTargetSearch: (query, limit) =>
+      ipcRenderer.invoke('science:quick-target-search', query, limit),
+    quickTargetMap: (targetId) =>
+      ipcRenderer.invoke('science:quick-target-map', targetId),
   },
 };
 

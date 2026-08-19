@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import path from 'node:path';
 import {
@@ -10,8 +10,13 @@ import {
   FitPlacementRequestSchema,
   FitPlacementResponseSchema,
   AtlasLabelSchema,
+  FunctionalTargetMapSchema,
+  QuickTargetSummarySchema,
+  TargetImportResultSchema,
+  TargetImportSpaceSchema,
   type CortexLumeProject,
   type FitPlacementRequest,
+  type TargetImportSpace,
   type Vec3,
 } from '@cortexlume/contracts';
 import { createProjectArchive, readProjectArchive } from './projectArchive';
@@ -50,13 +55,21 @@ function resolveScienceCommand(): { command: string; args: string[]; cwd: string
     return { command: executable, args: [], cwd: path.dirname(executable) };
   }
 
-  const script = path.resolve(app.getAppPath(), '..', '..', 'services', 'science', 'run.py');
+  const workspaceRoot = path.resolve(app.getAppPath(), '..', '..');
+  const script = path.join(workspaceRoot, 'services', 'science', 'run.py');
   const configuredPython = process.env.CORTEXLUME_PYTHON;
   if (configuredPython) {
     return { command: configuredPython, args: [script], cwd: path.dirname(script) };
   }
+  // Development must execute the checked-out science source. A previously built
+  // sidecar can legitimately lag behind new IPC/API endpoints and is therefore
+  // only a fallback when the workspace virtual environment is unavailable.
+  const workspacePython = path.join(workspaceRoot, '.venv', 'Scripts', 'python.exe');
+  if (existsSync(workspacePython)) {
+    return { command: workspacePython, args: [script], cwd: path.dirname(script) };
+  }
   const builtExecutable = path.resolve(
-    app.getAppPath(), '..', '..', 'services', 'science', 'dist',
+    workspaceRoot, 'services', 'science', 'dist',
     'cortexlume-science', 'cortexlume-science.exe',
   );
   if (existsSync(builtExecutable)) {
@@ -347,6 +360,33 @@ function registerIpc(): void {
     return parseDigitizerFile(selectedPath, new Uint8Array(await readFile(selectedPath)));
   });
 
+  ipcMain.handle('input:target-nifti', async (_event, rawDeclaredSpace: TargetImportSpace) => {
+    const declaredSpace = TargetImportSpaceSchema.parse(rawDeclaredSpace);
+    const selection = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Import statistical target map', properties: ['openFile'],
+      filters: [
+        { name: 'NIfTI statistical map', extensions: ['nii', 'gz'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    const selectedPath = selection.filePaths[0];
+    if (selection.canceled || !selectedPath) return null;
+    const fileName = path.basename(selectedPath);
+    if (!fileName.toLowerCase().endsWith('.nii') && !fileName.toLowerCase().endsWith('.nii.gz')) {
+      throw new Error('Select a .nii or .nii.gz NIfTI statistical map.');
+    }
+    if ((await stat(selectedPath)).size > 128 * 1024 * 1024) {
+      throw new Error('Target map exceeds the 128 MB import limit.');
+    }
+    const bytes = await readFile(selectedPath);
+    const response = await scienceRequest<unknown>('/v1/targets/import', {
+      fileName,
+      declaredSpace,
+      dataBase64: bytes.toString('base64'),
+    });
+    return TargetImportResultSchema.parse(response);
+  });
+
   ipcMain.handle('export:csv', async (_event, rawProject: CortexLumeProject) => {
     const project = CortexLumeProjectSchema.parse(rawProject);
     const directory = await chooseExportDirectory('Export CortexLume CSV files');
@@ -494,6 +534,25 @@ function registerIpc(): void {
         };
       }),
     });
+  });
+
+  ipcMain.handle('science:quick-target-search', async (_event, rawQuery: string, rawLimit = 20) => {
+    const query = String(rawQuery ?? '').trim().slice(0, 120);
+    const limit = Math.max(1, Math.min(50, Math.trunc(Number(rawLimit) || 20)));
+    const response = await scienceRequest<{ targets: unknown[]; provenance: Record<string, unknown> }>(
+      `/v1/targets?q=${encodeURIComponent(query)}&limit=${limit}`,
+    );
+    return {
+      targets: QuickTargetSummarySchema.array().parse(response.targets),
+      provenance: response.provenance ?? {},
+    };
+  });
+
+  ipcMain.handle('science:quick-target-map', async (_event, rawTargetId: string) => {
+    const targetId = String(rawTargetId ?? '').trim();
+    if (!targetId || targetId.length > 160) throw new Error('Quick Target identifier is invalid.');
+    const response = await scienceRequest<unknown>(`/v1/targets/${encodeURIComponent(targetId)}`);
+    return FunctionalTargetMapSchema.parse(response);
   });
 }
 

@@ -26,6 +26,12 @@ def template_directory() -> Path:
 
 
 def sha256_file(path: Path) -> str:
+    # Git may materialize reviewed text assets with CRLF on Windows. Their
+    # manifests are hashed from the canonical LF release bytes; normalize only
+    # line endings for text assets while retaining byte-exact hashes for every
+    # binary anatomy, atlas and correspondence file.
+    if path.suffix.casefold() in {'.json', '.csv', '.xml', '.txt'}:
+        return hashlib.sha256(path.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):

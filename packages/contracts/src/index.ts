@@ -230,6 +230,83 @@ export const DigitizerImportSchema = z.object({
 });
 export type DigitizerImport = z.infer<typeof DigitizerImportSchema>;
 
+export const QuickTargetSummarySchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  aliases: z.array(z.string()).default([]),
+  domain: z.string().min(1).optional(),
+  subdomain: z.string().min(1).optional(),
+  studyCount: z.number().int().nonnegative().nullable().optional(),
+  description: z.string().optional(),
+  peakRegions: z.array(z.string()).default([]),
+  laterality: z.string().optional(),
+});
+export type QuickTargetSummary = z.infer<typeof QuickTargetSummarySchema>;
+
+export const FunctionalTargetProvenanceSchema = z.object({
+  sourceKind: z.enum(['neurosynth-quick', 'nifti-import']),
+  sourceSpace: z.string().min(1),
+  targetSpace: z.literal('MNI152NLin6Asym'),
+  targetSurface: z.literal('Cedalion-ICBM152-25k'),
+  statistic: z.string().min(1),
+  mapSha256: z.string().min(1),
+  fileName: z.string().nullable().optional(),
+  interpolation: z.string().optional(),
+  validation: z.record(z.unknown()).optional(),
+  packId: z.string().optional(),
+  distributionRole: z.string().optional(),
+});
+export type FunctionalTargetProvenance = z.infer<typeof FunctionalTargetProvenanceSchema>;
+
+export const FunctionalTargetMapSchema = z.object({
+  target: QuickTargetSummarySchema,
+  vertexCount: z.literal(25_000),
+  vertexIndices: z.array(z.number().int().min(0).max(24_999)).min(1),
+  values: z.array(z.number().finite().positive()).min(1),
+  provenance: FunctionalTargetProvenanceSchema,
+}).superRefine((value, context) => {
+  if (value.vertexIndices.length !== value.values.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Target vertex indices and values must have equal length.' });
+  }
+  for (let index = 1; index < value.vertexIndices.length; index += 1) {
+    if (value.vertexIndices[index]! <= value.vertexIndices[index - 1]!) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Target vertex indices must be unique and strictly increasing.' });
+      break;
+    }
+  }
+});
+export type FunctionalTargetMap = z.infer<typeof FunctionalTargetMapSchema>;
+
+export const TargetImportSpaceSchema = z.enum([
+  'MNI152NLin6Asym',
+  'NeurosynthMNI152-2mm',
+]);
+export type TargetImportSpace = z.infer<typeof TargetImportSpaceSchema>;
+
+export const TargetImportDiagnosticSchema = z.object({
+  severity: z.enum(['info', 'warning', 'error']),
+  code: z.string().min(1),
+  message: z.string().min(1),
+  action: z.string().optional(),
+});
+export type TargetImportDiagnostic = z.infer<typeof TargetImportDiagnosticSchema>;
+
+export const TargetImportResultSchema = z.object({
+  accepted: z.boolean(),
+  declaredSpace: TargetImportSpaceSchema,
+  recognizedSpace: z.string().nullable(),
+  shape: z.array(z.number().int().positive()).nullable(),
+  affine: z.array(z.array(z.number())).nullable(),
+  units: z.string().nullable(),
+  valueMin: z.number().finite().nullable(),
+  valueMax: z.number().finite().nullable(),
+  nonzeroVoxels: z.number().int().nonnegative().nullable(),
+  sha256: z.string().nullable(),
+  diagnostics: z.array(TargetImportDiagnosticSchema),
+  map: FunctionalTargetMapSchema.nullable(),
+});
+export type TargetImportResult = z.infer<typeof TargetImportResultSchema>;
+
 export const CortexLumeProjectSchema = z.object({
   format: z.literal('cortexlume-project'),
   formatVersion: z.literal(1),
@@ -284,6 +361,7 @@ export interface DesktopApi {
   };
   input: {
     digitizer(): Promise<DigitizerImport | null>;
+    targetNifti(declaredSpace: TargetImportSpace): Promise<TargetImportResult | null>;
   };
   export: {
     csv(project: CortexLumeProject): Promise<{
@@ -314,5 +392,10 @@ export interface DesktopApi {
     atlasLookup(point: Vec3, probabilityThreshold?: number): Promise<AtlasLabel[]>;
     atlasLookupPath(points: Vec3[], probabilityThreshold?: number): Promise<AtlasLabel[]>;
     annotateProject(project: CortexLumeProject): Promise<CortexLumeProject>;
+    quickTargetSearch(query: string, limit?: number): Promise<{
+      targets: QuickTargetSummary[];
+      provenance: Record<string, unknown>;
+    }>;
+    quickTargetMap(targetId: string): Promise<FunctionalTargetMap>;
   };
 }

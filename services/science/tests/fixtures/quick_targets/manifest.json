@@ -1,0 +1,118 @@
+{
+  "distributionRole": "test-fixture",
+  "files": {
+    "catalog.json": {
+      "sha256": "f0618106024996fd0a2abccb58169804410c61ad802bfd7c61f5bdb71ac44a97"
+    },
+    "maps.npz": {
+      "sha256": "b5ffd6fd01b1f1c9e1ef30d0fe3a2d4d979fd92285b647ff8f0b71bcf8f88f58"
+    }
+  },
+  "format": "cortexlume-quick-target-pack",
+  "formatVersion": 1,
+  "generation": {
+    "estimator": "MKDAChi2",
+    "generator": "scripts/build_quick_target_pack.py",
+    "kernelRadiusMm": 10,
+    "nimareTagCommit": "a3f4ae6d1a799a643fe59c170195d94f0e37506a",
+    "nimareVersion": "0.20.0",
+    "sourceSpace": "synthetic-MNI-fixture",
+    "storage": "sparse uint16 vertex indices + float16 positive z values",
+    "termTfidfThresholdExclusive": 0.001,
+    "vertexSampling": "trilinear at official Cedalion mni152_r/a/s"
+  },
+  "packId": "cortexlume-quick-target-test-fixture-v1",
+  "qc": {
+    "maps": [
+      {
+        "finitePositiveValues": true,
+        "fixtureOnly": true,
+        "float16MaxAbsoluteError": 0.0019412040710449219,
+        "id": "neurosynth:working-memory",
+        "sigmaMm": 12,
+        "strictlyIncreasingUniqueIndices": true,
+        "syntheticPeaksMni": [
+          [
+            -42,
+            30,
+            28
+          ],
+          [
+            42,
+            30,
+            28
+          ],
+          [
+            0,
+            18,
+            50
+          ]
+        ]
+      },
+      {
+        "finitePositiveValues": true,
+        "fixtureOnly": true,
+        "float16MaxAbsoluteError": 0.0019311904907226562,
+        "id": "neurosynth:language",
+        "sigmaMm": 12,
+        "strictlyIncreasingUniqueIndices": true,
+        "syntheticPeaksMni": [
+          [
+            -50,
+            18,
+            16
+          ],
+          [
+            -48,
+            -44,
+            22
+          ]
+        ]
+      },
+      {
+        "finitePositiveValues": true,
+        "fixtureOnly": true,
+        "float16MaxAbsoluteError": 0.0019159317016601562,
+        "id": "neurosynth:motor",
+        "sigmaMm": 12,
+        "strictlyIncreasingUniqueIndices": true,
+        "syntheticPeaksMni": [
+          [
+            -38,
+            -22,
+            56
+          ],
+          [
+            38,
+            -22,
+            56
+          ]
+        ]
+      }
+    ],
+    "passed": true,
+    "termCount": 3
+  },
+  "source": {
+    "commit": "209c33cd009d0b069398a802198b41b9c488b9b7",
+    "databaseVersion": null,
+    "files": {},
+    "license": "ODbL-1.0",
+    "name": "CortexLume synthetic fixture",
+    "repository": "https://github.com/neurosynth/neurosynth-data"
+  },
+  "space": "MNI152NLin6Asym",
+  "statistic": {
+    "alpha": 0.05,
+    "multipleComparisons": "FDR independent",
+    "name": "association-test z",
+    "sign": "positive-only"
+  },
+  "surface": {
+    "correspondenceSha256": "8b5c0e45f58f0e5741b6d16dc6cfcb73d9014fe923eee1d7474b86d3f0e5b92c",
+    "name": "Cedalion ICBM152 brain scientific",
+    "ordering": "brain_vertex_coordinates.csv vertex column",
+    "version": "26.5.1",
+    "vertexCount": 25000
+  }
+}

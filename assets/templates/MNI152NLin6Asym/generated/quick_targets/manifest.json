@@ -1,0 +1,5524 @@
+{
+  "distributionRole": "release",
+  "files": {
+    "catalog.json": {
+      "sha256": "5604ac0a70257867b80a64e238bb42aec33abd05762aacb837139e20bd34f979"
+    },
+    "maps.npz": {
+      "sha256": "81af86406777cd484d0b39c2cc6ad7219e2e25a22479b87eeb85d565494d1533"
+    }
+  },
+  "format": "cortexlume-quick-target-pack",
+  "formatVersion": 1,
+  "generation": {
+    "estimator": "MKDAChi2",
+    "generator": "scripts/build_quick_target_pack.py",
+    "kernelRadiusMm": 10,
+    "nimareTagCommit": "a3f4ae6d1a799a643fe59c170195d94f0e37506a",
+    "nimareVersion": "0.20.0",
+    "profileId": "cortexlume-fnirs-curated-v1",
+    "profileSha256": "bf380d79a052184c749ac853bd9e7f8b37932bc6bb3cde0d00259ed0508100da",
+    "profileShard": null,
+    "profileTargetCount": 133,
+    "sourceSpace": "NeurosynthMNI152-2mm",
+    "storage": "sparse uint16 vertex indices + float16 positive z values",
+    "termTfidfThresholdExclusive": 0.001,
+    "vertexSampling": "nearest FDR support plus trilinear z at official Cedalion mni152_r/a/s"
+  },
+  "packId": "cortexlume-fnirs-curated-v1",
+  "qc": {
+    "candidateTermCount": 133,
+    "domainCounts": {
+      "Attention & Executive Control": 19,
+      "Emotion & Social Cognition": 19,
+      "Language": 18,
+      "Memory & Learning": 17,
+      "Pain & Interoception": 10,
+      "Perception": 18,
+      "Reward & Decision": 14,
+      "Sensorimotor": 17
+    },
+    "excludedTargets": [
+      {
+        "domain": "Attention & Executive Control",
+        "reason": "no-positive-FDR-surface-support",
+        "studyCount": 290,
+        "subdomain": "Awareness",
+        "term": "awareness"
+      }
+    ],
+    "mapSimilarity": {
+      "metric": "Pearson correlation across all 25,000 surface vertices, including zero support",
+      "pairs": [],
+      "reviewThresholdInclusive": 0.95
+    },
+    "maps": [
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:working-memory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "e9259fc43a3551854b977e3cfec798ebdf4e81684f182f693d8b4181e1cdd2eb",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:memory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "6fc3db28c6f8d18dbf92f4c01ea4ec7755f36030e0717c4e75731736c9192218",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019483566284179688,
+        "id": "neurosynth:memory-encoding",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "6ada723f0d003c88c9bb000ac68df919008fe80ff0fd11307a93710ebadcf2ed",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:memory-retrieval",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "5a2e6a746511a178032ee8917d088382f3d8442f160103d015e475b92debdfba",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:episodic-memory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "5079a229d77fd22be21126fdd346a16e7485a589a863c31ca6ab058868677518",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:semantic-memory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "99c58886d7272ffcdea52a0a0ec9fd73e47a2fd061678b26a8ad6041d63a3283",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:autobiographical-memory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d7903f94a6381824032b307d0c067322b1b3265a1de9e6dc933584ad98d8292f",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019512176513671875,
+        "id": "neurosynth:recognition-memory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "159eb4fd98f4bbe0ba0dcb7f3aa2827fd38913b4411e215fd679817b33165a38",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019512176513671875,
+        "id": "neurosynth:subsequent-memory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "89f38d972a105e9506f64a22f638fec30c1c94764a0005dca67b382aa51e1a29",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:encoding",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "9e815266c8584c78c7447639b84ec1953e467a3470f2f2ef2b127b0741f388de",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:retrieval",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "98ea1b344d0cdbf1ea2e7f3d8187c39092fd9bae78c474310eb6fdfc01bf5064",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001934051513671875,
+        "id": "neurosynth:learning",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "4fc4ce0db141748e1fc162a86f48dc72d94f974523ae3a265356828fb9bd2d91",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019488334655761719,
+        "id": "neurosynth:conditioning",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "f5ec629df084873a54355dbd66fad53a652c304dbff6052b09926ed813ced142",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019307136535644531,
+        "id": "neurosynth:extinction",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "8ead763a72bca944de60352b56fc7f5984aace7d28af735791db3f871b642929",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:recall",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "b9a3c5dfae7e6da98cc015ca4479de99cb9f2f4376d047ee27507f4cd56a4030",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:recollection",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "6200b8c62ec81c544eb733a67b4a55de15b576d938db914fc71488a0b5a1712a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0016241073608398438,
+        "id": "neurosynth:familiarity",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d23522c5a9207e2acebd1c6c80f0c06db6d736a2a2d196904341769d90203566",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:attention",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "eb033a83bcd254bfa08dc816bc5e810e75ad9f514aa05617a51ffcbd1eb5741a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019121170043945312,
+        "id": "neurosynth:selective-attention",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d600f28273d6dbe4f15006221cb87102f0dd9c75c23bbbac22da517c5c82ee0d",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0009553432464599609,
+        "id": "neurosynth:sustained-attention",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "a5a4a79be9994096de77383825d0c6b48754cec8ad853c22e0b12af98624760e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019507408142089844,
+        "id": "neurosynth:spatial-attention",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "cabcb26c369a40f73e7f795bdf69c5ee897acf056140bfaacb18b436f1715043",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0009729862213134766,
+        "id": "neurosynth:attentional-control",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "487f65861ba006438b97686db91b58eb97eb5470cd0a4ef76554fed7a73a456a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019450187683105469,
+        "id": "neurosynth:attention-network",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "0ee0fc5af087dbc030f3c3be3772a8e938918a9eefbf096d77fcd95f1db7fa96",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019388198852539062,
+        "id": "neurosynth:dorsal-attention",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "a884791da1d935f385dcc53d200824d0de0441f9a6f58bd4fb74565d8ec79739",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019459724426269531,
+        "id": "neurosynth:inhibition",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d2b29409cbfc285b182212d1de312e51fe13d0f8de481cbd066f44896fbd6673",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0009489059448242188,
+        "id": "neurosynth:inhibitory-control",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "124807e38fbf85af2886b74c4217ac21df3b2e1508e5c68a5797912799ae9d65",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019502639770507812,
+        "id": "neurosynth:response-inhibition",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "fc56b1505da935a1f0d4d7fe1e0c2f35a219d0b2d0f027094e63479a84ed8bdc",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019445419311523438,
+        "id": "neurosynth:cognitive-control",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "def58e48591994f85208bde0fa62da6d2175240b462c10eaea8df3a6089e2f16",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:executive",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "2eabd897a4ed793935ad2e34a369bf6f50d0369330114b07f24398afa093cae4",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0009696483612060547,
+        "id": "neurosynth:executive-control",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "2fd27486cc6b555fd508c904a60b24a582e16009850aca6f6f25b905ec7b84b6",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0008420944213867188,
+        "id": "neurosynth:executive-function",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "9e68ebe1056d033b3841e8f65b05c65c8dfe9e1eed9018138c090ca8b7bc62e0",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019450187683105469,
+        "id": "neurosynth:conflict",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "dddaa4a2834f91c713c96afbfbe136cc8612f2c4cfea5482f3a9f909a5035e1c",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019016265869140625,
+        "id": "neurosynth:stroop",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "e1e8f47f74fb3ca305dfdb82935ba983347814e9a93df6a1b190ae041dcb671f",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0018968582153320312,
+        "id": "neurosynth:switching",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "f3b5cf6b8efcbb84fb0d9e14456c446f719def554eed52fbf4c95bb6d0d52bf7",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:planning",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "a1ef8123d858b21f8470df98cee7ea3702cbb890cf8dda1f4e9eda9cd352ff99",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019259452819824219,
+        "id": "neurosynth:reasoning",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "f1b19646fe2e075dd27138f6c5c13a5bd37c19114719dc3ba6c8e5eef6e4ceb2",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:language",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "366f6f3043ab8d7a709ecf3ec9aa8d70d06ce5ad69db0ce357d9b6224d756e1c",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019483566284179688,
+        "id": "neurosynth:language-comprehension",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "817ec6d27cd036fc474b8da0c619e648512ad154329b2a3c060d4bc143c88805",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:language-network",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "677aab72a6c2b7da0322b34582db6ab957b668582f333fe787e912a1a873ce0a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019469261169433594,
+        "id": "neurosynth:speech",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d4c2df02fc4036e3801dc3a9099016aec68c69811844668d3bb4b021dcef86c7",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:speech-perception",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "3a27ce0d63b9d5d3614a5d2b6dd4e876e6c0424230f41922d0e295099b135d40",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019474029541015625,
+        "id": "neurosynth:speech-production",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "e87cd46b45d54fa681de4f095c34f3a0288e975c0c20413c0773910f73e7a5db",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0009756088256835938,
+        "id": "neurosynth:verbal-fluency",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "6869142abb5126d59669eb55e9fd7de2111f002775558dd8f2644aa197b8a661",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:phonological",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "00b2d69834a3d4c45ea396323778577b8ae57ec9d77f8de7203fb87104db93de",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:reading",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "cf5c2026a029831d93a0539a6e3d558f4488b8a9bb608720135784fad6ea7e35",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019512176513671875,
+        "id": "neurosynth:word",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "01957f6d8c10f6939c12c7c340611f98dc3fe63fce3f4639eef5b0e21da6d345",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019311904907226562,
+        "id": "neurosynth:word-recognition",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "c44c0e690e2b1499e5466575cbace4582135df0b23f81fb400505e270360e82e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:word-form",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "aa5f523d0266995feb8374bbedc5ce50e9a8074c82444acb1816dc7265c8363e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001949310302734375,
+        "id": "neurosynth:sentence",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "43db72cece01b61edb9c7fe40235b67f00d99f5ac6a9d9fa20288f1768474bc3",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:sentence-comprehension",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "f1b07758931070d56d7b998642b7a36646e7c40b4daa04041cab0989488f6c72",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:semantic",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "1d904eeb313c547603603bf266591a278c253cafcd25270c7a87b752d2433b4a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001911163330078125,
+        "id": "neurosynth:semantics",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "2828bce2a91fcfac2c345d4f8aa04add93a6f45e7d255bf06f30dcbab56a8612",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019502639770507812,
+        "id": "neurosynth:comprehension",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "bb7a4cf5aef6c4f0a0e8dc02d881092298065b88aa0918af589914963bfcf5c0",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019474029541015625,
+        "id": "neurosynth:lexical-decision",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "244b2077b8e9c91501fbc64cf494565f674582fb56792c2a018ccc09a1b6d3bd",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:visual",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "5767c847d63d71a9e7e2ffb2f4306161884334185667c3eb46ddb2e8746a68d3",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019388198852539062,
+        "id": "neurosynth:vision",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "72af9710947fd1d80e10855f95db910a63ea7bed1dec0c26f140bc768ec40e56",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019316673278808594,
+        "id": "neurosynth:visual-attention",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "68854709826e3d2f022fb4216800ab3b4e2484add7269107351ef8fb7751f71e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019464492797851562,
+        "id": "neurosynth:visual-perception",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "5943ac1ce821b213ca21a6aa80714e88cb1c57ff0c58d5f7a339755ad99459bb",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:visual-motion",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "b93ec2d5fa5bea17f8119889d2029228c46ddd52562cb7a239e277832d181851",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019478797912597656,
+        "id": "neurosynth:early-visual",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "93ed43f2f4c410de8f4d00dc05e1a02e83aac06f6faad930b1dc0ab68af84efc",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001949310302734375,
+        "id": "neurosynth:visual-stream",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "b67ff5b2197bcb07bd4041912a87de24f7e8b0b6c59aa1d06aa56456e49cd1f3",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019497871398925781,
+        "id": "neurosynth:auditory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "a4da66a9132c9013c5b8d5c73cb3c52624ec04c5592d072872f2a1ac414b5551",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:auditory-stimuli",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "151eccc66f619b5fd96d7cdc021e5e0ba2e8a3f0d76f7dfd9ba2052b0a908a3d",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:audiovisual",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "0ce9732e746cdd4d265f2a5589b587df1dd2ae04187839b4b827a589d9ec73c6",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:perception",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "492a8e8d26f8907594630287495f3fb18dc03b509405f5b5a54f52d4ae5771f4",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:face",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "ac3ab5682d4a0a5660e70dcb29861aafce8e3551ce8d69c4d225c61a5a85153e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019502639770507812,
+        "id": "neurosynth:face-recognition",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "f5ee5d703e4a556a85349f2dcc4a7d0f7bcce8749a5234c0f0d748948ef23ef8",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019502639770507812,
+        "id": "neurosynth:object",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "63dd40ad197a4dc35a4d24048b96aa2383c2402569767079e7b587a173f9fd6a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019483566284179688,
+        "id": "neurosynth:object-recognition",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "28088df5f31a5afdfbf0db264e5a72f9f2ce52f8d2017cb2b7eaa7beb0a7dea2",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001934051513671875,
+        "id": "neurosynth:color",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "1d0483bbc5ab7e5798e8a22d5d9f10ae866025bf63bc6df50213034eb6fca5b7",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019483566284179688,
+        "id": "neurosynth:music",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "767a343c38c888f3d4fb02d15b1f28478b93432e11593ab7acfc3789b6e84c96",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001949310302734375,
+        "id": "neurosynth:visuospatial",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "31409d423b5bf6d6cda0810783efd549ca315c7c13e8e282f4abbba9512f5153",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:motor",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d838e0f936b562d0cf1dccdb0a5af585999aa6b3f1ff21067c1c0e093ac90726",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019469261169433594,
+        "id": "neurosynth:motor-control",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "24717a69bc8d4048f0ed04b882d4c19e467b4b3cd4a80ed6256589e1abbee4bc",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:motor-imagery",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "f4b9f458cc002973f01652e06b1ef01c88058872ebb103c9806f7f00030c6c77",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019412040710449219,
+        "id": "neurosynth:motor-function",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "1090dadc6e4621d972ff4484baa430bb6225af96e8dd524c16d58792ce0e57d9",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:motor-performance",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "5f2b5d68632db17abf31eed11625faadfa258d8e7437a29fafe4cd05f49efc3e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001949310302734375,
+        "id": "neurosynth:movement",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "4026f91a1927b3e2a248a447906ba8bacf010984b3ce7d35c510123654941101",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:finger-movements",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "48d8490a725197980b3f5e4734358e399cb6881106fc2a960c4679747d92d0ae",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019507408142089844,
+        "id": "neurosynth:hand-movements",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "e4142db7627959e098f49084057af216bd5af97f6ec08740ce31d4bfa726d777",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019521713256835938,
+        "id": "neurosynth:action",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "c60a50ba4862df9eb7a8916d1322d5c3b86d7a5135decbb4b437ba6d787c1e6d",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019469261169433594,
+        "id": "neurosynth:action-observation",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "8c846fb7a8831991d7885c6c1af013a95775ef33a92e4d2c35ebe68602325130",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019440650939941406,
+        "id": "neurosynth:imitation",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "faa9668366181e01e10fa744e7446b2ae67e912a9a63b11c172486c0fad44005",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:sensorimotor",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "8044d54e1b80acdb3a65e2754691d0d1d2d3a37b6783421499560d97e549baea",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:somatosensory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "7892765599aa3b9cea1fbbd0f66d8b8c542ede67b60d85ac289be3f6292b789f",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019450187683105469,
+        "id": "neurosynth:tactile",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "6b789b4a0664c85ba9fab8b7d120f86de509fbf152ce4d5cb2c33708855ecca5",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019450187683105469,
+        "id": "neurosynth:visuomotor",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "51d5f95696f48af1b3a91643d0ebd31471c19bfc860e57705ace2e2e8b489066",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:eye-movements",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "ca73cdd6d506e84c968ccab4cb358a5f47dbca9ea8774805ca9067550fe59c12",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019502639770507812,
+        "id": "neurosynth:saccades",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "c2a82778f42f54683c4f24d80bb8aa424494222cf2128a097dbe01dc5e3cd16a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:emotion",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "1553ec8c4f9f322faf1fbc4a2d79687587cfad5b0763f91f0bdfb956acf6cbae",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019512176513671875,
+        "id": "neurosynth:emotion-regulation",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "b682d6e8c7dd40a3b54deb498d6daab267e09220d785c926179cf5f72841e19b",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019397735595703125,
+        "id": "neurosynth:emotional-valence",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "430ac9b85b64e257c01b4aba553d34ddfcdc2f2fa89ca88b663707d2c2c782af",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:emotional-faces",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "01b3b4714851fa63027a4f90932455d23cada6c2077c7a65f8ae51b886ec9690",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0018906593322753906,
+        "id": "neurosynth:affect",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "3cef8a2a2fcd1ff7f623e559935227258a9f86aababa194cf5952bf48080d8a2",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0018248558044433594,
+        "id": "neurosynth:negative-affect",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d4d37edb681cfdfc49aa6444244693714736d81fdc27d25c400c266030572dff",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:fear",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "9fc07277e79366133cd093dbac9ed615c3b632c6f29074d0c998109e488c8f3d",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019450187683105469,
+        "id": "neurosynth:anxiety",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "ec846761e0533397e3b97705c6a1f4da4946ade321ee117bf52fd087c50f1f5e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0016727447509765625,
+        "id": "neurosynth:anger",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "71a64e9db30680ce4ba5b6cd02cc51b3e86ad5c9964aacec2384e072adf61246",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019431114196777344,
+        "id": "neurosynth:empathy",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "0018bcdb6b794ca7741a578d0807ad8423800594898f927f9eb03bae3470a33b",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001953125,
+        "id": "neurosynth:social",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "8cf08e2c958a7a2be82153929ba7ca8156cf125cbe43f8774e5caaf93338f425",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019502639770507812,
+        "id": "neurosynth:social-cognition",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "53cde56f9d84bc9e2e0c10333efea1beee7a1346b8d968b65696ec19f0f2242a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019221305847167969,
+        "id": "neurosynth:social-interaction",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "2cd0974d05722fd3466f82cb6a799022165ee30e01b7b478c9fc7e6d7357bb67",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:mentalizing",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "4644c35ae4ac697f61a5c265958c7d7c9cc5bef10f48e6e62ff1bccf402e7663",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019507408142089844,
+        "id": "neurosynth:facial-expressions",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "1ca5b35ef65348c05f4cd4bc7424a3c6dc77b194b25bd4dbe5cc6b135d46b7cc",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019502639770507812,
+        "id": "neurosynth:self",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "50e77364505ac9aed8e15ea48d878f99b6f6e862f5c9f420cde5d29ced139e02",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019512176513671875,
+        "id": "neurosynth:self-referential",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "582bad97cb871705d58b1600588c0a83ef79a9ad2f8820dbe831d4a8aa7e685f",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019421577453613281,
+        "id": "neurosynth:moral",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "1834c9cb74c997a312baccf081a62b5b8666d5915833d03d1addcaaf36ccb72c",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019469261169433594,
+        "id": "neurosynth:mirror-neuron",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "2ac9bef4df920e35dcd9dd30b082311914faba001a5ba307a03d78442d11951a",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019512176513671875,
+        "id": "neurosynth:reward",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "518347ca72c2c7e77d5a710da197545ab32961d66bf834aadea620de5b6f5d2c",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:monetary-reward",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "bd39d833145015dd2c6432b49e767e6afbf4d01821f416a823314367b46474fc",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0018892288208007812,
+        "id": "neurosynth:reward-anticipation",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "fbfc0f81229409b05885d467b27ca232ec59f34001d1b9b419ff6e44186ec5f3",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.00193023681640625,
+        "id": "neurosynth:reinforcement-learning",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "65e86ed2b923cb1723e23495aec5269eb989fd9e74e8ee293e8c200985d2a314",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:value",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "440c0b46f3ba5669b2e84ba65dfade67bce30e23d1206a26a775a9f259711597",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0009691715240478516,
+        "id": "neurosynth:risk",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "33eb7d5ce20066ab8f3a7dac0de676b71c424cfae47fe2fb3a235fa579c6ab2e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019135475158691406,
+        "id": "neurosynth:risk-taking",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "7aa88e0ef6cc1e280a00442b3be4d8e065412722cec19686d2bec8f3904b6d9b",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019278526306152344,
+        "id": "neurosynth:choice",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "4a1442eb3c478d32e6b0141c340285670e26d8b49d66a2439abe09c57755fee1",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019507408142089844,
+        "id": "neurosynth:decision",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "af0d499aba9bab41ff6b2c16aebaa224bbe042d3f49f7cb740c082b8dc43cbc7",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019268989562988281,
+        "id": "neurosynth:decision-making",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "8c6d9ca33719d1f906fa876cfc6cc38be39ed09193128e48c18575ce88a64b5e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0018768310546875,
+        "id": "neurosynth:decision-task",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "5da007a5505e7e3e43e03b7487db55210596fba9fde0af3771f32191b161d50c",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019412040710449219,
+        "id": "neurosynth:motivation",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "f56455780f56b7b4be533d9c602ba502e2e326218bbeb94170903fe35b0002a1",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019469261169433594,
+        "id": "neurosynth:anticipation",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "e2671072b466a1cc1e43e6091dd4f4a82b67e55be564c3000d53c605c8a4e95b",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0018482208251953125,
+        "id": "neurosynth:loss",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "46e97fbb3e7041bb6c52598a5ea254191deb0c835d081a69c9049ae001683a92",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019516944885253906,
+        "id": "neurosynth:pain",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "5d93abcc4900425efe4cf118119daf96c41f6f3143d7b237e653122ef46ae262",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001949310302734375,
+        "id": "neurosynth:chronic-pain",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "8b14bd2691de8a272743e5da055de7f4708f80959002b8cfc681cd62955b272c",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019526481628417969,
+        "id": "neurosynth:painful",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "b55ad99d9e329e51ab096aea3d74af01b1ddbe1bd6a593d993cd412b28d4c748",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019512176513671875,
+        "id": "neurosynth:nociceptive",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "3488bc9bae8b5c9dc71510ca14a7d0e959d4c437ea1faaad6011647a202ef3f1",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0009691715240478516,
+        "id": "neurosynth:interoceptive",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "e3bd91d2dcc306106282ca5ae480a54408833ba1e1b60e6f98ae6a897dcec200",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019168853759765625,
+        "id": "neurosynth:taste",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "1413c933bf3f9ad111345b771aeab329b199ef281a95cf8751b39a270da0f47e",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.001949310302734375,
+        "id": "neurosynth:olfactory",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "c26d7b8bbc338ed1ecb43b9ed87ec3ec1e72a6c2f8b1706beaaa385c6483251b",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019240379333496094,
+        "id": "neurosynth:autonomic",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "d921ccebaa0f8e949e9b5c4c7ad1b1f11cf1689189248d1870be74e260d547ae",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.0019507408142089844,
+        "id": "neurosynth:arousal",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "124145ef6bb0843ee1a9885fba9460271ddffec8b3e5bd23ad77c846d3ba08c6",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      },
+      {
+        "finitePositiveValues": true,
+        "float16MaxAbsoluteError": 0.00036919116973876953,
+        "id": "neurosynth:consciousness",
+        "inputAffine": [
+          [
+            2.0,
+            0.0,
+            0.0,
+            -90.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            -126.0
+          ],
+          [
+            0.0,
+            0.0,
+            2.0,
+            -72.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "inputMapSha256": "6253822129c344b3c9bab0db2cc5bc12ab0e620db33d7efd9dbf65b9727cdeea",
+        "inputShape": [
+          91,
+          109,
+          91
+        ],
+        "niftiOrientation": "RAS",
+        "reusedFromValidatedPack": true,
+        "strictlyIncreasingUniqueIndices": true,
+        "vertexGridCoverage": 1.0
+      }
+    ],
+    "passed": true,
+    "smallSurfaceSupport": {
+      "maps": [
+        {
+          "id": "neurosynth:sustained-attention",
+          "nonzeroVertexCount": 4
+        },
+        {
+          "id": "neurosynth:consciousness",
+          "nonzeroVertexCount": 6
+        }
+      ],
+      "reviewThresholdExclusive": 25
+    },
+    "termCount": 132
+  },
+  "source": {
+    "commit": "209c33cd009d0b069398a802198b41b9c488b9b7",
+    "databaseVersion": "7",
+    "files": {
+      "data-neurosynth_version-7_coordinates.tsv.gz": {
+        "bytes": 3587167,
+        "sha256": "17135be3e08a0ab045896c77217e8463086543a0817d52a6a88c8e32c1161616"
+      },
+      "data-neurosynth_version-7_metadata.tsv.gz": {
+        "bytes": 1175486,
+        "sha256": "8acde7de2a14ee2a12b406e50a8805e83288b0bc78924ddb36879d496dfb757b"
+      },
+      "data-neurosynth_version-7_vocab-terms_source-abstract_type-tfidf_features.npz": {
+        "bytes": 9896293,
+        "sha256": "1b3359eebcbc8557340583788b3855031ea21361e87c265cb8fc540d9b6c4edd"
+      },
+      "data-neurosynth_version-7_vocab-terms_vocabulary.txt": {
+        "bytes": 37026,
+        "sha256": "14d341b5683b25da065a2b08dcdf0fe8cc20846d56ee27b3fce50ebedc89383c"
+      }
+    },
+    "license": "ODbL-1.0",
+    "name": "Neurosynth",
+    "repository": "https://github.com/neurosynth/neurosynth-data"
+  },
+  "space": "MNI152NLin6Asym",
+  "statistic": {
+    "alpha": 0.05,
+    "multipleComparisons": "FDR independent",
+    "name": "association-test z",
+    "sign": "positive-only"
+  },
+  "surface": {
+    "correspondenceSha256": "8b5c0e45f58f0e5741b6d16dc6cfcb73d9014fe923eee1d7474b86d3f0e5b92c",
+    "name": "Cedalion ICBM152 brain scientific",
+    "ordering": "brain_vertex_coordinates.csv vertex column",
+    "version": "26.5.1",
+    "vertexCount": 25000
+  }
+}

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cortexlume-science"
-version = "1.1.0"
+version = "1.2.0"
 description = "Validated local anatomy and atlas service for CortexLume"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -24,6 +24,11 @@ assets = [
 ]
 cedalion = [
   "cedalion==26.5.1"
+]
+quick-target-build = [
+  "nibabel>=5.3,<6",
+  "nimare==0.20.0",
+  "scipy>=1.15,<2"
 ]
 dev = [
   "httpx>=0.28,<1",
