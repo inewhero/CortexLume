@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import type { DigitizerSession, LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
+import type { AnatomicalCoverageAnalysis, DigitizerSession, LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
 import { useProjectStore } from '../store/projectStore';
 import {
   add3,
@@ -22,7 +22,14 @@ import {
   tangentBasis,
   threeFromRas,
 } from '../lib/geometry';
-import { getSurfaceGraph, interpolateSurfaceValues } from '../lib/surfaceInterpolation';
+import { getSurfaceGraph, interpolateSurfaceLabels, interpolateSurfaceValues } from '../lib/surfaceInterpolation';
+import {
+  anatomicalCoverageRegionColors,
+  anatomicalRegionColor,
+  buildAnatomicalCoverageRequest,
+  requestAnatomicalCoverage,
+  scientificCoverageAttributes,
+} from '../lib/anatomicalCoverage';
 
 interface LandmarkFile {
   points: Array<{ label: string; rasMm: Vec3; threeMm: Vec3; system: 'five-point' | '10-10' }>;
@@ -113,6 +120,48 @@ const targetFragmentShader = `
       ? 0.0
       : 0.34 + 0.64 * smoothstep(0.02, 0.24, vTargetWeight);
     gl_FragColor = vec4(mix(anatomy, heat(vTargetWeight) * diffuse, heatMix), uOpacity);
+  }
+`;
+
+const coverageVertexShader = `
+  attribute float coverageWeight;
+  attribute vec3 coverageColor;
+  varying float vCoverageWeight;
+  varying vec3 vCoverageColor;
+  varying vec3 vNormal;
+  void main() {
+    vCoverageWeight = coverageWeight;
+    vCoverageColor = coverageColor;
+    vNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const coverageFragmentShader = `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  uniform float uOverlayOnly;
+  uniform float uCoverageEdgeWeight;
+  varying float vCoverageWeight;
+  varying vec3 vCoverageColor;
+  varying vec3 vNormal;
+  void main() {
+    float edgeStart = max(0.0001, uCoverageEdgeWeight * 0.90);
+    float edgeEnd = max(edgeStart + 0.0001, min(0.95, uCoverageEdgeWeight * 2.25));
+    float edgeAlpha = smoothstep(edgeStart, edgeEnd, vCoverageWeight);
+    if (uOverlayOnly > 0.5 && edgeAlpha <= 0.002) discard;
+    vec3 lightDirection = normalize(vec3(-0.35, 0.72, 0.58));
+    float diffuse = 0.42 + 0.58 * abs(dot(normalize(vNormal), lightDirection));
+    vec3 anatomy = uColor * diffuse;
+    float coverageMix = vCoverageWeight <= 0.0001
+      ? 0.0
+      : 0.58 + 0.38 * smoothstep(0.02, 0.72, vCoverageWeight);
+    if (uOverlayOnly > 0.5) {
+      float overlayDiffuse = 0.68 + 0.32 * abs(dot(normalize(vNormal), lightDirection));
+      gl_FragColor = vec4(vCoverageColor * overlayDiffuse, uOpacity * edgeAlpha);
+    } else {
+      gl_FragColor = vec4(mix(anatomy, vCoverageColor * diffuse, coverageMix * edgeAlpha), uOpacity);
+    }
   }
 `;
 
@@ -305,6 +354,115 @@ function FunctionalTargetSurface({
   );
 }
 
+function AnatomicalCoverageSurface({
+  geometry,
+  analysis,
+  scientificVertexMap,
+  selectedRegionIndex,
+  requireInterior,
+  color,
+  opacity,
+  depthWrite,
+  overlayOnly = false,
+}: {
+  geometry: THREE.BufferGeometry;
+  analysis: AnatomicalCoverageAnalysis;
+  scientificVertexMap: ScientificVertexMap;
+  selectedRegionIndex: number | null;
+  requireInterior: boolean;
+  color: string;
+  opacity: number;
+  depthWrite: boolean;
+  overlayOnly?: boolean;
+}) {
+  const uniforms = useMemo(() => ({
+    uColor: { value: new THREE.Color(color) },
+    uOpacity: { value: opacity },
+    uOverlayOnly: { value: overlayOnly ? 1 : 0 },
+    uCoverageEdgeWeight: { value: Math.exp(
+      -0.5 * (analysis.parameters.supportRadiusMm / analysis.parameters.kernelSigmaMm) ** 2,
+    ) },
+  }), [analysis.parameters.kernelSigmaMm, analysis.parameters.supportRadiusMm, color, opacity, overlayOnly]);
+  const weightedGeometry = useMemo(() => {
+    if (analysis.vertexCount !== 25_000
+      || geometry.getAttribute('position').count !== scientificVertexMap.indices.length) return null;
+    const prepared = geometry.clone();
+    const scientific = scientificCoverageAttributes(analysis, selectedRegionIndex);
+    const validityMask = requireInterior
+      ? scientificVertexMap.interiorValidityMask
+      : scientificVertexMap.surfaceValidityMask;
+    const displayWeights = new Float32Array(scientificVertexMap.indices.length);
+    const displayRegionIndices = new Int16Array(scientificVertexMap.indices.length);
+    displayRegionIndices.fill(-1);
+    for (let displayIndex = 0; displayIndex < scientificVertexMap.indices.length; displayIndex += 1) {
+      if (!validityMask[displayIndex]) continue;
+      const scientificIndex = scientificVertexMap.indices[displayIndex]!;
+      displayWeights[displayIndex] = scientific.geometricWeights[scientificIndex] ?? 0;
+      displayRegionIndices[displayIndex] = scientific.regionIndices[scientificIndex] ?? -1;
+    }
+    const renderedWeights = selectedRegionIndex == null
+      ? displayWeights
+      : interpolateSurfaceValues(geometry, displayWeights, {
+          validityMask,
+          iterations: 4,
+          diffusion: 0.2,
+          expansionSupport: 0.5,
+          maxHoleVertices: 900,
+        });
+    // Extend only the categorical color one mesh ring beyond support. The
+    // scientific coverage weights remain unchanged and drive the alpha fade;
+    // this prevents boundary interpolation against black RGB vertices.
+    const colorActivity = interpolateSurfaceValues(geometry, renderedWeights, {
+      validityMask,
+      iterations: 1,
+      diffusion: 0,
+      expansionSupport: 0.001,
+      maxHoleVertices: 0,
+    });
+    const interpolatedRegions = interpolateSurfaceLabels(
+      geometry,
+      displayRegionIndices,
+      colorActivity,
+      { validityMask },
+    );
+    const regionColors = anatomicalCoverageRegionColors(analysis);
+    const regionRgb = new Map<number, THREE.Color>();
+    for (const [regionIndex, regionColor] of regionColors) {
+      regionRgb.set(regionIndex, new THREE.Color(regionColor));
+    }
+    const displayColors = new Float32Array(scientificVertexMap.indices.length * 3);
+    for (let displayIndex = 0; displayIndex < interpolatedRegions.length; displayIndex += 1) {
+      const regionIndex = interpolatedRegions[displayIndex]!;
+      const region = analysis.regions[regionIndex];
+      if (regionIndex < 0 || !region) {
+        renderedWeights[displayIndex] = 0;
+        continue;
+      }
+      const color = regionRgb.get(regionIndex)
+        ?? new THREE.Color(anatomicalRegionColor(region.atlasId, region.labelEn));
+      displayColors[displayIndex * 3] = color.r;
+      displayColors[displayIndex * 3 + 1] = color.g;
+      displayColors[displayIndex * 3 + 2] = color.b;
+    }
+    prepared.setAttribute('coverageWeight', new THREE.BufferAttribute(renderedWeights, 1));
+    prepared.setAttribute('coverageColor', new THREE.BufferAttribute(displayColors, 3));
+    return prepared;
+  }, [analysis, geometry, requireInterior, scientificVertexMap, selectedRegionIndex]);
+  useEffect(() => () => weightedGeometry?.dispose(), [weightedGeometry]);
+  if (!weightedGeometry) return null;
+  return <mesh geometry={weightedGeometry} renderOrder={1}>
+    <shaderMaterial
+      uniforms={uniforms}
+      vertexShader={coverageVertexShader}
+      fragmentShader={coverageFragmentShader}
+      transparent={overlayOnly || opacity < 1}
+      depthWrite={overlayOnly ? true : depthWrite}
+      depthTest
+      side={overlayOnly ? THREE.FrontSide : THREE.DoubleSide}
+    />
+  </mesh>;
+}
+
 function geometryFromScene(scene: THREE.Group): THREE.BufferGeometry {
   let geometry: THREE.BufferGeometry | undefined;
   scene.traverse((object) => {
@@ -357,6 +515,11 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
   const visibility = useProjectStore((state) => state.anatomyVisibility);
   const appearance = useProjectStore((state) => state.anatomyAppearance);
   const functionalTarget = useProjectStore((state) => state.functionalTarget);
+  const anatomicalCoverage = useProjectStore((state) => state.anatomicalCoverage);
+  const anatomicalCoverageEnabled = useProjectStore((state) => state.anatomicalCoverageEnabled);
+  const anatomicalCoverageStatus = useProjectStore((state) => state.anatomicalCoverageStatus);
+  const anatomicalCoverageMode = useProjectStore((state) => state.anatomicalCoverageMode);
+  const selectedCoverageRegionIndex = useProjectStore((state) => state.selectedCoverageRegionIndex);
   const scalp = useGLTF(anatomyUrl('scalp.glb'), false, false);
   const gray = useGLTF(anatomyUrl('gray_matter.glb'), false, false);
   const white = useGLTF(anatomyUrl('white_matter.glb'), false, false);
@@ -377,21 +540,23 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
     () => new MeshBVH(scientificBrainGeometry),
     [scientificBrainGeometry],
   );
-  const targetDisplayGeometry = visibility.grayMatter
-    ? grayGeometry
-    : visibility.whiteMatter
-      ? whiteGeometry
-      : null;
-  const scientificVertexMap = useMemo(() => (
-    functionalTarget && targetDisplayGeometry
+  const coverageActive = anatomicalCoverageEnabled && anatomicalCoverageStatus === 'ready' && anatomicalCoverage;
+  const targetDisplayGeometry = visibility.grayMatter ? grayGeometry : visibility.whiteMatter ? whiteGeometry : null;
+  const grayScientificVertexMap = useMemo(() => (
+    coverageActive || (visibility.grayMatter && functionalTarget)
       ? nearestScientificVertexMap(
           scientificBrainGeometry,
-          targetDisplayGeometry,
+          grayGeometry,
           scientificBrainBvh,
-          targetDisplayGeometry === whiteGeometry,
+          false,
         )
       : null
-  ), [Boolean(functionalTarget), scientificBrainBvh, scientificBrainGeometry, targetDisplayGeometry]);
+  ), [Boolean(coverageActive), Boolean(functionalTarget), grayGeometry, scientificBrainBvh, scientificBrainGeometry, visibility.grayMatter]);
+  const whiteScientificVertexMap = useMemo(() => (
+    functionalTarget && targetDisplayGeometry === whiteGeometry
+      ? nearestScientificVertexMap(scientificBrainGeometry, whiteGeometry, scientificBrainBvh, true)
+      : null
+  ), [Boolean(functionalTarget), scientificBrainBvh, scientificBrainGeometry, targetDisplayGeometry, whiteGeometry]);
 
   useEffect(() => {
     const warmMappings = () => {
@@ -471,11 +636,11 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
   return (
     <group onPointerDown={onBlank}>
       {visibility.whiteMatter && (
-        functionalTarget && targetDisplayGeometry === whiteGeometry && scientificVertexMap
+        functionalTarget && targetDisplayGeometry === whiteGeometry && whiteScientificVertexMap
           ? <FunctionalTargetSurface
               geometry={whiteGeometry}
               scientificVertexCount={scientificBrainGeometry.getAttribute('position').count}
-              scientificVertexMap={scientificVertexMap}
+              scientificVertexMap={whiteScientificVertexMap}
               requireInterior
               color={appearance.whiteMatter.color}
               opacity={appearance.whiteMatter.opacity}
@@ -490,12 +655,36 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
               />
             </mesh>
       )}
+      {coverageActive && !visibility.grayMatter && visibility.whiteMatter && grayScientificVertexMap && (
+        <AnatomicalCoverageSurface
+          geometry={grayGeometry}
+          analysis={coverageActive}
+          scientificVertexMap={grayScientificVertexMap}
+          selectedRegionIndex={anatomicalCoverageMode === 'region' ? selectedCoverageRegionIndex : null}
+          requireInterior={false}
+          color={appearance.grayMatter.color}
+          opacity={appearance.grayMatter.opacity}
+          depthWrite={false}
+          overlayOnly
+        />
+      )}
       {visibility.grayMatter && (
-        functionalTarget && targetDisplayGeometry === grayGeometry && scientificVertexMap
+        coverageActive && grayScientificVertexMap
+          ? <AnatomicalCoverageSurface
+              geometry={grayGeometry}
+              analysis={coverageActive}
+              scientificVertexMap={grayScientificVertexMap}
+              selectedRegionIndex={anatomicalCoverageMode === 'region' ? selectedCoverageRegionIndex : null}
+              requireInterior={false}
+              color={appearance.grayMatter.color}
+              opacity={appearance.grayMatter.opacity}
+              depthWrite={appearance.grayMatter.opacity >= 0.98}
+            />
+          : functionalTarget && targetDisplayGeometry === grayGeometry && grayScientificVertexMap
           ? <FunctionalTargetSurface
               geometry={grayGeometry}
               scientificVertexCount={scientificBrainGeometry.getAttribute('position').count}
-              scientificVertexMap={scientificVertexMap}
+              scientificVertexMap={grayScientificVertexMap}
               requireInterior={false}
               color={appearance.grayMatter.color}
               opacity={appearance.grayMatter.opacity}
@@ -714,11 +903,14 @@ export function HeadViewport() {
   const [landmarks, setLandmarks] = useState<LandmarkFile['points']>([]);
   const [surfaceRevision, setSurfaceRevision] = useState(0);
   const {
-    project, selectedInstanceId, selectedHeadOptodeId, instanceEditMode,
+    project, projectRevision, selectedInstanceId, selectedHeadOptodeId, instanceEditMode,
     placeLayout, selectInstance, setInstanceEditMode, updateInstanceAnchor,
     updateInstanceOverride, rotateMapping, toggleInstanceVisibility, removeInstance,
     toast, setToast,
     functionalTarget,
+    anatomicalCoverage, anatomicalCoverageEnabled, anatomicalCoverageMode,
+    selectedCoverageRegionIndex, anatomicalCoverageSettings, anatomicalCoverageStatus,
+    setAnatomicalCoverageResult, setAnatomicalCoverageStatus,
   } = useProjectStore();
   const selected = project.instances.find((instance) => instance.id === selectedInstanceId);
   const selectedLayout = project.layouts.find((layout) => layout.id === selected?.definitionId);
@@ -731,6 +923,10 @@ export function HeadViewport() {
     const values = [...functionalTarget.values].sort((a, b) => a - b);
     return [values[0]!, values[Math.min(values.length - 1, Math.floor(values.length * 0.98))]!] as const;
   }, [functionalTarget]);
+  const coverageRegionColors = useMemo(
+    () => anatomicalCoverage ? anatomicalCoverageRegionColors(anatomicalCoverage) : new Map<number, string>(),
+    [anatomicalCoverage],
+  );
 
   useEffect(() => {
     void fetch(anatomyUrl('landmarks.json')).then((response) => response.json()).then((data: LandmarkFile) => setLandmarks(data.points));
@@ -741,6 +937,44 @@ export function HeadViewport() {
     const timeout = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [setToast, toast]);
+
+  useEffect(() => {
+    if (!anatomicalCoverageEnabled) return;
+    if (surfaceRevision < 1) return;
+    const request = buildAnatomicalCoverageRequest(project, anatomicalCoverageSettings);
+    if (!request) {
+      setAnatomicalCoverageResult(null);
+      return;
+    }
+    let current = true;
+    setAnatomicalCoverageStatus('loading');
+    const timeout = window.setTimeout(() => {
+      void requestAnatomicalCoverage(request, (value) => window.cortexlume.science.anatomicalCoverage(value))
+        .then((result) => {
+          if (current) setAnatomicalCoverageResult(result);
+        })
+        .catch((error) => {
+          if (current) setAnatomicalCoverageStatus(
+            'error',
+            error instanceof Error ? error.message : String(error),
+          );
+        });
+    }, 180);
+    return () => {
+      current = false;
+      window.clearTimeout(timeout);
+    };
+  }, [
+    anatomicalCoverageEnabled,
+    anatomicalCoverageSettings,
+    project.instances,
+    project.layouts,
+    project.projectionSettings,
+    projectRevision,
+    setAnatomicalCoverageResult,
+    setAnatomicalCoverageStatus,
+    surfaceRevision,
+  ]);
 
   const nudge = (uMm: number, vMm: number) => {
     if (!editable) return;
@@ -816,6 +1050,25 @@ export function HeadViewport() {
           <span>{functionalTarget.provenance.statistic.toUpperCase()}</span>
           <i aria-hidden="true" />
           <div className="target-map-range"><small>{targetDisplayRange?.[0].toFixed(2)}</small><small>{targetDisplayRange?.[1].toFixed(2)}</small></div>
+        </div>
+      )}
+      {anatomicalCoverageEnabled && (
+        <div className="viewport-overlay coverage-map-legend">
+          <strong>GEOMETRIC ANATOMICAL COVERAGE</strong>
+          <span>{anatomicalCoverageStatus === 'loading'
+            ? 'CALCULATING ATLAS OVERLAP…'
+            : anatomicalCoverageStatus === 'error'
+              ? 'ANALYSIS UNAVAILABLE'
+              : anatomicalCoverageMode === 'region'
+                ? anatomicalCoverage?.regions.find((region) => region.regionIndex === selectedCoverageRegionIndex)?.labelEn ?? 'SELECT REGION'
+                : 'OVERALL MOSAIC'}</span>
+          {anatomicalCoverageStatus === 'ready' && anatomicalCoverage?.regions.slice(0, 5).map((region) => (
+            <div className={`coverage-legend-row ${anatomicalCoverageMode === 'region' && selectedCoverageRegionIndex !== region.regionIndex ? 'is-muted' : ''}`} key={`${region.atlasId}:${region.labelEn}`}>
+              <i style={{ backgroundColor: coverageRegionColors.get(region.regionIndex) }} />
+              <b>{region.labelEn}</b>
+              <code>{Math.round(region.coveredAtlasMassFraction * 100)}%</code>
+            </div>
+          ))}
         </div>
       )}
       <Canvas onPointerMissed={() => selectInstance(selectedInstanceId, null)} camera={{ position: [215, 138, -300], fov: 39 }} dpr={[1, 1.6]} gl={{ antialias: true }}>

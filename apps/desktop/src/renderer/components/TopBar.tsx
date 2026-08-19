@@ -1,10 +1,22 @@
 import { useState } from 'react';
+import type { UpdateCheckResult } from '../../shared/startup';
 
-export function TopBar() {
+export function TopBar({ update, onOpenUpdate }: {
+  update: UpdateCheckResult | null;
+  onOpenUpdate(): void;
+}) {
   const [maximized, setMaximized] = useState(false);
   return (
     <header className="window-chrome">
-      <div className="window-drag-region"><strong>CortexLume</strong></div>
+      <div className="window-drag-region">
+        <strong>CortexLume</strong>
+        {update?.status === 'available' && <button
+          type="button"
+          className="title-update-link"
+          title={`Open CortexLume ${update.latestVersion} release`}
+          onClick={onOpenUpdate}
+        >UPDATE AVAILABLE · v{update.latestVersion}</button>}
+      </div>
       <div className="window-controls">
         <button aria-label="Minimize" title="Minimize" onClick={() => void window.cortexlume.window.minimize()}><span aria-hidden="true">&#xE921;</span></button>
         <button

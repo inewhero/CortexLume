@@ -307,6 +307,201 @@ export const TargetImportResultSchema = z.object({
 });
 export type TargetImportResult = z.infer<typeof TargetImportResultSchema>;
 
+/**
+ * A sampled channel path used only to build a geometric anatomical-coverage
+ * prior. The path is not a photon sensitivity, fluence, or Jacobian field.
+ */
+export const AnatomicalCoverageChannelSchema = z.object({
+  instanceId: z.string().uuid(),
+  pairId: z.string().uuid(),
+  channelNumber: z.number().int().positive().optional(),
+  pointsRasMm: z.array(Vec3Schema).min(2).max(129),
+});
+export type AnatomicalCoverageChannel = z.infer<typeof AnatomicalCoverageChannelSchema>;
+
+const AnatomicalCoverageSettingsBaseSchema = z.object({
+  kernelSigmaMm: z.number().finite().min(1).max(40).default(12),
+  supportRadiusMm: z.number().finite().min(2).max(80).default(24),
+  minimumAtlasMembership: z.number().finite().min(0).max(1).default(0.05),
+});
+export const AnatomicalCoverageSettingsSchema = AnatomicalCoverageSettingsBaseSchema.refine((value) => value.supportRadiusMm >= value.kernelSigmaMm, {
+  message: 'Coverage support radius must be at least one kernel sigma.',
+  path: ['supportRadiusMm'],
+});
+export type AnatomicalCoverageSettings = z.infer<typeof AnatomicalCoverageSettingsSchema>;
+
+export const AnatomicalCoverageRequestSchema = z.object({
+  channels: z.array(AnatomicalCoverageChannelSchema).min(1),
+  settings: AnatomicalCoverageSettingsSchema.default({}),
+});
+export type AnatomicalCoverageRequest = z.infer<typeof AnatomicalCoverageRequestSchema>;
+
+export const AnatomicalCoverageChannelResultSchema = z.object({
+  stableId: z.string().min(1),
+  instanceId: z.string().uuid(),
+  pairId: z.string().uuid(),
+  channelNumber: z.number().int().positive().optional(),
+  pathPointCount: z.number().int().min(2).max(129),
+  pathLengthMm: z.number().finite().positive(),
+  pathSha256: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type AnatomicalCoverageChannelResult = z.infer<typeof AnatomicalCoverageChannelResultSchema>;
+
+export const AnatomicalCoverageChannelShareSchema = z.object({
+  channelIndex: z.number().int().nonnegative(),
+  stableId: z.string().min(1),
+  geometricShare: z.number().finite().min(0).max(1),
+});
+export type AnatomicalCoverageChannelShare = z.infer<typeof AnatomicalCoverageChannelShareSchema>;
+
+export const AnatomicalCoverageRegionSchema = z.object({
+  regionIndex: z.number().int().nonnegative(),
+  atlasId: z.string().min(1),
+  labelEn: z.string().min(1),
+  colorHex: z.string().regex(/^#[A-Fa-f0-9]{6}$/),
+  coveredAtlasMassFraction: z.number().finite().min(0).max(1),
+  weightedAtlasMass: z.number().finite().positive(),
+  dominantVertexCount: z.number().int().nonnegative(),
+  channelShares: z.array(AnatomicalCoverageChannelShareSchema),
+});
+export type AnatomicalCoverageRegion = z.infer<typeof AnatomicalCoverageRegionSchema>;
+
+export const AnatomicalCoverageMosaicSchema = z.object({
+  geometricVertexIndices: z.array(z.number().int().min(0).max(24_999)),
+  geometricCoverageWeights: z.array(z.number().finite().min(0).max(1)),
+  vertexIndices: z.array(z.number().int().min(0).max(24_999)),
+  coverageWeights: z.array(z.number().finite().min(0).max(1)),
+  opacityWeights: z.array(z.number().finite().min(0).max(1)),
+  regionIndices: z.array(z.number().int().nonnegative()),
+  atlasMemberships: z.array(z.number().finite().min(0).max(1)),
+  dominantChannelIndices: z.array(z.number().int().nonnegative()),
+}).superRefine((value, context) => {
+  const length = value.vertexIndices.length;
+  for (const [name, values] of Object.entries({
+    coverageWeights: value.coverageWeights,
+    opacityWeights: value.opacityWeights,
+    regionIndices: value.regionIndices,
+    atlasMemberships: value.atlasMemberships,
+    dominantChannelIndices: value.dominantChannelIndices,
+  })) {
+    if (values.length !== length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: `Mosaic ${name} length mismatch.` });
+    }
+  }
+  if (value.geometricCoverageWeights.length !== value.geometricVertexIndices.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Mosaic geometric support length mismatch.' });
+  }
+  for (let index = 1; index < value.geometricVertexIndices.length; index += 1) {
+    if (value.geometricVertexIndices[index]! <= value.geometricVertexIndices[index - 1]!) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Mosaic geometric vertex indices must be unique and strictly increasing.' });
+      break;
+    }
+  }
+  for (let index = 1; index < length; index += 1) {
+    if (value.vertexIndices[index]! <= value.vertexIndices[index - 1]!) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Mosaic vertex indices must be unique and strictly increasing.' });
+      break;
+    }
+  }
+});
+export type AnatomicalCoverageMosaic = z.infer<typeof AnatomicalCoverageMosaicSchema>;
+
+export const AnatomicalCoverageAnalysisSchema = z.object({
+  version: z.literal(1),
+  sourceKind: z.literal('geometric-anatomical-coverage-prior'),
+  targetSurface: z.literal('Cedalion-ICBM152-25k'),
+  vertexCount: z.literal(25_000),
+  channels: z.array(AnatomicalCoverageChannelResultSchema).min(1),
+  parameters: AnatomicalCoverageSettingsBaseSchema.extend({
+    distanceMetric: z.literal('euclidean-distance-to-polyline'),
+    kernel: z.literal('truncated-gaussian'),
+    channelCombination: z.literal('maximum-kernel-weight'),
+    mosaicAssignment: z.literal('maximum-harvard-oxford-membership'),
+    regionAggregation: z.literal('coverage-weighted-atlas-membership'),
+    atlasMembershipAggregation: z.literal('sum-retained-top3-without-renormalization'),
+    summarySampling: z.literal('vertex-sampled-not-surface-area-integrated'),
+  }),
+  mosaic: AnatomicalCoverageMosaicSchema,
+  regions: z.array(AnatomicalCoverageRegionSchema),
+  qc: z.object({
+    geometricCoveredVertexCount: z.number().int().nonnegative(),
+    atlasLabeledVertexCount: z.number().int().nonnegative(),
+    unlabeledCoveredVertexCount: z.number().int().nonnegative(),
+    atlasSupportFraction: z.number().finite().min(0).max(1),
+    flags: z.array(z.string()),
+  }),
+  provenance: z.object({
+    templateAssetVersion: z.string().min(1),
+    coordinateConvention: z.literal('RAS+'),
+    units: z.literal('mm'),
+    surfaceVertexCoordinatesSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    surfaceMeshSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    atlasId: z.string().min(1),
+    atlasIndexSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    atlasSampling: z.literal('nearest-voxel-top3-original-membership'),
+    interpretation: z.literal('Geometric anatomical coverage prior; not photon sensitivity, fluence, or Jacobian.'),
+  }),
+}).superRefine((value, context) => {
+  if (value.parameters.supportRadiusMm < value.parameters.kernelSigmaMm) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage support radius must be at least one kernel sigma.' });
+  }
+  value.channels.forEach((channel, index) => {
+    if (channel.stableId !== `${channel.instanceId}:${channel.pairId}`) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage channel stable ID is not canonical.' });
+    }
+    if (index > 0 && channel.stableId <= value.channels[index - 1]!.stableId) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage channels must have unique, ordered stable IDs.' });
+    }
+  });
+  value.regions.forEach((region, index) => {
+    if (region.regionIndex !== index) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage region indices must be contiguous and ordered.' });
+    }
+    for (const share of region.channelShares) {
+      if (share.channelIndex >= value.channels.length || value.channels[share.channelIndex]?.stableId !== share.stableId) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage channel share references an invalid channel.' });
+      }
+    }
+    const channelShareTotal = region.channelShares.reduce((sum, share) => sum + share.geometricShare, 0);
+    if (Math.abs(channelShareTotal - 1) > 1e-6) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage region channel shares must sum to one.' });
+    }
+  });
+  if (value.mosaic.regionIndices.some((index) => index >= value.regions.length)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage mosaic references an invalid region.' });
+  }
+  if (value.mosaic.dominantChannelIndices.some((index) => index >= value.channels.length)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage mosaic references an invalid channel.' });
+  }
+  value.mosaic.opacityWeights.forEach((opacity, index) => {
+    const expected = value.mosaic.coverageWeights[index]! * value.mosaic.atlasMemberships[index]!;
+    if (Math.abs(opacity - expected) > 1e-6) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage mosaic opacity is inconsistent.' });
+    }
+  });
+  const geometricWeights = new Map(
+    value.mosaic.geometricVertexIndices.map((vertexIndex, index) => (
+      [vertexIndex, value.mosaic.geometricCoverageWeights[index]!] as const
+    )),
+  );
+  value.mosaic.vertexIndices.forEach((vertexIndex, index) => {
+    const geometricWeight = geometricWeights.get(vertexIndex);
+    if (geometricWeight == null || Math.abs(geometricWeight - value.mosaic.coverageWeights[index]!) > 1e-6) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Atlas-labeled coverage must be contained in geometric support.' });
+    }
+  });
+  if (value.qc.atlasLabeledVertexCount !== value.mosaic.vertexIndices.length
+    || value.qc.geometricCoveredVertexCount !== value.mosaic.geometricVertexIndices.length
+    || value.qc.geometricCoveredVertexCount !== value.qc.atlasLabeledVertexCount + value.qc.unlabeledCoveredVertexCount) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage QC vertex counts are inconsistent.' });
+  }
+  const regionFractionTotal = value.regions.reduce((sum, region) => sum + region.coveredAtlasMassFraction, 0);
+  if (value.regions.length > 0 && Math.abs(regionFractionTotal - 1) > 1e-6) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage region mass fractions must sum to one.' });
+  }
+});
+export type AnatomicalCoverageAnalysis = z.infer<typeof AnatomicalCoverageAnalysisSchema>;
+
 export const CortexLumeProjectSchema = z.object({
   format: z.literal('cortexlume-project'),
   formatVersion: z.literal(1),
@@ -397,5 +592,6 @@ export interface DesktopApi {
       provenance: Record<string, unknown>;
     }>;
     quickTargetMap(targetId: string): Promise<FunctionalTargetMap>;
+    anatomicalCoverage(request: AnatomicalCoverageRequest): Promise<AnatomicalCoverageAnalysis>;
   };
 }

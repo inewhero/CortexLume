@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from cortexlume_science.app import app
+from cortexlume_science.anatomical_coverage import load_surface_atlas_data
 from cortexlume_science.atlas import atlas_status, query_probability_path, query_probability_volume
 from cortexlume_science.quick_targets import load_quick_target_pack
 from .test_geometry import fixture_layout
@@ -107,6 +108,26 @@ def test_atlas_query_endpoint_preserves_raw_percentages() -> None:
     body = response.json()
     assert body["atlasVerified"] is True
     assert body["results"][0]["corticalRegions"][0]["probability"] == 0.45
+
+
+def test_anatomical_coverage_endpoint_returns_single_sparse_mosaic() -> None:
+    vertices = load_surface_atlas_data().vertices_ras_mm
+    response = client.post("/v1/coverage/anatomical", headers=headers, json={
+        "channels": [{
+            "instanceId": "00000000-0000-4000-8000-000000000001",
+            "pairId": "00000000-0000-4000-8000-000000000011",
+            "channelNumber": 1,
+            "pointsRasMm": [vertices[0].tolist(), vertices[100].tolist()],
+        }],
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["sourceKind"] == "geometric-anatomical-coverage-prior"
+    assert body["vertexCount"] == 25_000
+    assert len(body["mosaic"]["vertexIndices"]) > 0
+    assert len(body["mosaic"]["vertexIndices"]) == len(body["mosaic"]["regionIndices"])
+    assert body["provenance"]["interpretation"].startswith("Geometric anatomical coverage prior")
+    assert "sensitivity" not in body["sourceKind"]
 
 
 def test_channel_path_aggregates_only_labeled_cortical_voxels() -> None:

@@ -1,10 +1,11 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { HeadViewport } from './components/HeadViewport';
 import { BidsSettings } from './components/BidsSettings';
 import { Inspector } from './components/Inspector';
 import { LayoutEditor } from './components/LayoutEditor';
 import { LayoutLibrary } from './components/LayoutLibrary';
 import { TopBar } from './components/TopBar';
+import type { UpdateCheckResult } from '../shared/startup';
 
 function PanelFrame({ title, side, collapsed = false, children }: {
   title: string;
@@ -28,15 +29,43 @@ function PanelFrame({ title, side, collapsed = false, children }: {
 export function App() {
   const [leftVisible, setLeftVisible] = useState(true);
   const [rightVisible, setRightVisible] = useState(true);
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateCheckResult | null>(null);
   const columns = useMemo(() => [
     leftVisible ? 'clamp(360px, 28vw, 440px)' : '0px',
     'minmax(460px, 1fr)',
     rightVisible ? 'clamp(300px, 22vw, 350px)' : '0px',
   ].join(' '), [leftVisible, rightVisible]);
 
+  useEffect(() => {
+    let active = true;
+    let checking = false;
+    const check = () => {
+      const startup = window.cortexlume?.startup;
+      if (!startup || !navigator.onLine || checking) return;
+      checking = true;
+      void startup.checkUpdate()
+        .then((update) => {
+          if (active) setAvailableUpdate(update.status === 'available' ? update : null);
+        })
+        .catch(() => {
+          // Offline and unavailable update sources remain completely silent.
+        })
+        .finally(() => { checking = false; });
+    };
+    check();
+    window.addEventListener('online', check);
+    return () => {
+      active = false;
+      window.removeEventListener('online', check);
+    };
+  }, []);
+
   return (
     <div className="app-shell">
-      <TopBar />
+      <TopBar
+        update={availableUpdate}
+        onOpenUpdate={() => void window.cortexlume?.startup.openRelease()}
+      />
       <main className="workspace" style={{ gridTemplateColumns: columns }}>
         <PanelFrame title="Optode Design" side="left" collapsed={!leftVisible}>
           <div className="scroll-panel"><LayoutEditor /><BidsSettings /><LayoutLibrary /></div>

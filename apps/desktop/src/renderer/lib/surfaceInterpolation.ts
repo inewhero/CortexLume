@@ -191,3 +191,66 @@ export function interpolateSurfaceValues(
   }
   return current;
 }
+
+export interface SurfaceLabelInterpolationOptions {
+  activationFloor?: number;
+  validityMask?: Uint8Array;
+}
+
+/**
+ * Propagate categorical labels only through an already-interpolated active
+ * surface mask. This closes display-only atlas gaps without blending labels
+ * through Euclidean space or changing the scientific region summaries.
+ */
+export function interpolateSurfaceLabels(
+  geometry: THREE.BufferGeometry,
+  labels: Int16Array,
+  activity: Float32Array,
+  options: SurfaceLabelInterpolationOptions = {},
+): Int16Array {
+  const vertexCount = geometry.getAttribute('position').count;
+  if (labels.length !== vertexCount || activity.length !== vertexCount) {
+    throw new Error('Surface label, activity, and vertex counts must match.');
+  }
+  const validityMask = options.validityMask;
+  if (validityMask && validityMask.length !== vertexCount) {
+    throw new Error(`Surface validity count ${validityMask.length} does not match vertex count ${vertexCount}.`);
+  }
+  const graph = getSurfaceGraph(geometry);
+  const activationFloor = Math.max(0, options.activationFloor ?? 0.002);
+  const current = labels.slice();
+  const distances = new Int32Array(vertexCount);
+  distances.fill(-1);
+  const queue = new Uint32Array(vertexCount);
+  let queueStart = 0;
+  let queueEnd = 0;
+
+  for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+    if (current[vertex]! < 0 || activity[vertex]! <= activationFloor
+      || (validityMask && !validityMask[vertex])) continue;
+    distances[vertex] = 0;
+    queue[queueEnd++] = vertex;
+  }
+
+  // Multi-source traversal guarantees that every active vertex in a component
+  // containing an atlas seed receives its closest topological label. Atlas-
+  // labeled vertices remain fixed and inactive vertices are hard boundaries.
+  while (queueStart < queueEnd) {
+    const vertex = queue[queueStart++]!;
+    const label = current[vertex]!;
+    const candidateDistance = distances[vertex]! + 1;
+    for (let cursor = graph.offsets[vertex]!; cursor < graph.offsets[vertex + 1]!; cursor += 1) {
+      const neighbor = graph.neighbors[cursor]!;
+      if (activity[neighbor]! <= activationFloor || (validityMask && !validityMask[neighbor])) continue;
+      if (distances[neighbor]! < 0) {
+        current[neighbor] = label;
+        distances[neighbor] = candidateDistance;
+        queue[queueEnd++] = neighbor;
+      } else if (labels[neighbor]! < 0 && distances[neighbor]! === candidateDistance
+        && label < current[neighbor]!) {
+        current[neighbor] = label;
+      }
+    }
+  }
+  return current;
+}

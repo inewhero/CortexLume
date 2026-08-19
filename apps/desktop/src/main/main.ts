@@ -7,6 +7,8 @@ import { request as httpRequest } from 'node:http';
 import path from 'node:path';
 import {
   CortexLumeProjectSchema,
+  AnatomicalCoverageAnalysisSchema,
+  AnatomicalCoverageRequestSchema,
   FitPlacementRequestSchema,
   FitPlacementResponseSchema,
   AtlasLabelSchema,
@@ -22,6 +24,9 @@ import {
 import { createProjectArchive, readProjectArchive } from './projectArchive';
 import { buildBidsGeometryExport, buildBrainNetExport, buildCsvExport, type ExportBundle } from './projectExport';
 import { parseDigitizerFile } from './digitizerImport';
+import { mergeProjectAtlasAnnotations, type PathAtlasAnnotation, type PointAtlasAnnotation } from './projectAnnotation';
+import { checkGithubUpdate } from './startupLifecycle';
+import type { UpdateCheckResult } from '../shared/startup';
 
 let mainWindow: BrowserWindow | null = null;
 let scienceProcess: ChildProcessWithoutNullStreams | null = null;
@@ -29,6 +34,7 @@ let sciencePort: number | null = null;
 let scienceToken = '';
 let scienceReady: Promise<void> | null = null;
 const headlessSmokeTest = process.env.CORTEXLUME_HEADLESS_TEST === '1';
+let validatedReleaseUrl: string | null = null;
 
 function quadraticPathThroughTarget(source: Vec3, target: Vec3, detector: Vec3, count = 33): Vec3[] {
   const control: Vec3 = [
@@ -78,13 +84,22 @@ function resolveScienceCommand(): { command: string; args: string[]; cwd: string
   return { command: 'py', args: ['-3.12', script], cwd: path.dirname(script) };
 }
 
+function stopScienceSidecar(): void {
+  const child = scienceProcess;
+  scienceProcess = null;
+  sciencePort = null;
+  scienceReady = null;
+  child?.kill();
+}
+
 function startScienceSidecar(): Promise<void> {
   if (scienceReady) return scienceReady;
-  scienceToken = randomBytes(32).toString('hex');
-  const { command, args, cwd } = resolveScienceCommand();
+  const ready = (async () => {
+    scienceToken = randomBytes(32).toString('hex');
+    const { command, args, cwd } = resolveScienceCommand();
 
-  scienceReady = new Promise((resolve, reject) => {
-    scienceProcess = spawn(command, args, {
+    await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
       cwd,
       windowsHide: true,
       env: {
@@ -95,11 +110,12 @@ function startScienceSidecar(): Promise<void> {
           : path.resolve(app.getAppPath(), '..', '..', 'assets', 'templates', 'MNI152NLin6Asym'),
       },
     });
+    scienceProcess = child;
 
     let buffer = '';
     const timeout = setTimeout(() => reject(new Error('Science sidecar startup timed out')), 20_000);
 
-    scienceProcess.stdout.on('data', (chunk: Buffer) => {
+    child.stdout.on('data', (chunk: Buffer) => {
       buffer += chunk.toString('utf8');
       const lines = buffer.split(/\r?\n/);
       buffer = lines.pop() ?? '';
@@ -111,18 +127,24 @@ function startScienceSidecar(): Promise<void> {
         resolve();
       }
     });
-    scienceProcess.stderr.on('data', (chunk: Buffer) => console.error(`[science] ${chunk}`));
-    scienceProcess.once('error', (error) => {
+    child.stderr.on('data', (chunk: Buffer) => console.error(`[science] ${chunk}`));
+    child.once('error', (error) => {
       clearTimeout(timeout);
       reject(error);
     });
-    scienceProcess.once('exit', () => {
+    child.once('exit', () => {
+      if (scienceProcess !== child) return;
       sciencePort = null;
       scienceProcess = null;
       scienceReady = null;
     });
+    });
+  })();
+  scienceReady = ready;
+  void ready.catch(() => {
+    if (scienceReady === ready) scienceReady = null;
   });
-  return scienceReady;
+  return ready;
 }
 
 async function scienceRequest<T>(pathname: string, payload?: unknown): Promise<T> {
@@ -316,6 +338,19 @@ function registerIpc(): void {
   });
   ipcMain.handle('window:close', () => mainWindow?.close());
 
+  ipcMain.handle('startup:check-update', async () => {
+    if (!app.isPackaged) return { status: 'development', currentVersion: app.getVersion() } satisfies UpdateCheckResult;
+    const update = await checkGithubUpdate(app.getVersion());
+    validatedReleaseUrl = update.status === 'available' ? update.releaseUrl ?? null : null;
+    return update;
+  });
+
+  ipcMain.handle('startup:open-release', async () => {
+    if (!validatedReleaseUrl) return false;
+    await shell.openExternal(validatedReleaseUrl);
+    return true;
+  });
+
   ipcMain.handle('project:open', async () => {
     const selection = await dialog.showOpenDialog(mainWindow!, {
       title: 'Open CortexLume project',
@@ -486,8 +521,8 @@ function registerIpc(): void {
       issue: string | null;
       results: Array<{
         id: string;
-        corticalRegions: CortexLumeProject['verifiedResults'][number]['underlyingCorticalRegions'];
-        deepStructures: CortexLumeProject['verifiedResults'][number]['deepTargetStructures'];
+        corticalRegions: unknown[];
+        deepStructures: unknown[];
       }>;
     }>('/v1/atlas/query-batch', {
       points: project.verifiedResults.map((result, index) => ({
@@ -497,8 +532,14 @@ function registerIpc(): void {
       })),
       probabilityThreshold: project.projectionSettings.atlasProbabilityThreshold,
     });
-    const byIndex = new Map(response.results.map((result) => [Number(result.id), result]));
-    const pathRegions = await Promise.all(project.verifiedResults.map(async (result) => {
+    const byIndex = new Map<number, PointAtlasAnnotation>(response.results.map((result) => [
+      Number(result.id),
+      {
+        corticalRegions: AtlasLabelSchema.array().parse(result.corticalRegions ?? []),
+        deepStructures: AtlasLabelSchema.array().parse(result.deepStructures ?? []),
+      },
+    ]));
+    const pathAnnotations = await Promise.all(project.verifiedResults.map(async (result): Promise<PathAtlasAnnotation | null> => {
       if (result.subjectKind !== 'pair' || !result.instanceId || !result.corticalRasMm) return null;
       const instance = project.instances.find((candidate) => candidate.id === result.instanceId);
       const layout = project.layouts.find((candidate) => candidate.id === instance?.definitionId);
@@ -517,23 +558,13 @@ function registerIpc(): void {
         points: quadraticPathThroughTarget(source, result.corticalRasMm, detector),
         probabilityThreshold: project.projectionSettings.atlasProbabilityThreshold,
       });
-      return AtlasLabelSchema.array().parse(pathResponse.regions ?? []);
+      return {
+        corticalRegions: AtlasLabelSchema.array().parse(pathResponse.regions ?? []),
+      };
     }));
-    return CortexLumeProjectSchema.parse({
-      ...project,
-      verifiedResults: project.verifiedResults.map((result, index) => {
-        const annotation = byIndex.get(index);
-        return {
-          ...result,
-          underlyingCorticalRegions: pathRegions[index] ?? annotation?.corticalRegions ?? [],
-          deepTargetStructures: annotation?.deepStructures ?? [],
-          qcFlags: [
-            ...result.qcFlags.filter((flag) => flag !== 'atlas_lookup_pending' && !flag.startsWith('atlas_unavailable')),
-            ...(response.atlasVerified ? [] : [response.issue ?? 'atlas_unavailable']),
-          ],
-        };
-      }),
-    });
+    return CortexLumeProjectSchema.parse(mergeProjectAtlasAnnotations(
+      project, byIndex, pathAnnotations, response.atlasVerified, response.issue,
+    ));
   });
 
   ipcMain.handle('science:quick-target-search', async (_event, rawQuery: string, rawLimit = 20) => {
@@ -554,6 +585,12 @@ function registerIpc(): void {
     const response = await scienceRequest<unknown>(`/v1/targets/${encodeURIComponent(targetId)}`);
     return FunctionalTargetMapSchema.parse(response);
   });
+
+  ipcMain.handle('science:anatomical-coverage', async (_event, rawRequest: unknown) => {
+    const request = AnatomicalCoverageRequestSchema.parse(rawRequest);
+    const response = await scienceRequest<unknown>('/v1/coverage/anatomical', request);
+    return AnatomicalCoverageAnalysisSchema.parse(response);
+  });
 }
 
 app.whenReady().then(async () => {
@@ -571,5 +608,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  scienceProcess?.kill();
+  stopScienceSidecar();
 });

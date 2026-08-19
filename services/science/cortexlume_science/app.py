@@ -8,12 +8,15 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, status
 
 from . import __version__
+from .anatomical_coverage import AnatomicalCoverageError, compute_anatomical_coverage
 from .atlas import atlas_status, query_probability_path, query_probability_volume
 from .geometry import cortex_projection, fit_errors, fitted_positions, inward_depth_target, pair_midpoint
 from .models import (
     AtlasLabel,
     AtlasPathQueryRequest,
     AtlasQueryRequest,
+    AnatomicalCoverageAnalysis,
+    AnatomicalCoverageRequest,
     BatchProjectionRequest,
     FitPlacementRequest,
     FitPlacementResponse,
@@ -238,19 +241,17 @@ def batch_projection(request: BatchProjectionRequest, authorization: str | None 
 def atlas_query_batch(request: AtlasQueryRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     authorize(authorization)
     atlas = atlas_status()
-    if not atlas.available:
-        return {"atlasVerified": False, "issue": atlas.issue, "results": []}
     return {
-        "atlasVerified": True,
-        "issue": None,
+        "atlasVerified": atlas.available,
+        "issue": atlas.issue,
         "results": [{
             "id": point.id,
             "corticalRegions": [item.model_dump(by_alias=True) for item in query_probability_volume(
                 point.cortical_ras_mm, "cortical", request.probability_threshold
-            )] if point.cortical_ras_mm else [],
+            )] if atlas.available and point.cortical_ras_mm else [],
             "deepStructures": [item.model_dump(by_alias=True) for item in query_probability_volume(
                 point.deep_target_ras_mm, "subcortical", request.probability_threshold
-            )] if point.deep_target_ras_mm else [],
+            )] if atlas.available and point.deep_target_ras_mm else [],
         } for point in request.points],
     }
 
@@ -260,7 +261,9 @@ def atlas_query_path(request: AtlasPathQueryRequest, authorization: str | None =
     authorize(authorization)
     atlas = atlas_status()
     if not atlas.available:
-        return {"atlasVerified": False, "issue": atlas.issue, "regions": []}
+        return {
+            "atlasVerified": False, "issue": atlas.issue, "regions": [],
+        }
     return {
         "atlasVerified": True,
         "issue": None,
@@ -268,6 +271,26 @@ def atlas_query_path(request: AtlasPathQueryRequest, authorization: str | None =
             request.points, "cortical", request.probability_threshold
         )],
     }
+
+
+@app.post(
+    "/v1/coverage/anatomical",
+    response_model=AnatomicalCoverageAnalysis,
+    response_model_by_alias=True,
+)
+def anatomical_coverage(
+    request: AnatomicalCoverageRequest,
+    authorization: str | None = Header(default=None),
+) -> AnatomicalCoverageAnalysis:
+    """Build a visual anatomical-region mosaic from geometric channel paths."""
+    authorize(authorization)
+    try:
+        return compute_anatomical_coverage(request)
+    except AnatomicalCoverageError as error:
+        detail = str(error)
+        if detail.startswith(("coverage_channel_", "coverage_kernel_")):
+            raise HTTPException(status_code=422, detail=detail) from error
+        raise HTTPException(status_code=503, detail=detail) from error
 
 
 @app.post("/v1/projects/validate")

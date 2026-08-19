@@ -50,6 +50,9 @@ export function Inspector() {
     setBidsSettingsExpanded, setDefaultDepth,
     confirmDigitizerMapping, confirmFivePointCalibration, setDigitizerPreview,
     setFunctionalTarget,
+    anatomicalCoverage, anatomicalCoverageEnabled, anatomicalCoverageMode,
+    selectedCoverageRegionIndex, anatomicalCoverageError,
+    setAnatomicalCoverageEnabled, setAnatomicalCoverageMode, setSelectedCoverageRegion,
   } = useProjectStore();
   const instance = project.instances.find((item) => item.id === selectedInstanceId);
   const layout = project.layouts.find((item) => item.id === instance?.definitionId);
@@ -91,6 +94,28 @@ export function Inspector() {
     });
     return patches.length > 1 ? [...patches, { id: 'all', label: 'ALL LOADED PATCHES', targets: patches.flatMap((patch) => patch.targets) }] : patches;
   }, [project.instances, project.layouts]);
+  const visibleChannelCount = useMemo(() => project.instances
+    .filter((candidate) => candidate.visible !== false)
+    .reduce((sum, candidate) => sum + (project.layouts.find((item) => item.id === candidate.definitionId)?.pairs.length ?? 0), 0),
+  [project.instances, project.layouts]);
+
+  useEffect(() => {
+    if (visibleChannelCount === 0 && anatomicalCoverageEnabled) setAnatomicalCoverageEnabled(false);
+  }, [anatomicalCoverageEnabled, setAnatomicalCoverageEnabled, visibleChannelCount]);
+
+  useEffect(() => {
+    if (!anatomicalCoverageEnabled
+      || anatomicalCoverageMode !== 'region'
+      || selectedCoverageRegionIndex != null) return;
+    const firstRegion = anatomicalCoverage?.regions[0];
+    if (firstRegion) setSelectedCoverageRegion(firstRegion.regionIndex);
+  }, [
+    anatomicalCoverage,
+    anatomicalCoverageEnabled,
+    anatomicalCoverageMode,
+    selectedCoverageRegionIndex,
+    setSelectedCoverageRegion,
+  ]);
 
   useEffect(() => {
     void fetch(new URL('./anatomy/landmarks.json', window.location.href).href)
@@ -363,6 +388,55 @@ export function Inspector() {
             <code>{transmissionDepthMm} mm</code>
           </div>
         </label>
+      </section>
+
+      <section className={`control-block anatomical-coverage-control ${visibleChannelCount === 0 ? 'is-disabled' : ''}`}>
+        <div className="control-block-title"><span>ANATOMICAL COVERAGE</span></div>
+        <div className="segmented full-width coverage-mode">
+          <button
+            disabled={visibleChannelCount === 0}
+            aria-pressed={anatomicalCoverageEnabled && anatomicalCoverageMode === 'mosaic'}
+            className={anatomicalCoverageEnabled && anatomicalCoverageMode === 'mosaic' ? 'active' : ''}
+            onClick={() => {
+              if (anatomicalCoverageEnabled && anatomicalCoverageMode === 'mosaic') {
+                setAnatomicalCoverageEnabled(false);
+              } else {
+                setSelectedCoverageRegion(null);
+                if (!anatomicalCoverageEnabled) setAnatomicalCoverageEnabled(true);
+              }
+            }}
+          >OVERALL MOSAIC</button>
+          <button
+            disabled={visibleChannelCount === 0}
+            aria-pressed={anatomicalCoverageEnabled && anatomicalCoverageMode === 'region'}
+            className={anatomicalCoverageEnabled && anatomicalCoverageMode === 'region' ? 'active' : ''}
+            onClick={() => {
+              if (anatomicalCoverageEnabled && anatomicalCoverageMode === 'region') {
+                setAnatomicalCoverageEnabled(false);
+              } else {
+                if (!anatomicalCoverageEnabled) setAnatomicalCoverageEnabled(true);
+                setAnatomicalCoverageMode('region');
+                const firstRegionIndex = selectedCoverageRegionIndex
+                  ?? anatomicalCoverage?.regions[0]?.regionIndex
+                  ?? null;
+                if (firstRegionIndex != null) setSelectedCoverageRegion(firstRegionIndex);
+              }
+            }}
+          >SINGLE REGION</button>
+        </div>
+        {anatomicalCoverageEnabled && anatomicalCoverageMode === 'region' && (
+          <select
+            className="coverage-region-select"
+            aria-label="Anatomical coverage region"
+            value={selectedCoverageRegionIndex ?? ''}
+            onChange={(event) => setSelectedCoverageRegion(Number(event.target.value))}
+          >
+            {anatomicalCoverage?.regions.map((region) => <option key={`${region.atlasId}:${region.labelEn}`} value={region.regionIndex}>
+              {region.labelEn} · {Math.round(region.coveredAtlasMassFraction * 100)}%
+            </option>)}
+          </select>
+        )}
+        {anatomicalCoverageError && <p className="coverage-control-error">{anatomicalCoverageError}</p>}
       </section>
 
       <section className="control-block selection-block">

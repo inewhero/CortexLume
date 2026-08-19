@@ -6,7 +6,7 @@
 
 CortexLume is a scientifically validated, offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp, display, and cortical coordinates in MNI space.
 
-The application combines literature-derived functional target heatmaps, strict statistical NIfTI import, a high-density 2D array editor, multi-patch 3D alignment, sphere-aware scalp and cortical projection, five-point and 10–10 references, Harvard–Oxford probability-volume lookup, project archives, focused CSV results, BIDS-NIRS geometry sidecars, and direct BrainNet Viewer export.
+The application combines literature-derived functional target heatmaps, strict statistical NIfTI import, a high-density 2D array editor, multi-patch 3D alignment, sphere-aware scalp and cortical projection, five-point and 10–10 references, Harvard–Oxford probability-volume lookup, anatomical coverage mosaics, project archives, focused CSV results, BIDS-NIRS geometry sidecars, and direct BrainNet Viewer export.
 
 ## Features
 
@@ -34,6 +34,12 @@ Inspect the scalp, gray matter, white matter, five-point landmarks, 10–10 posi
 
 ![Omnidirectional View](./screenshots/ScreenShot_omni.png)
 
+### Array coverage mosaic
+
+Turn on **Anatomical Coverage** after placing one or more patches to see the Harvard–Oxford regions intersected by the complete visible array. **Overall Mosaic** shows the covered regional partition on a single gray-matter mesh; **Single Region** isolates one region for closer inspection. The display uses a geometric channel-path coverage prior with atlas membership, and remains separate from photon fluence or subject-specific sensitivity modelling.
+
+![Anatomical Coverage mosaic](./screenshots/ScreenShot_coverage.png)
+
 ### Reproducible output
 
 Export clear coordinate tables for analysis, a technical JSON provenance record, a BIDS-NIRS geometry package, or a BrainNet Viewer bundle that opens the mapped array in MATLAB.
@@ -53,6 +59,7 @@ The bundled `MNI152NLin6Asym` asset manifest is verified and the atlas, correspo
 | Runtime cortical contact | Passed | Unsimplified correspondence-backed 25k mesh used for BVH ray and optode-sphere collision; dense pial mesh is display-only |
 | Harvard–Oxford atlas | Passed | FSL authority probability volumes mapped losslessly to the locked TemplateFlow RAS+ grid and checked against golden coordinates |
 | Functional target mapping | Passed | FDR-supported Neurosynth maps and validated NIfTI statistics mapped to the official Cedalion 25k vertex order with source hashes and mapping QC |
+| Anatomical coverage mosaic | Passed | Geometric channel paths mapped once to the Cedalion 25k surface, combined deterministically, and partitioned by original Harvard–Oxford membership on a single GM render path |
 | Asset integrity | Passed | Every released template, mesh, atlas index, correspondence table, and QC report is SHA-256 checked at runtime |
 
 Coordinates use `MNI152NLin6Asym`, RAS+, millimetres. Scalp coordinates describe physical optode sphere centres on the head. Display coordinates describe collision-safe sphere centres used internally by the CortexLume cortical renderer, preventing finite-sized nodes from entering deep sulci; they are intermediate, mesh-specific visualization coordinates. Cortical coordinates describe the first correspondence-backed gray-matter contact and remain the portable input to atlas lookup and BrainNet Viewer. Channel atlas results aggregate the sampled geometric channel path; optode atlas results are retained as single-ray references.
@@ -71,14 +78,15 @@ The complete anatomical correspondence evidence is stored in [`cedalion-correspo
 4. **Align the mapping.** Select one patch, move it over the scalp, and use the rotation controls. Enable single-optode editing only for local corrections.
 5. **Choose the display mode.** **Scalp** keeps optodes on the head surface. **Cortex** places each finite-sized optode at its collision-safe cortical display position while retaining the underlying gray-matter contact for analysis. The default channel transmission depth is 25 mm and can be adjusted in **Info Panel**.
 6. **Inspect results.** Select an optode or channel to view scalp and cortical MNI together with the highest-probability cortical region. The Info Panel reports the full top-three atlas result. Display MNI remains an export-only visualization coordinate.
-7. **Describe the recording.** Expand **Device** when preparing BIDS output and enter the subject, task, acquisition, run, sampling frequency, and instrument metadata.
-8. **Save or export.** Save the editable workspace as `.cortexlume`, or select CSV, BIDS, or BrainNet Viewer output.
+7. **Inspect array coverage.** Enable **Anatomical Coverage** to view the overall Harvard–Oxford mosaic for every visible patch, then switch to **Single Region** when checking one anatomical target.
+8. **Describe the recording.** Expand **Device** when preparing BIDS output and enter the subject, task, acquisition, run, sampling frequency, and instrument metadata.
+9. **Save or export.** Save the editable workspace as `.cortexlume`, or select CSV, BIDS, or BrainNet Viewer output.
 
 ## Data integrity and exports
 
 ### CSV
 
-CSV export creates `cortexlume_optodes.csv` and `cortexlume_channels.csv`. These tables contain calculated coordinates, distances, channel definitions, and atlas results only. QC decisions and internal flags are deliberately excluded from CSV.
+CSV export creates `cortexlume_optodes.csv` and `cortexlume_channels.csv`. These tables contain calculated coordinates, distances, channel definitions, and Harvard–Oxford atlas results only. QC decisions and internal flags are deliberately excluded from CSV.
 
 `cortexlume_export.json` is the authoritative technical companion. It records the template and atlas hashes, projection settings, device metadata, complete layouts and instances, projection results, channel-level spacing errors, declared QC thresholds, flags, and export warnings. Export format version 3 separates readable results from machine-auditable provenance.
 
@@ -121,7 +129,7 @@ Build the PyInstaller science service, packaged application, Squirrel installer,
 pnpm package:win
 ```
 
-Artifacts are written under `apps/desktop/out/make`. Release builds package the checksum-pinned anatomical and atlas assets but do not include source archives, temporary processing environments, or external applications such as MATLAB and BrainNet Viewer.
+Artifacts are written under `apps/desktop/out/make`. Release builds package the checksum-pinned anatomical and atlas assets but do not include source archives, temporary processing environments, or external applications such as MATLAB and BrainNet Viewer. Packaged builds check for stable application updates silently while online; an available version appears in the title bar and opens the latest GitHub release when selected.
 
 ## License
 

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type {
   BidsSettings,
+  AnatomicalCoverageAnalysis,
+  AnatomicalCoverageSettings,
   CortexLumeProject,
   DeviceProfile,
   DigitizerSession,
@@ -146,6 +148,9 @@ export interface AnatomyAppearance {
   whiteMatter: { color: string; opacity: number };
 }
 
+export type AnatomicalCoverageMode = 'mosaic' | 'region';
+export type AnatomicalCoverageStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 interface ProjectStore {
   project: CortexLumeProject;
   projectPath: string | null;
@@ -168,6 +173,13 @@ interface ProjectStore {
   activeDigitizerSessionId: string | null;
   digitizerPreview: { session: DigitizerSession; mappings: DigitizerOptodeMapping[] } | null;
   functionalTarget: FunctionalTargetMap | null;
+  anatomicalCoverage: AnatomicalCoverageAnalysis | null;
+  anatomicalCoverageEnabled: boolean;
+  anatomicalCoverageMode: AnatomicalCoverageMode;
+  selectedCoverageRegionIndex: number | null;
+  anatomicalCoverageSettings: AnatomicalCoverageSettings;
+  anatomicalCoverageStatus: AnatomicalCoverageStatus;
+  anatomicalCoverageError: string | null;
   setToast(message: string | null): void;
   setBidsSettingsExpanded(expanded: boolean, validationFields?: BidsField[]): void;
   addDigitizerSession(session: DigitizerSession): void;
@@ -175,6 +187,11 @@ interface ProjectStore {
   confirmFivePointCalibration(session: DigitizerSession, targetInstanceIds: string[]): void;
   setDigitizerPreview(preview: { session: DigitizerSession; mappings: DigitizerOptodeMapping[] } | null): void;
   setFunctionalTarget(target: FunctionalTargetMap | null): void;
+  setAnatomicalCoverageEnabled(enabled: boolean): void;
+  setAnatomicalCoverageResult(result: AnatomicalCoverageAnalysis | null): void;
+  setAnatomicalCoverageMode(mode: AnatomicalCoverageMode): void;
+  setSelectedCoverageRegion(regionIndex: number | null): void;
+  setAnatomicalCoverageStatus(status: AnatomicalCoverageStatus, error?: string | null): void;
   removeDigitizerSession(sessionId: string): void;
   toggleDigitizerSession(sessionId: string): void;
   setActiveDigitizerSession(sessionId: string | null): void;
@@ -285,6 +302,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     activeDigitizerSessionId: null,
     digitizerPreview: null,
     functionalTarget: null,
+    anatomicalCoverage: null,
+    anatomicalCoverageEnabled: false,
+    anatomicalCoverageMode: 'mosaic',
+    selectedCoverageRegionIndex: null,
+    anatomicalCoverageSettings: {
+      kernelSigmaMm: 12,
+      supportRadiusMm: 24,
+      minimumAtlasMembership: 0.05,
+    },
+    anatomicalCoverageStatus: 'idle',
+    anatomicalCoverageError: null,
 
     setToast: (toast) => set({ toast }),
     setBidsSettingsExpanded: (bidsSettingsExpanded, bidsValidationFields = []) => set({
@@ -296,7 +324,38 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       activeDigitizerSessionId: session.id,
     })),
     setDigitizerPreview: (digitizerPreview) => set({ digitizerPreview }),
-    setFunctionalTarget: (functionalTarget) => set({ functionalTarget }),
+    setFunctionalTarget: (functionalTarget) => set({
+      functionalTarget,
+      ...(functionalTarget ? {
+        anatomicalCoverageEnabled: false,
+        anatomicalCoverageStatus: 'idle' as const,
+        anatomicalCoverageError: null,
+      } : {}),
+    }),
+    setAnatomicalCoverageEnabled: (anatomicalCoverageEnabled) => set({
+      anatomicalCoverageEnabled,
+      ...(anatomicalCoverageEnabled ? { functionalTarget: null } : {}),
+      anatomicalCoverageStatus: anatomicalCoverageEnabled ? 'loading' : 'idle',
+      anatomicalCoverageError: null,
+    }),
+    setAnatomicalCoverageResult: (anatomicalCoverage) => set((state) => ({
+      anatomicalCoverage,
+      anatomicalCoverageStatus: anatomicalCoverage ? 'ready' : 'idle',
+      anatomicalCoverageError: null,
+      selectedCoverageRegionIndex: state.selectedCoverageRegionIndex != null
+        && anatomicalCoverage?.regions.some((region) => region.regionIndex === state.selectedCoverageRegionIndex)
+        ? state.selectedCoverageRegionIndex
+        : null,
+    })),
+    setAnatomicalCoverageMode: (anatomicalCoverageMode) => set({ anatomicalCoverageMode }),
+    setSelectedCoverageRegion: (selectedCoverageRegionIndex) => set({
+      selectedCoverageRegionIndex,
+      anatomicalCoverageMode: selectedCoverageRegionIndex == null ? 'mosaic' : 'region',
+    }),
+    setAnatomicalCoverageStatus: (anatomicalCoverageStatus, anatomicalCoverageError = null) => set({
+      anatomicalCoverageStatus,
+      anatomicalCoverageError,
+    }),
     confirmDigitizerMapping: (session, mappings) => set((state) => {
       const pointPositions = new Map(session.calibratedPoints.map((point) => [point.pointId, point.rasMm]));
       const affected = new Set(mappings.map((mapping) => mapping.instanceId));
@@ -336,6 +395,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         activeDigitizerSessionId: session.id,
         digitizerPreview: null,
         functionalTarget: null,
+        anatomicalCoverage: null,
+        anatomicalCoverageEnabled: false,
+        anatomicalCoverageMode: 'mosaic',
+        selectedCoverageRegionIndex: null,
+        anatomicalCoverageStatus: 'idle',
+        anatomicalCoverageError: null,
         projectRevision: state.projectRevision + 1,
       };
     }),
@@ -447,6 +512,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         bidsValidationFields: [],
         activeDigitizerSessionId: hydrated.digitizerSessions.at(-1)?.id ?? null,
         digitizerPreview: null,
+        functionalTarget: null,
+        anatomicalCoverage: null,
+        anatomicalCoverageEnabled: false,
+        anatomicalCoverageMode: 'mosaic',
+        selectedCoverageRegionIndex: null,
+        anatomicalCoverageStatus: 'idle',
+        anatomicalCoverageError: null,
       };
     }),
     setProjectPath: (projectPath) => set({ projectPath }),

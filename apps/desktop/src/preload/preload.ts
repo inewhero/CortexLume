@@ -2,15 +2,23 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CortexLumeProject,
   DesktopApi,
+  AnatomicalCoverageRequest,
   FitPlacementRequest,
   TargetImportSpace,
 } from '@cortexlume/contracts';
+import type { StartupRuntimeApi } from '../shared/startup';
 
-const api: DesktopApi = {
+type CortexLumeDesktopApi = DesktopApi & { startup: StartupRuntimeApi };
+
+const api: CortexLumeDesktopApi = {
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
     close: () => ipcRenderer.invoke('window:close'),
+  },
+  startup: {
+    checkUpdate: () => ipcRenderer.invoke('startup:check-update'),
+    openRelease: () => ipcRenderer.invoke('startup:open-release'),
   },
   project: {
     open: () => ipcRenderer.invoke('project:open'),
@@ -41,6 +49,8 @@ const api: DesktopApi = {
       ipcRenderer.invoke('science:quick-target-search', query, limit),
     quickTargetMap: (targetId) =>
       ipcRenderer.invoke('science:quick-target-map', targetId),
+    anatomicalCoverage: (request: AnatomicalCoverageRequest) =>
+      ipcRenderer.invoke('science:anatomical-coverage', request),
   },
 };
 

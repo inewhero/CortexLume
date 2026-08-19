@@ -150,6 +150,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
   const warnings: string[] = [];
   const results = resultMap(project);
   const codes = instanceCodes(project);
+  const instances = exportInstances(project);
   const optodeRows: unknown[][] = [[
     'patch', 'optode', 'type',
     'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
@@ -171,7 +172,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
     'cortical_region_3', 'cortical_region_3_percent',
   ]];
 
-  for (const instance of exportInstances(project)) {
+  for (const instance of instances) {
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const code = codes.get(instance.id) ?? '';
@@ -211,7 +212,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
   if (project.instances.length === 0) {
     warnings.push('No 3D patch instances exist; exported coordinate columns are empty.');
   }
-  const expectedResults = exportInstances(project).reduce((total, instance) => {
+  const expectedResults = instances.reduce((total, instance) => {
     const layout = layoutForInstance(project, instance);
     return total + (layout ? layout.optodes.length + layout.pairs.length : 0);
   }, 0);

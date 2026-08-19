@@ -11,6 +11,7 @@ from .template_gate import sha256_file, template_directory
 
 ATLAS_VERSION = "TemplateFlow-MNI152NLin6Asym-c906e8d_FSL-HarvardOxford-5.0"
 ATLAS_SHA256 = "8591df9e9b37df27748d5ae3c8ca0478201834bac8014950115ba46697c4f6d0"
+CORTICAL_ATLAS_ID = f"HOCPAL@{ATLAS_VERSION}"
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ def query_probability_volume(
     indices = archive[f"{kind}_indices"][tuple(voxel)]
     probabilities = archive[f"{kind}_probabilities"][tuple(voxel)]
     labels = archive[f"{kind}_labels"]
-    atlas_id = f"HOCPAL@{ATLAS_VERSION}" if kind == "cortical" else f"HOSPA@{ATLAS_VERSION}"
+    atlas_id = CORTICAL_ATLAS_ID if kind == "cortical" else f"HOSPA@{ATLAS_VERSION}"
     results: list[AtlasLabel] = []
     for index, percentage in zip(indices, probabilities, strict=True):
         probability = float(percentage) / 100.0
@@ -76,6 +77,37 @@ def query_probability_volume(
             probability=probability,
         ))
     return results
+
+
+def cortical_probability_fields(
+    points_ras_mm: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, tuple[str, ...]]:
+    """Sample the locked cortical top-three fields for an ordered point set.
+
+    Returned memberships are the original Harvard-Oxford values in [0, 1].
+    They are never renormalized, including at voxels where the retained
+    top-three memberships sum to less than one.
+    """
+    points = np.asarray(points_ras_mm, dtype=np.float64)
+    if points.ndim != 2 or points.shape[1] != 3 or not np.all(np.isfinite(points)):
+        raise ValueError("cortical_probability_points_invalid")
+    if not atlas_status().available:
+        raise RuntimeError(atlas_status().issue or "atlas_unavailable")
+    archive = _archive()
+    inverse = np.linalg.inv(archive["affine"])
+    homogeneous = np.column_stack((points, np.ones(points.shape[0], dtype=np.float64)))
+    voxels = np.rint(homogeneous @ inverse.T).astype(np.int64)[:, :3]
+    shape = np.asarray(archive["cortical_probabilities"].shape[:3], dtype=np.int64)
+    inside = np.all((voxels >= 0) & (voxels < shape), axis=1)
+    indices = np.full((points.shape[0], 3), 255, dtype=np.uint8)
+    memberships = np.zeros((points.shape[0], 3), dtype=np.float64)
+    if np.any(inside):
+        selected = voxels[inside]
+        coordinates = tuple(selected[:, axis] for axis in range(3))
+        indices[inside] = archive["cortical_indices"][coordinates]
+        memberships[inside] = archive["cortical_probabilities"][coordinates].astype(np.float64) / 100.0
+    labels = tuple(str(label).strip() for label in archive["cortical_labels"])
+    return indices, memberships, labels
 
 
 def query_probability_path(

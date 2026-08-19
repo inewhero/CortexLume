@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { interpolateSurfaceValues } from './surfaceInterpolation';
+import { interpolateSurfaceLabels, interpolateSurfaceValues } from './surfaceInterpolation';
 
 function indexedGeometry(positions: number[], indices: number[]) {
   const geometry = new THREE.BufferGeometry();
@@ -101,5 +101,51 @@ describe('surface interpolation', () => {
       new Float32Array([1, 0, 0]),
       { validityMask: new Uint8Array([1, 1]) },
     )).toThrow(/validity count/i);
+  });
+
+  it('fills categorical display gaps through mesh edges without crossing disconnected surfaces', () => {
+    const geometry = indexedGeometry([
+      0, 0, 0,
+      -1, 1, 0,
+      1, 1, 0,
+      1, -1, 0,
+      -1, -1, 0,
+      0, 0, 0.1,
+      1, 0, 0.1,
+      0, 1, 0.1,
+    ], [
+      0, 1, 2,
+      0, 2, 3,
+      0, 3, 4,
+      0, 4, 1,
+      5, 6, 7,
+    ]);
+    const labels = new Int16Array([-1, 2, 2, 4, 4, -1, -1, -1]);
+    const activity = new Float32Array([0.8, 1, 1, 0.7, 0.7, 0, 0, 0]);
+
+    const result = interpolateSurfaceLabels(geometry, labels, activity);
+
+    expect([2, 4]).toContain(result[0]);
+    expect([...result.slice(5)]).toEqual([-1, -1, -1]);
+  });
+
+  it('fills an entire active component rather than stopping after a fixed number of rings', () => {
+    const vertexCount = 110;
+    const positions = Array.from({ length: vertexCount }, (_, index) => [index, index % 2, 0]).flat();
+    const indices: number[] = [];
+    for (let index = 0; index < vertexCount - 2; index += 1) {
+      indices.push(index, index + 1, index + 2);
+    }
+    const labels = new Int16Array(vertexCount);
+    labels.fill(-1);
+    labels[0] = 3;
+
+    const result = interpolateSurfaceLabels(
+      indexedGeometry(positions, indices),
+      labels,
+      new Float32Array(vertexCount).fill(1),
+    );
+
+    expect(result[vertexCount - 1]).toBe(3);
   });
 });
