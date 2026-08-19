@@ -52,7 +52,11 @@ def sha256(path: Path) -> str:
 
 
 def write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    # Release hashes must describe the exact bytes stored in Git. The repository
+    # normalizes text to LF, so do not let Windows translate newlines to CRLF
+    # before the manifest records catalog.json's SHA-256.
+    with path.open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
 def slug(term: str) -> str:

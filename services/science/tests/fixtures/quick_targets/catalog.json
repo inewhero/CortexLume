@@ -9,8 +9,8 @@
     "nonzeroVertexCount": 2668,
     "studyCount": 0,
     "threshold": {
-      "kind": "positive",
-      "minimumExclusive": 0
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
     },
     "valueRange": [
       0.50048828125,
@@ -27,8 +27,8 @@
     "nonzeroVertexCount": 1867,
     "studyCount": 0,
     "threshold": {
-      "kind": "positive",
-      "minimumExclusive": 0
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
     },
     "valueRange": [
       0.50048828125,
@@ -45,8 +45,8 @@
     "nonzeroVertexCount": 1782,
     "studyCount": 0,
     "threshold": {
-      "kind": "positive",
-      "minimumExclusive": 0
+      "alphaInclusive": 0.05,
+      "kind": "FDR-corrected-positive"
     },
     "valueRange": [
       0.5,

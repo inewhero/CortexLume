@@ -17,6 +17,14 @@ BUILDER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILDER)
 
 
+def test_generated_json_uses_checkout_stable_lf_bytes(tmp_path: Path) -> None:
+    output = tmp_path / "manifest.json"
+    BUILDER.write_json(output, {"label": "memory", "values": [1, 2, 3]})
+    raw = output.read_bytes()
+    assert raw.endswith(b"\n")
+    assert b"\r\n" not in raw
+
+
 def test_default_profile_is_versioned_balanced_and_alias_safe() -> None:
     profile, targets = BUILDER.load_profile(PROFILE)
     assert profile["profileId"] == "cortexlume-fnirs-curated-v1"

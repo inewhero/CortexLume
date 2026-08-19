@@ -115,9 +115,9 @@ def test_fixture_pack_generation_is_byte_deterministic() -> None:
 
 def test_release_pack_is_locked_and_anatomically_oriented() -> None:
     expected_hashes = {
-        "catalog.json": "5604ac0a70257867b80a64e238bb42aec33abd05762aacb837139e20bd34f979",
+        "catalog.json": "4fb2d08ce9ce51fd2513735b14bc080a0e7d02ac024382de5a410ba1a4a4248b",
         "maps.npz": "81af86406777cd484d0b39c2cc6ad7219e2e25a22479b87eeb85d565494d1533",
-        "manifest.json": "5434537a0b5e41a70b9940c8ce4852d4ec52491f45ab685fd96a6b31afc55ad3",
+        "manifest.json": "9ea3e0436882d95e345de0e25e45f2fab88c30a269969018a6b6a7d5ff522c0b",
     }
     for name, expected in expected_hashes.items():
         assert hashlib.sha256((RELEASE / name).read_bytes()).hexdigest() == expected

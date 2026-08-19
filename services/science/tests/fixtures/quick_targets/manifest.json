@@ -2,7 +2,7 @@
   "distributionRole": "test-fixture",
   "files": {
     "catalog.json": {
-      "sha256": "f0618106024996fd0a2abccb58169804410c61ad802bfd7c61f5bdb71ac44a97"
+      "sha256": "a99db814fa7cd122c52416766badf29662ba1ac4604f93c859bc2a3a22fe4bc4"
     },
     "maps.npz": {
       "sha256": "b5ffd6fd01b1f1c9e1ef30d0fe3a2d4d979fd92285b647ff8f0b71bcf8f88f58"
@@ -19,10 +19,20 @@
     "sourceSpace": "synthetic-MNI-fixture",
     "storage": "sparse uint16 vertex indices + float16 positive z values",
     "termTfidfThresholdExclusive": 0.001,
-    "vertexSampling": "trilinear at official Cedalion mni152_r/a/s"
+    "vertexSampling": "nearest FDR support plus trilinear z at official Cedalion mni152_r/a/s"
   },
   "packId": "cortexlume-quick-target-test-fixture-v1",
   "qc": {
+    "candidateTermCount": 3,
+    "domainCounts": {
+      "Uncategorized": 3
+    },
+    "excludedTargets": [],
+    "mapSimilarity": {
+      "metric": "Pearson correlation across all 25,000 surface vertices, including zero support",
+      "pairs": [],
+      "reviewThresholdInclusive": 0.95
+    },
     "maps": [
       {
         "finitePositiveValues": true,
@@ -91,6 +101,10 @@
       }
     ],
     "passed": true,
+    "smallSurfaceSupport": {
+      "maps": [],
+      "reviewThresholdExclusive": 25
+    },
     "termCount": 3
   },
   "source": {

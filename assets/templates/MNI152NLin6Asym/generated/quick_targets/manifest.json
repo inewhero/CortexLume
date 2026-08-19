@@ -2,7 +2,7 @@
   "distributionRole": "release",
   "files": {
     "catalog.json": {
-      "sha256": "5604ac0a70257867b80a64e238bb42aec33abd05762aacb837139e20bd34f979"
+      "sha256": "4fb2d08ce9ce51fd2513735b14bc080a0e7d02ac024382de5a410ba1a4a4248b"
     },
     "maps.npz": {
       "sha256": "81af86406777cd484d0b39c2cc6ad7219e2e25a22479b87eeb85d565494d1533"

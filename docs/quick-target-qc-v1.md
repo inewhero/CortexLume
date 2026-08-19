@@ -10,9 +10,9 @@ documented in `quick-target-data.md`.
 - Included maps: 132 real, nonempty positive FDR-corrected surface maps.
 - Excluded: `awareness` (290 selected studies), reason
   `no-positive-FDR-surface-support`.
-- Catalog size: 82,037 bytes.
+- Catalog size: 79,094 bytes.
 - Sparse map archive size: 770,306 bytes.
-- Manifest size: 126,993 bytes.
+- Manifest size: 121,469 bytes.
 
 | Domain | Included maps |
 | --- | ---: |
@@ -47,13 +47,14 @@ is machine-readable in `manifest.json` under `qc.smallSurfaceSupport`.
 ## Integrity and reproducibility
 
 The final pack was regenerated from the completed, fully validated incremental
-pack. That repeat took exactly 63.00 seconds and produced byte-identical files:
+pack. The LF-normalized repeat took 60.89 seconds and produced byte-identical
+files on Windows and in a Git checkout:
 
 | File | SHA-256 |
 | --- | --- |
-| `catalog.json` | `5604ac0a70257867b80a64e238bb42aec33abd05762aacb837139e20bd34f979` |
+| `catalog.json` | `4fb2d08ce9ce51fd2513735b14bc080a0e7d02ac024382de5a410ba1a4a4248b` |
 | `maps.npz` | `81af86406777cd484d0b39c2cc6ad7219e2e25a22479b87eeb85d565494d1533` |
-| `manifest.json` | `5434537a0b5e41a70b9940c8ce4852d4ec52491f45ab685fd96a6b31afc55ad3` |
+| `manifest.json` | `9ea3e0436882d95e345de0e25e45f2fab88c30a269969018a6b6a7d5ff522c0b` |
 
 A one-new-map benchmark (`memory encoding`) took 72.63 seconds including the
 one-time Neurosynth-to-NiMARE dataset conversion. Incremental reuse never trusts
