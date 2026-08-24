@@ -27,6 +27,9 @@ function fixtureTarget(sourceKind: 'neurosynth-quick' | 'nifti-import' | 'harvar
 }
 
 function structured(result: Awaited<ReturnType<Client['callTool']>>): Record<string, unknown> {
+  if (result.isError || !result.structuredContent) {
+    throw new Error(`MCP tool failed: ${JSON.stringify(result.content)}`);
+  }
   return result.structuredContent as Record<string, unknown>;
 }
 
