@@ -378,18 +378,19 @@ export class CortexLumeMcpRuntime {
       const normalizedRoot = normalize(root);
       return normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}${path.sep}`);
     };
-    if (!this.roots.some((root) => within(resolved, path.resolve(root)))) {
+    const canonicalRoots = await Promise.all(this.roots.map(async (root) => {
+      const realRoot = existsSync(root) ? await realpath(root) : path.resolve(root);
+      return realRoot;
+    }));
+    const canonicalCandidate = path.join(await realpath(path.dirname(resolved)), path.basename(resolved));
+    if (!canonicalRoots.some((root) => within(canonicalCandidate, root))) {
       throw new Error(`Path is outside MCP authorized roots: ${candidate}`);
     }
-    const checked = mustExist
-      ? await realpath(resolved)
-      : path.join(await realpath(path.dirname(resolved)), path.basename(resolved));
-    const allowed = await Promise.all(this.roots.map(async (root) => {
-      const realRoot = existsSync(root) ? await realpath(root) : path.resolve(root);
-      return within(checked, realRoot);
-    }));
-    if (!allowed.some(Boolean)) throw new Error(`Path is outside MCP authorized roots: ${candidate}`);
-    return mustExist ? checked : resolved;
+    const checked = mustExist ? await realpath(resolved) : canonicalCandidate;
+    if (!canonicalRoots.some((root) => within(checked, root))) {
+      throw new Error(`Path is outside MCP authorized roots: ${candidate}`);
+    }
+    return checked;
   }
 
   private async writeUniqueAuthorizedOutput(requested: string, data: Uint8Array): Promise<string> {

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
@@ -110,8 +110,8 @@ describe('CortexLume MCP runtime', () => {
       name: 'save_project',
       arguments: { planId: selectedPlan.planId, candidateId, outputPath: requestedOutput, projectName: 'Agent E2E' },
     }));
-    expect(firstSave.path).toBe(requestedOutput);
-    expect(secondSave.path).not.toBe(requestedOutput);
+    expect(await realpath(firstSave.path as string)).toBe(await realpath(requestedOutput));
+    expect(await realpath(secondSave.path as string)).not.toBe(await realpath(requestedOutput));
     expect(await readFile(firstSave.path as string)).not.toHaveLength(0);
 
     const inspection = structured(await client.callTool({ name: 'inspect_project', arguments: { path: firstSave.path } }));
