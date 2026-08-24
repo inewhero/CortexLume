@@ -13,6 +13,7 @@ from cortexlume_science.anatomical_coverage import (
     SurfaceAtlasData,
     _stable_region_color,
     load_surface_atlas_data,
+    target_anatomical_profile,
 )
 from cortexlume_science.models import (
     AnatomicalCoverageChannel,
@@ -97,6 +98,19 @@ def test_mosaic_is_permutation_invariant_and_uses_stable_multi_patch_ids() -> No
         actual = next(region.weighted_atlas_mass for region in forward.regions if region.label_en == label)
         assert actual == pytest.approx(expected_mass)
     json.dumps(forward.model_dump(mode="json"), allow_nan=False)
+
+
+def test_target_anatomical_profile_uses_planner_supplied_surface_mass(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "cortexlume_science.anatomical_coverage.load_surface_atlas_data",
+        lambda: fixture_surface(),
+    )
+    profile = target_anatomical_profile([0, 2], [3.0, 1.0], 0.05)
+    assert profile["atlasId"]
+    assert profile["atlasSupportFraction"] == pytest.approx(1.0)
+    assert [region["labelEn"] for region in profile["regions"]] == ["Region A", "Region B"]
+    assert sum(region["massFraction"] for region in profile["regions"]) == pytest.approx(1.0)
+    assert profile["regions"][0]["massFraction"] > profile["regions"][1]["massFraction"]
 
 
 def test_all_uncovered_returns_empty_mosaic_without_nan() -> None:

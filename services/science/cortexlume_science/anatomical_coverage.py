@@ -113,6 +113,64 @@ def cortical_region_target(label: str) -> dict:
     }
 
 
+def target_anatomical_profile(
+    vertex_indices: list[int],
+    vertex_masses: list[float],
+    minimum_atlas_membership: float = 0.05,
+) -> dict:
+    """Summarize a sparse, surface-area-weighted target in atlas space.
+
+    The caller supplies the exact mass used by the planner (vertex area ×
+    target value), so the explanatory region profile and the optimization
+    objective stay numerically aligned.
+    """
+    indices = np.asarray(vertex_indices, dtype=np.int64)
+    masses = np.asarray(vertex_masses, dtype=np.float64)
+    if indices.ndim != 1 or masses.shape != indices.shape or indices.size == 0:
+        raise AnatomicalCoverageError("target_profile_sparse_shape_invalid")
+    if np.any(indices < 0) or np.any(indices >= VERTEX_COUNT) or len(np.unique(indices)) != len(indices):
+        raise AnatomicalCoverageError("target_profile_vertex_indices_invalid")
+    if not np.all(np.isfinite(masses)) or np.any(masses <= 0):
+        raise AnatomicalCoverageError("target_profile_vertex_masses_invalid")
+    if not 0 <= minimum_atlas_membership <= 1:
+        raise AnatomicalCoverageError("target_profile_membership_threshold_invalid")
+
+    atlas = load_surface_atlas_data()
+    label_indices = atlas.atlas_label_indices[indices]
+    memberships = atlas.atlas_memberships[indices]
+    valid = (
+        (label_indices != 255)
+        & (memberships > 0)
+        & (memberships >= minimum_atlas_membership)
+    )
+    region_masses: dict[int, float] = {}
+    for slot in range(3):
+        selected = valid[:, slot]
+        for label_index in np.unique(label_indices[selected, slot]):
+            label = int(label_index)
+            label_mask = selected & (label_indices[:, slot] == label)
+            region_masses[label] = region_masses.get(label, 0.0) + float(
+                np.dot(masses[label_mask], memberships[label_mask, slot])
+            )
+    total_region_mass = float(sum(region_masses.values()))
+    total_target_mass = float(masses.sum())
+    per_vertex_support = np.clip(np.where(valid, memberships, 0.0).sum(axis=1), 0.0, 1.0)
+    support_fraction = float(np.dot(masses, per_vertex_support) / total_target_mass)
+    ordered_labels = sorted(
+        region_masses,
+        key=lambda label: (-region_masses[label], atlas.atlas_labels[label].casefold(), label),
+    )
+    return {
+        "atlasId": CORTICAL_ATLAS_ID,
+        "atlasSupportFraction": support_fraction,
+        "regions": [{
+            "atlasId": CORTICAL_ATLAS_ID,
+            "labelEn": atlas.atlas_labels[label],
+            "massFraction": region_masses[label] / total_region_mass,
+        } for label in ordered_labels] if total_region_mass > 0 else [],
+    }
+
+
 @dataclass(frozen=True)
 class SurfaceAtlasData:
     vertices_ras_mm: np.ndarray

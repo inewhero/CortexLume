@@ -38,6 +38,16 @@ def test_search_prefers_exact_term_and_supports_synonyms_typos_and_partial_token
     assert pack.search("not-a-term") == []
 
 
+def test_catalog_overview_exposes_complete_compact_grouped_vocabulary() -> None:
+    pack = QuickTargetPack(FIXTURE)
+    overview = pack.catalog_overview()
+    assert overview["count"] == len(pack.catalog)
+    assert {item["id"] for item in overview["targets"]} == {item["id"] for item in pack.catalog}
+    assert all("mapSha256" not in item for item in overview["targets"])
+    assert sum(domain["count"] for domain in overview["domains"]) == overview["count"]
+    assert overview["provenance"]["packId"] == pack.manifest["packId"]
+
+
 def test_release_exact_aliases_suppress_fuzzy_tail_results() -> None:
     pack = QuickTargetPack(RELEASE)
     assert [item["id"] for item in pack.search("olfaction")] == ["neurosynth:olfactory"]

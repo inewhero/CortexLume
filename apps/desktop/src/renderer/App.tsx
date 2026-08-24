@@ -4,6 +4,7 @@ import { BidsSettings } from './components/BidsSettings';
 import { Inspector } from './components/Inspector';
 import { LayoutEditor } from './components/LayoutEditor';
 import { LayoutLibrary } from './components/LayoutLibrary';
+import { QuickTargetController } from './components/QuickTarget';
 import { TopBar } from './components/TopBar';
 import type { UpdateCheckResult } from '../shared/startup';
 import { useProjectStore } from './store/projectStore';
@@ -85,7 +86,7 @@ export function App() {
       />
       <main className="workspace" style={{ gridTemplateColumns: columns }}>
         <PanelFrame title="Optode Design" side="left" collapsed={!leftVisible}>
-          <div className="scroll-panel"><LayoutEditor /><BidsSettings /><LayoutLibrary /></div>
+          <div className="scroll-panel"><QuickTargetController /><LayoutEditor /><BidsSettings /><LayoutLibrary /></div>
         </PanelFrame>
         <PanelFrame title="3D Align">
           <HeadViewport />

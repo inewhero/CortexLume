@@ -3,6 +3,26 @@ import type { FunctionalTargetMap } from '@cortexlume/contracts';
 import { useProjectStore } from './projectStore';
 
 describe('anatomical coverage view state', () => {
+  it('keeps Quick Target and NIfTI mutually exclusive with the latest source active', () => {
+    useProjectStore.getState().newProject();
+    const quickTarget = {
+      target: { id: 'quick:memory', label: 'Memory' },
+      provenance: { sourceKind: 'neurosynth-quick' },
+    } as FunctionalTargetMap;
+    const niftiTarget = {
+      target: { id: 'nifti:task-map', label: 'task-map.nii.gz' },
+      provenance: { sourceKind: 'nifti-import' },
+    } as FunctionalTargetMap;
+
+    useProjectStore.getState().setFunctionalTarget(quickTarget);
+    expect(useProjectStore.getState().functionalTarget).toBe(quickTarget);
+    useProjectStore.getState().setFunctionalTarget(niftiTarget);
+
+    expect(useProjectStore.getState().functionalTarget).toBe(niftiTarget);
+    expect(useProjectStore.getState().project.functionalTarget).toBe(niftiTarget);
+    expect(useProjectStore.getState().project.surfaceOverlay).toBe('functional-target');
+  });
+
   it('makes Functional Target and anatomical coverage visually exclusive without deleting target data', () => {
     useProjectStore.getState().newProject();
     useProjectStore.getState().setAnatomyLayer('grayMatter', true);

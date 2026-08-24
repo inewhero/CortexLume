@@ -3,9 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FunctionalTargetMap } from '@cortexlume/contracts';
+import type { AnatomicalCoverageRequest, FunctionalTargetMap } from '@cortexlume/contracts';
+import type { PlannerCandidate } from '@cortexlume/core/node';
 import type { ScienceClient } from '@cortexlume/science-client';
-import { CortexLumeMcpRuntime } from './mcpServer';
+import { CortexLumeMcpRuntime, rerankEnrichedCandidates } from './mcpServer';
 
 const TEMPLATE_ROOT = path.resolve(process.cwd(), '../../assets/templates/MNI152NLin6Asym');
 
@@ -33,10 +34,111 @@ function structured(result: Awaited<ReturnType<Client['callTool']>>): Record<str
   return result.structuredContent as Record<string, unknown>;
 }
 
+function fixtureCoverage(request: AnatomicalCoverageRequest) {
+  return {
+    version: 1,
+    sourceKind: 'geometric-anatomical-coverage-prior',
+    targetSurface: 'Cedalion-ICBM152-25k',
+    vertexCount: 25_000,
+    channels: request.channels.map((channel) => ({
+      stableId: `${channel.instanceId}:${channel.pairId}`,
+      instanceId: channel.instanceId,
+      pairId: channel.pairId,
+      ...(channel.channelNumber == null ? {} : { channelNumber: channel.channelNumber }),
+      pathPointCount: channel.pointsRasMm.length,
+      pathLengthMm: 30,
+      pathSha256: 'a'.repeat(64),
+    })),
+    parameters: {
+      kernelSigmaMm: 12,
+      supportRadiusMm: 24,
+      minimumAtlasMembership: 0.05,
+      distanceMetric: 'euclidean-distance-to-polyline',
+      kernel: 'truncated-gaussian',
+      channelCombination: 'maximum-kernel-weight',
+      mosaicAssignment: 'maximum-harvard-oxford-membership',
+      regionAggregation: 'coverage-weighted-atlas-membership',
+      atlasMembershipAggregation: 'sum-retained-top3-without-renormalization',
+      summarySampling: 'vertex-sampled-not-surface-area-integrated',
+    },
+    mosaic: {
+      geometricVertexIndices: [], geometricCoverageWeights: [], vertexIndices: [], coverageWeights: [],
+      opacityWeights: [], regionIndices: [], atlasMemberships: [], dominantChannelIndices: [],
+    },
+    regions: [{
+      regionIndex: 0,
+      atlasId: 'Harvard-Oxford fixture',
+      labelEn: 'Left Precentral Gyrus',
+      colorHex: '#4477AA',
+      coveredAtlasMassFraction: 1,
+      weightedAtlasMass: 1,
+      dominantVertexCount: 0,
+      channelShares: request.channels.map((channel, channelIndex) => ({
+        channelIndex,
+        stableId: `${channel.instanceId}:${channel.pairId}`,
+        geometricShare: 1 / request.channels.length,
+      })),
+    }],
+    qc: { geometricCoveredVertexCount: 0, atlasLabeledVertexCount: 0, unlabeledCoveredVertexCount: 0, atlasSupportFraction: 1, flags: [] },
+    provenance: {
+      templateAssetVersion: 'fixture', coordinateConvention: 'RAS+', units: 'mm',
+      surfaceVertexCoordinatesSha256: 'b'.repeat(64), surfaceMeshSha256: 'c'.repeat(64),
+      atlasId: 'Harvard-Oxford fixture', atlasIndexSha256: 'd'.repeat(64),
+      atlasSampling: 'nearest-voxel-top3-original-membership',
+      interpretation: 'Geometric anatomical coverage prior; not photon sensitivity, fluence, or Jacobian.',
+    },
+  };
+}
+
+function rankingCandidate(
+  stableId: string,
+  nominal: number,
+  balanced: number,
+  anatomy: number,
+): PlannerCandidate {
+  return {
+    layouts: [],
+    instances: [],
+    summary: {
+      stableId,
+      rank: 1,
+      accepted: true,
+      rejectionReasons: [],
+      placements: [],
+      metrics: {
+        nominalTargetMassCoverage: nominal,
+        robustP10TargetMassCoverage: 0.1,
+        robustWorstTargetMassCoverage: 0.08,
+        minimumOptodeClearanceMm: 25,
+        meanSpacingDistortionMm: 0.5,
+        balancedTargetCoverage: balanced,
+        anatomicalTargetAlignment: anatomy,
+        maximumScalpCortexGapMm: 25,
+        cranialOptodeFraction: 1,
+        cranialRobustPassFraction: 1,
+      },
+    },
+  };
+}
+
 describe('CortexLume MCP runtime', () => {
   const clients: Client[] = [];
   afterEach(async () => {
     await Promise.all(clients.splice(0).map((client) => client.close()));
+  });
+
+  it('keeps functional specificity ahead of atlas-profile similarity for comparable coverage', () => {
+    const candidates = [
+      rankingCandidate('atlas-biased', 0.210, 0.18, 0.50),
+      rankingCandidate('functionally-focused', 0.206, 0.23, 0.30),
+      rankingCandidate('lower-coverage', 0.18, 0.24, 0.60),
+    ];
+    rerankEnrichedCandidates(candidates);
+    expect(candidates.map((candidate) => candidate.summary.stableId)).toEqual([
+      'functionally-focused',
+      'atlas-biased',
+      'lower-coverage',
+    ]);
   });
 
   it('handshakes, advertises stable schemas, plans all target kinds and preserves derived files', async () => {
@@ -45,9 +147,27 @@ describe('CortexLume MCP runtime', () => {
     await writeFile(niftiPath, 'mocked NIfTI bytes');
     const openGui = vi.fn();
     const science = {
-      request: vi.fn(async (pathname: string) => {
+      stop: vi.fn(),
+      request: vi.fn(async (pathname: string, payload?: unknown) => {
         if (pathname === '/v1/health') return { ok: true, templateVerified: true, atlasVerified: true };
         if (pathname === '/v1/targets/import') return { accepted: true, diagnostics: [], map: fixtureTarget('nifti-import') };
+        if (pathname === '/v1/targets/catalog') return { count: 1, targets: [{ id: 'neurosynth:fixture', label: 'fixture' }], domains: [], provenance: {} };
+        if (pathname === '/v1/coverage/target-profile') return {
+          atlasId: 'Harvard-Oxford fixture', atlasSupportFraction: 1,
+          regions: [{ atlasId: 'Harvard-Oxford fixture', labelEn: 'Left Precentral Gyrus', massFraction: 1 }],
+        };
+        if (pathname === '/v1/coverage/anatomical-summary') {
+          const coverage = fixtureCoverage(payload as AnatomicalCoverageRequest);
+          return {
+            atlasId: coverage.provenance.atlasId,
+            atlasSupportFraction: coverage.qc.atlasSupportFraction,
+            regions: coverage.regions.map((region) => ({
+              atlasId: region.atlasId,
+              labelEn: region.labelEn,
+              massFraction: region.coveredAtlasMassFraction,
+            })),
+          };
+        }
         if (pathname.startsWith('/v1/targets/')) return fixtureTarget('neurosynth-quick');
         if (pathname === '/v1/atlas/cortical-region-target') return fixtureTarget('harvard-oxford-region');
         if (pathname === '/v1/targets') return { targets: [], provenance: {} };
@@ -71,7 +191,7 @@ describe('CortexLume MCP runtime', () => {
 
     const listed = await client.listTools();
     expect(listed.tools.map((tool) => tool.name)).toEqual([
-      'get_capabilities', 'search_targets', 'list_atlas_regions', 'plan_project',
+      'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'plan_project',
       'save_project', 'inspect_project', 'open_project',
     ]);
     expect(listed.tools.find((tool) => tool.name === 'plan_project')?.inputSchema.required).toContain('target');
@@ -79,6 +199,8 @@ describe('CortexLume MCP runtime', () => {
     const capabilities = structured(await client.callTool({ name: 'get_capabilities', arguments: {} }));
     expect(capabilities.projectFormatVersion).toBe(2);
     expect((capabilities.assets as { ready: boolean }).ready).toBe(true);
+    const catalog = structured(await client.callTool({ name: 'list_targets', arguments: {} }));
+    expect(catalog.count).toBe(1);
 
     const targetRequests = [
       { kind: 'quick-target', id: 'neurosynth:working-memory' },
@@ -96,6 +218,8 @@ describe('CortexLume MCP runtime', () => {
       const plan = structured(result);
       expect(plan.candidates).toHaveLength(3);
       expect(plan.recommendedCandidateId).toBeTruthy();
+      expect((plan.targetAnatomy as { regions: unknown[] }).regions).toHaveLength(1);
+      expect((plan.candidates as Array<{ anatomicalCoverage: { regions: unknown[] } }>)[0]!.anatomicalCoverage.regions).toHaveLength(1);
       plans.push(plan);
     }
 

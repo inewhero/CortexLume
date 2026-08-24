@@ -39,6 +39,11 @@ def test_quick_target_search_and_map_endpoints(monkeypatch) -> None:
         assert typo.status_code == 200
         assert typo.json()["targets"][0]["id"] == "neurosynth:language"
 
+        catalog = client.get("/v1/targets/catalog", headers=headers)
+        assert catalog.status_code == 200
+        assert catalog.json()["count"] == len(catalog.json()["targets"])
+        assert {target["id"] for target in catalog.json()["targets"]} >= {"neurosynth:working-memory"}
+
         response = client.get("/v1/targets/neurosynth:working-memory", headers=headers)
         assert response.status_code == 200
         body = response.json()
@@ -141,14 +146,15 @@ def test_harvard_oxford_region_catalog_and_sparse_target() -> None:
 
 def test_anatomical_coverage_endpoint_returns_single_sparse_mosaic() -> None:
     vertices = load_surface_atlas_data().vertices_ras_mm
-    response = client.post("/v1/coverage/anatomical", headers=headers, json={
+    payload = {
         "channels": [{
             "instanceId": "00000000-0000-4000-8000-000000000001",
             "pairId": "00000000-0000-4000-8000-000000000011",
             "channelNumber": 1,
             "pointsRasMm": [vertices[0].tolist(), vertices[100].tolist()],
         }],
-    })
+    }
+    response = client.post("/v1/coverage/anatomical", headers=headers, json=payload)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["sourceKind"] == "geometric-anatomical-coverage-prior"
@@ -157,6 +163,16 @@ def test_anatomical_coverage_endpoint_returns_single_sparse_mosaic() -> None:
     assert len(body["mosaic"]["vertexIndices"]) == len(body["mosaic"]["regionIndices"])
     assert body["provenance"]["interpretation"].startswith("Geometric anatomical coverage prior")
     assert "sensitivity" not in body["sourceKind"]
+
+    summary = client.post("/v1/coverage/anatomical-summary", headers=headers, json=payload)
+    assert summary.status_code == 200, summary.text
+    compact = summary.json()
+    assert compact["atlasId"] == body["provenance"]["atlasId"]
+    assert compact["atlasSupportFraction"] == body["qc"]["atlasSupportFraction"]
+    assert [region["labelEn"] for region in compact["regions"]] == [
+        region["labelEn"] for region in body["regions"]
+    ]
+    assert "mosaic" not in compact
 
 
 def test_channel_path_aggregates_only_labeled_cortical_voxels() -> None:

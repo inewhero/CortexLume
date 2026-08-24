@@ -38,6 +38,7 @@ __pycache__/
 /services/science/.mypy_cache/
 /services/science/pytest-cache-files-*/
 /.playwright-cli/
+/output/playwright/
 /.tmp/
 
 # Local agent/runtime metadata

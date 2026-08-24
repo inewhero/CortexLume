@@ -575,6 +575,7 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
       scalp: (rasPoint) => headModel.projectScalp(rasPoint),
       scalpSphereCenter: (rasPoint, radiusMm) => headModel.projectScalpSphereCenter(rasPoint, radiusMm),
       cortex: (rasPoint, radiusMm) => headModel.projectCortex(rasPoint, radiusMm),
+      scalpOffset: (anchor, rotationRad, uvMm) => headModel.projectScalpOffset(anchor, rotationRad, uvMm),
     });
     onReady();
   }, [headModel]);

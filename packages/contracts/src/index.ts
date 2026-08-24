@@ -516,8 +516,34 @@ export const PlanningCandidateMetricsSchema = z.object({
   robustWorstTargetMassCoverage: z.number().finite().min(0).max(1),
   minimumOptodeClearanceMm: z.number().finite().nonnegative(),
   meanSpacingDistortionMm: z.number().finite().nonnegative(),
+  /** Fraction of the candidate's geometric surface support that remains inside the target support. */
+  targetSupportSpecificity: z.number().finite().min(0).max(1).optional(),
+  /** Harmonic mean of target-mass coverage and target-support specificity. */
+  balancedTargetCoverage: z.number().finite().min(0).max(1).optional(),
+  /** Distribution overlap between candidate and target Harvard–Oxford region profiles. */
+  anatomicalTargetAlignment: z.number().finite().min(0).max(1).optional(),
+  /** Largest radial scalp-to-cortex gap among placed optodes. */
+  maximumScalpCortexGapMm: z.number().finite().nonnegative().optional(),
+  /** Fraction of optodes inside the planner's cranial support envelope. */
+  cranialOptodeFraction: z.number().finite().min(0).max(1).optional(),
+  /** Fraction of fixed ±5 mm/±5° perturbations that remain fully cranially supported. */
+  cranialRobustPassFraction: z.number().finite().min(0).max(1).optional(),
 });
 export type PlanningCandidateMetrics = z.infer<typeof PlanningCandidateMetricsSchema>;
+
+export const PlanningAnatomicalRegionSchema = z.object({
+  atlasId: z.string().min(1),
+  labelEn: z.string().min(1),
+  massFraction: z.number().finite().min(0).max(1),
+});
+export type PlanningAnatomicalRegion = z.infer<typeof PlanningAnatomicalRegionSchema>;
+
+export const PlanningAnatomicalProfileSchema = z.object({
+  atlasId: z.string().min(1),
+  atlasSupportFraction: z.number().finite().min(0).max(1),
+  regions: z.array(PlanningAnatomicalRegionSchema),
+});
+export type PlanningAnatomicalProfile = z.infer<typeof PlanningAnatomicalProfileSchema>;
 
 export const PlanningCandidateSummarySchema = z.object({
   stableId: z.string().min(1),
@@ -525,6 +551,7 @@ export const PlanningCandidateSummarySchema = z.object({
   accepted: z.boolean(),
   rejectionReasons: z.array(z.string()),
   metrics: PlanningCandidateMetricsSchema,
+  anatomicalCoverage: PlanningAnatomicalProfileSchema.optional(),
   placements: z.array(z.object({
     layoutId: z.string().uuid(),
     instanceId: z.string().uuid(),
@@ -544,6 +571,15 @@ export const AgentPlanningRecordSchema = z.object({
   seed: z.string().min(1),
   assetHashes: z.record(z.string().regex(/^[a-f0-9]{64}$/)),
   sourceProjectSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
+  targetAnatomy: PlanningAnatomicalProfileSchema.optional(),
+  guidance: z.object({
+    targetSurfaceComponentCount: z.number().int().positive(),
+    significantTargetComponentCount: z.number().int().positive(),
+    significantTargetRegionCount: z.number().int().nonnegative(),
+    requestedPatchCount: z.number().int().positive(),
+    recommendedPatchCount: z.number().int().min(1).max(4),
+    flags: z.array(z.string()),
+  }).optional(),
   candidates: z.array(PlanningCandidateSummarySchema).length(3),
   recommendedCandidateId: z.string().min(1),
   selectedCandidateId: z.string().min(1),

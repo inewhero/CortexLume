@@ -47,6 +47,41 @@ export function radialTangentBasis(anchor: Vec3, rotationRad: number): { u: Vec3
   return { u, v, normal };
 }
 
+/**
+ * Build a surface seed from local patch coordinates without flattening a
+ * large array into one tangent plane. The U axis follows a great-circle arc
+ * from the anchor and V is parallel-transported before its own arc step.
+ * Projecting this seed onto the locked scalp mesh preserves physical pitch
+ * far better than a single nearest-point projection of anchor + U + V.
+ */
+export function arcSurfaceSeed(
+  anchor: Vec3,
+  center: Vec3,
+  basis: Pick<ReturnType<typeof radialTangentBasis>, 'u' | 'v'>,
+  uvMm: readonly [number, number],
+): Vec3 {
+  const radialVector = add3(anchor, scale3(center, -1));
+  const radius = Math.hypot(...radialVector);
+  if (!Number.isFinite(radius) || radius < 1) return anchor;
+  const radial = scale3(radialVector, 1 / radius);
+  const tangentU = normalize3(add3(basis.u, scale3(radial, -dot3(basis.u, radial))));
+  const vWithoutRadial = add3(basis.v, scale3(radial, -dot3(basis.v, radial)));
+  let tangentV = normalize3(add3(vWithoutRadial, scale3(tangentU, -dot3(vWithoutRadial, tangentU))));
+  if (dot3(tangentV, basis.v) < 0) tangentV = scale3(tangentV, -1);
+
+  const uAngle = uvMm[0] / radius;
+  const afterU = add3(
+    scale3(radial, Math.cos(uAngle)),
+    scale3(tangentU, Math.sin(uAngle)),
+  );
+  const vAngle = uvMm[1] / radius;
+  const afterUv = normalize3(add3(
+    scale3(afterU, Math.cos(vAngle)),
+    scale3(tangentV, Math.sin(vAngle)),
+  ));
+  return add3(center, scale3(afterUv, radius));
+}
+
 export function effectiveUv(layout: LayoutDefinition, instance: LayoutInstance, optodeId: string): Vec2 {
   return instance.overrides.find((override) => override.optodeId === optodeId)?.uvMm
     ?? layout.optodes.find((optode) => optode.id === optodeId)?.uvMm

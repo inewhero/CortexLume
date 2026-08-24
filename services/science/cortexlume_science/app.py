@@ -13,6 +13,7 @@ from .anatomical_coverage import (
     compute_anatomical_coverage,
     cortical_region_target,
     list_cortical_regions,
+    target_anatomical_profile,
 )
 from .atlas import atlas_status, query_probability_path, query_probability_volume
 from .geometry import cortex_projection, fit_errors, fitted_positions, inward_depth_target, pair_midpoint
@@ -80,6 +81,17 @@ def search_quick_targets(
     }
 
 
+@app.get("/v1/targets/catalog")
+def list_quick_target_catalog(
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    authorize(authorization)
+    try:
+        return load_quick_target_pack().catalog_overview()
+    except (OSError, ValueError, KeyError, QuickTargetError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
 @app.get("/v1/targets/{target_id}")
 def get_quick_target(
     target_id: str,
@@ -94,6 +106,24 @@ def get_quick_target(
     if target is None:
         raise HTTPException(status_code=404, detail="Quick Target not found")
     return target
+
+
+@app.post("/v1/coverage/target-profile")
+def functional_target_anatomical_profile(
+    payload: dict[str, Any],
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    authorize(authorization)
+    try:
+        return target_anatomical_profile(
+            payload.get("vertexIndices", []),
+            payload.get("vertexMasses", []),
+            payload.get("minimumAtlasMembership", 0.05),
+        )
+    except (TypeError, ValueError, AnatomicalCoverageError) as error:
+        detail = str(error)
+        status_code = 422 if detail.startswith("target_profile_") else 503
+        raise HTTPException(status_code=status_code, detail=detail) from error
 
 
 @app.get("/v1/atlas/cortical-regions")
@@ -321,6 +351,31 @@ def anatomical_coverage(
         if detail.startswith(("coverage_channel_", "coverage_kernel_")):
             raise HTTPException(status_code=422, detail=detail) from error
         raise HTTPException(status_code=503, detail=detail) from error
+
+
+@app.post("/v1/coverage/anatomical-summary")
+def anatomical_coverage_summary(
+    request: AnatomicalCoverageRequest,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Return only the compact atlas distribution needed by Agent planning."""
+    authorize(authorization)
+    try:
+        analysis = compute_anatomical_coverage(request)
+    except AnatomicalCoverageError as error:
+        detail = str(error)
+        if detail.startswith(("coverage_channel_", "coverage_kernel_")):
+            raise HTTPException(status_code=422, detail=detail) from error
+        raise HTTPException(status_code=503, detail=detail) from error
+    return {
+        "atlasId": analysis.provenance.atlas_id,
+        "atlasSupportFraction": analysis.qc.atlas_support_fraction,
+        "regions": [{
+            "atlasId": region.atlas_id,
+            "labelEn": region.label_en,
+            "massFraction": region.covered_atlas_mass_fraction,
+        } for region in analysis.regions],
+    }
 
 
 @app.post("/v1/projects/validate")

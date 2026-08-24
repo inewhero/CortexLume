@@ -30,8 +30,9 @@ describe('QuickTarget', () => {
     });
     render(<QuickTarget selectedTarget={null} onSelect={onSelect} onClear={vi.fn()} />);
 
-    const toggle = screen.getByRole('button', { name: /functional target/i });
+    const toggle = screen.getByRole('button', { name: /quick target/i });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).not.toHaveTextContent('UNTARGETED');
     expect(screen.getByRole('searchbox', { hidden: true }).closest('.quick-target-body')).toHaveAttribute('aria-hidden', 'true');
     fireEvent.click(toggle);
     const result = await screen.findByRole('button', { name: /working memory/i });
@@ -45,7 +46,7 @@ describe('QuickTarget', () => {
       quickTargetMap: vi.fn(),
     });
     render(<QuickTarget selectedTarget={null} onSelect={vi.fn()} onClear={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /functional target/i }));
+    fireEvent.click(screen.getByRole('button', { name: /quick target/i }));
     expect(await screen.findByText('Memory & Learning / Working Memory')).toBeInTheDocument();
   });
 
@@ -54,7 +55,9 @@ describe('QuickTarget', () => {
     setBridge({ quickTargetSearch: vi.fn(), quickTargetMap: vi.fn() });
     render(<QuickTarget selectedTarget={target} onSelect={vi.fn()} onClear={onClear} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /functional target/i }));
+    const toggle = screen.getByRole('button', { name: /quick target/i });
+    expect(toggle).not.toHaveTextContent('Working memory');
+    fireEvent.click(toggle);
     expect(screen.getByText('HEATMAP ACTIVE IN 3D ALIGN.')).toBeInTheDocument();
     expect(screen.getByText('Memory & Learning / Working Memory')).toBeInTheDocument();
     expect(screen.getByText('Middle frontal gyrus')).toBeInTheDocument();
@@ -70,8 +73,8 @@ describe('QuickTarget', () => {
       quickTargetMap: vi.fn(),
     });
     render(<QuickTarget selectedTarget={target} onSelect={vi.fn()} onClear={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /functional target/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'QUICK TARGET' }));
+    fireEvent.click(screen.getByRole('button', { name: /quick target/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'CHANGE TARGET' }));
 
     expect(screen.getByText(/current layout will not change/i)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /language/i })).toBeInTheDocument();
@@ -88,7 +91,7 @@ describe('QuickTarget', () => {
       quickTargetMap: vi.fn(),
     });
     render(<QuickTarget selectedTarget={null} onSelect={onSelect} onClear={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /functional target/i }));
+    fireEvent.click(screen.getByRole('button', { name: /quick target/i }));
     fireEvent.click(await screen.findByRole('button', { name: /motor/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Map pack read failed.');
     fireEvent.click(screen.getByRole('button', { name: 'RETRY' }));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   channelSensitivityPath,
   distance3,
@@ -14,7 +14,6 @@ import type { DigitizerImport, Vec3 } from '@cortexlume/contracts';
 import { DigitizerDialog, type MappingScope } from './DigitizerDialog';
 import { FIVE_POINT_LABELS, type FivePointLabel } from '../lib/digitizer';
 import { TargetMapImportDialog } from './TargetMapImportDialog';
-import { QuickTargetController } from './QuickTarget';
 
 const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code: string }> = [
   { key: 'scalp', label: 'Scalp envelope', code: 'SCLP' },
@@ -50,7 +49,7 @@ export function Inspector() {
     setProjectionMode, resetInstanceOverride, setAnatomyLayer, setAnatomyAppearance,
     setBidsSettingsExpanded, setDefaultDepth,
     confirmDigitizerMapping, confirmFivePointCalibration, setDigitizerPreview,
-    setFunctionalTarget,
+    functionalTarget, setFunctionalTarget, setFunctionalTargetVisible,
     anatomicalCoverage, anatomicalCoverageEnabled, anatomicalCoverageMode,
     selectedCoverageRegionIndex, anatomicalCoverageError,
     setAnatomicalCoverageEnabled, setAnatomicalCoverageMode, setSelectedCoverageRegion,
@@ -285,6 +284,7 @@ export function Inspector() {
         <div className="workflow-row"><span>IMPORT</span><div className="project-actions">
           <button onClick={importDigitizer}>DIGITIZER</button>
           <button onClick={openFivePointEntry}>5-POINT</button>
+          <button onClick={() => setTargetMapDialog(true)}>NIFTI MAP</button>
         </div></div>
         <div className="workflow-row"><span>EXPORT</span><div className="project-actions">
           <button onClick={exportBrainNet}>BRAINNET</button>
@@ -315,63 +315,75 @@ export function Inspector() {
       />}
 
       <section className="control-block">
-        <div className="control-block-title"><span>ANATOMY LAYERS</span><code>VIEW</code></div>
+        <div className="control-block-title"><span>ANATOMY LAYERS</span></div>
         <div className="layer-list">
           {ANATOMY_LAYERS.map((layer) => {
             const materialLayer = layer.key === 'grayMatter' || layer.key === 'whiteMatter' ? layer.key : null;
             const material = materialLayer ? anatomyAppearance[materialLayer] : null;
-            return (
-            <div className="layer-row" key={layer.key}>
-              <span><code>{layer.code}</code>{layer.label}</span>
-              <div className="layer-row-actions">
-                {materialLayer && material && <button
-                  type="button"
-                  data-material-trigger
-                  className="material-swatch"
-                  style={{ backgroundColor: material.color }}
-                  aria-label={`Edit ${layer.label} material`}
-                  title="Color and opacity"
-                  onClick={() => setMaterialPopup((current) => current === materialLayer ? null : materialLayer)}
-                />}
-                <input
-                  aria-label={`${layer.code} ${layer.label}`}
-                  type="checkbox"
-                  checked={anatomyVisibility[layer.key]}
-                  onChange={(event) => setAnatomyLayer(layer.key, event.target.checked)}
-                />
+            return <Fragment key={layer.key}>
+              <div className="layer-row">
+                <span><code>{layer.code}</code>{layer.label}</span>
+                <div className="layer-row-actions">
+                  {materialLayer && material && <button
+                    type="button"
+                    data-material-trigger
+                    className="material-swatch"
+                    style={{ backgroundColor: material.color }}
+                    aria-label={`Edit ${layer.label} material`}
+                    title="Color and opacity"
+                    onClick={() => setMaterialPopup((current) => current === materialLayer ? null : materialLayer)}
+                  />}
+                  <input
+                    aria-label={`${layer.code} ${layer.label}`}
+                    type="checkbox"
+                    checked={anatomyVisibility[layer.key]}
+                    onChange={(event) => setAnatomyLayer(layer.key, event.target.checked)}
+                  />
+                </div>
+                {materialLayer && material && materialPopup === materialLayer && (
+                  <div className="layer-material-popover" ref={materialPopupRef}>
+                    <div className="material-popover-title"><strong>{layer.label}</strong><code>{Math.round(material.opacity * 100)}%</code></div>
+                    <label className="material-color-field">
+                      <span>COLOR</span>
+                      <input
+                        type="color" value={material.color}
+                        aria-label={`${layer.label} color`}
+                        onChange={(event) => setAnatomyAppearance(materialLayer, { color: event.target.value })}
+                      />
+                      <code>{material.color.toUpperCase()}</code>
+                    </label>
+                    <label className="material-opacity-field">
+                      <span>OPACITY</span>
+                      <input
+                        type="range" min={5} max={100} step={1}
+                        value={Math.round(material.opacity * 100)}
+                        aria-label={`${layer.label} opacity`}
+                        onInput={(event) => setAnatomyAppearance(materialLayer, { opacity: Number(event.currentTarget.value) / 100 })}
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
-              {materialLayer && material && materialPopup === materialLayer && (
-                <div className="layer-material-popover" ref={materialPopupRef}>
-                  <div className="material-popover-title"><strong>{layer.label}</strong><code>{Math.round(material.opacity * 100)}%</code></div>
-                  <label className="material-color-field">
-                    <span>COLOR</span>
+              {layer.key === 'whiteMatter' && functionalTarget && (
+                <div className="layer-row functional-map-layer">
+                  <span title={functionalTarget.target.label}><code>FMAP</code>Functional map</span>
+                  <div className="layer-row-actions">
                     <input
-                      type="color" value={material.color}
-                      aria-label={`${layer.label} color`}
-                      onChange={(event) => setAnatomyAppearance(materialLayer, { color: event.target.value })}
+                      aria-label="FMAP Functional map"
+                      type="checkbox"
+                      checked={project.surfaceOverlay === 'functional-target'}
+                      onChange={(event) => setFunctionalTargetVisible(event.target.checked)}
                     />
-                    <code>{material.color.toUpperCase()}</code>
-                  </label>
-                  <label className="material-opacity-field">
-                    <span>OPACITY</span>
-                    <input
-                      type="range" min={5} max={100} step={1}
-                      value={Math.round(material.opacity * 100)}
-                      aria-label={`${layer.label} opacity`}
-                      onInput={(event) => setAnatomyAppearance(materialLayer, { opacity: Number(event.currentTarget.value) / 100 })}
-                    />
-                  </label>
+                  </div>
                 </div>
               )}
-            </div>
-          );})}
+            </Fragment>;
+          })}
         </div>
       </section>
 
-      <QuickTargetController onImportNifti={() => setTargetMapDialog(true)} />
-
       <section className="control-block">
-        <div className="control-block-title"><span>PROJECTION</span><code>MNI</code></div>
+        <div className="control-block-title"><span>PROJECTION</span></div>
         <div className="segmented full-width">
           <button className={project.projectionSettings.mode === 'scalp' ? 'active' : ''} onClick={() => setProjectionMode('scalp')}>SCALP</button>
           <button className={project.projectionSettings.mode === 'cortex' ? 'active' : ''} onClick={() => setProjectionMode('cortex')}>CORTEX</button>
@@ -442,7 +454,7 @@ export function Inspector() {
       </section>
 
       <section className="control-block selection-block">
-        <div className="control-block-title"><span>SELECTION</span><code>{optode?.label ?? (pair ? `CH${pair.channelNumber ?? '—'}` : layout?.name) ?? 'NONE'}</code></div>
+        <div className="control-block-title"><span>SELECTION</span></div>
         {!instance && <div className="empty-state">LOAD OR DRAG A PATCH INTO THE 3D PANEL</div>}
         {instance && !optode && !pair && (
           <dl>

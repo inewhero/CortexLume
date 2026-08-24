@@ -255,6 +255,35 @@ class QuickTargetPack:
             ranked = [item for item in ranked if item[0][0] == exact_tier]
         return [dict(record) for _, record in ranked[:limit]]
 
+    def catalog_overview(self) -> dict[str, Any]:
+        """Return the complete compact catalog for Agent-side discovery."""
+        fields = ("id", "label", "aliases", "domain", "subdomain", "studyCount", "laterality")
+        targets = [{key: record[key] for key in fields if key in record} for record in self.catalog]
+        targets.sort(key=lambda record: (
+            str(record.get("domain", "")).casefold(),
+            str(record.get("subdomain", "")).casefold(),
+            str(record["label"]).casefold(),
+        ))
+        domains: dict[str, dict[str, int]] = {}
+        for record in targets:
+            domain = str(record.get("domain", "Uncategorized"))
+            subdomain = str(record.get("subdomain", "Uncategorized"))
+            domains.setdefault(domain, {})[subdomain] = domains.setdefault(domain, {}).get(subdomain, 0) + 1
+        return {
+            "count": len(targets),
+            "targets": targets,
+            "domains": [{
+                "name": domain,
+                "count": sum(subdomains.values()),
+                "subdomains": [{"name": name, "count": count} for name, count in sorted(subdomains.items())],
+            } for domain, subdomains in sorted(domains.items())],
+            "provenance": {
+                "packId": self.manifest["packId"],
+                "distributionRole": self.manifest["distributionRole"],
+                "space": self.manifest["space"],
+            },
+        }
+
     def get(self, target_id: str) -> dict[str, Any] | None:
         found = self._by_id.get(target_id)
         if found is None:

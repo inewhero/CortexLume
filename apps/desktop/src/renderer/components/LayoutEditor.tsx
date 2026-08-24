@@ -20,6 +20,8 @@ export function LayoutEditor() {
   const [zoom, setZoom] = useState(1);
   const [editingPairId, setEditingPairId] = useState<string | null>(null);
   const [editingChannel, setEditingChannel] = useState('');
+  const [quickMatrixExpanded, setQuickMatrixExpanded] = useState(true);
+  const [channelSolverExpanded, setChannelSolverExpanded] = useState(true);
   const [channelIndexExpanded, setChannelIndexExpanded] = useState(false);
   const [layoutNameDraft, setLayoutNameDraft] = useState('');
   const {
@@ -259,29 +261,47 @@ export function LayoutEditor() {
         })()}
       </div>
 
-      <section className="control-block">
-        <div className="control-block-title"><span>QUICK MATRIX</span><code>X × Y</code></div>
-        <div className="parameter-grid three">
-          <label><span>X COLS</span><input type="number" min={1} max={12} value={gridColumns} onChange={(event) => setGridColumns(Number(event.target.value))} /></label>
-          <label><span>Y ROWS</span><input type="number" min={1} max={12} value={gridRows} onChange={(event) => setGridRows(Number(event.target.value))} /></label>
-          <label><span>PITCH MM</span><input type="number" min={1} max={100} value={gridPitch} onChange={(event) => setGridPitch(Number(event.target.value))} /></label>
-        </div>
-        <div className="button-row">
-          <button onClick={reverseOptodeTypes}>REVERSE S / D</button>
-          <button className="primary" onClick={() => generateGrid(gridColumns, gridRows, gridPitch)}>BUILD {gridColumns}×{gridRows}</button>
+      <section className={`control-block collapsible-control${quickMatrixExpanded ? ' is-expanded' : ' is-collapsed'}`}>
+        <button
+          type="button"
+          className="control-block-title collapsible-control-toggle"
+          aria-expanded={quickMatrixExpanded}
+          onClick={() => setQuickMatrixExpanded((value) => !value)}
+        >
+          <span>QUICK MATRIX</span><code>{quickMatrixExpanded ? '−' : '+'}</code>
+        </button>
+        <div className="collapsible-control-body">
+          <div className="parameter-grid three">
+            <label><span>X COLS</span><input type="number" min={1} max={12} value={gridColumns} onChange={(event) => setGridColumns(Number(event.target.value))} /></label>
+            <label><span>Y ROWS</span><input type="number" min={1} max={12} value={gridRows} onChange={(event) => setGridRows(Number(event.target.value))} /></label>
+            <label><span>PITCH MM</span><input type="number" min={1} max={100} value={gridPitch} onChange={(event) => setGridPitch(Number(event.target.value))} /></label>
+          </div>
+          <div className="button-row">
+            <button onClick={reverseOptodeTypes}>REVERSE S / D</button>
+            <button className="primary" onClick={() => generateGrid(gridColumns, gridRows, gridPitch)}>BUILD {gridColumns}×{gridRows}</button>
+          </div>
         </div>
       </section>
 
-      <section className="control-block">
-        <div className="control-block-title"><span>CHANNEL SOLVER</span><code>MM</code></div>
-        <div className="parameter-grid two">
-          <label><span>MIN</span><input type="number" min={1} max={100} value={minDistance} onChange={(event) => setMinDistance(Number(event.target.value))} /></label>
-          <label><span>MAX</span><input type="number" min={1} max={100} value={maxDistance} onChange={(event) => setMaxDistance(Number(event.target.value))} /></label>
-        </div>
-        <div className="button-row">
-          <button onClick={() => { setMinDistance(25); setMaxDistance(40); }}>25–40</button>
-          <button onClick={() => { setMinDistance(5); setMaxDistance(15); }}>05–15</button>
-          <button className="primary" onClick={() => generatePairs(minDistance, maxDistance)}>GENERATE CH</button>
+      <section className={`control-block collapsible-control${channelSolverExpanded ? ' is-expanded' : ' is-collapsed'}`}>
+        <button
+          type="button"
+          className="control-block-title collapsible-control-toggle"
+          aria-expanded={channelSolverExpanded}
+          onClick={() => setChannelSolverExpanded((value) => !value)}
+        >
+          <span>CHANNEL SOLVER</span><code>{channelSolverExpanded ? '−' : '+'}</code>
+        </button>
+        <div className="collapsible-control-body">
+          <div className="parameter-grid two">
+            <label><span>MIN</span><input type="number" min={1} max={100} value={minDistance} onChange={(event) => setMinDistance(Number(event.target.value))} /></label>
+            <label><span>MAX</span><input type="number" min={1} max={100} value={maxDistance} onChange={(event) => setMaxDistance(Number(event.target.value))} /></label>
+          </div>
+          <div className="button-row">
+            <button onClick={() => { setMinDistance(25); setMaxDistance(40); }}>25–40</button>
+            <button onClick={() => { setMinDistance(5); setMaxDistance(15); }}>05–15</button>
+            <button className="primary" onClick={() => generatePairs(minDistance, maxDistance)}>GENERATE CH</button>
+          </div>
         </div>
       </section>
 

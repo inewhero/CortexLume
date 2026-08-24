@@ -1,4 +1,5 @@
 import type { LayoutDefinition, LayoutInstance, Vec2, Vec3 } from '@cortexlume/contracts';
+import { arcSurfaceSeed } from '@cortexlume/core';
 import * as THREE from 'three';
 
 export const SCALP_RADII: Vec3 = [86, 105, 100];
@@ -7,15 +8,18 @@ export const CORTEX_RADII: Vec3 = [72, 88, 82];
 let scalpSurfaceProjector: ((point: Vec3) => Vec3) | null = null;
 let scalpSphereCenterProjector: ((point: Vec3, radiusMm: number) => Vec3) | null = null;
 let corticalSurfaceProjector: ((point: Vec3, radiusMm: number) => Vec3) | null = null;
+let scalpOffsetProjector: ((anchor: Vec3, rotationRad: number, uvMm: Vec2) => Vec3) | null = null;
 
 export function registerSurfaceProjectors(projectors: {
   scalp(point: Vec3): Vec3;
   scalpSphereCenter(point: Vec3, radiusMm: number): Vec3;
   cortex(point: Vec3, radiusMm: number): Vec3;
+  scalpOffset?(anchor: Vec3, rotationRad: number, uvMm: Vec2): Vec3;
 }): void {
   scalpSurfaceProjector = projectors.scalp;
   scalpSphereCenterProjector = projectors.scalpSphereCenter;
   corticalSurfaceProjector = projectors.cortex;
+  scalpOffsetProjector = projectors.scalpOffset ?? null;
 }
 
 export function projectToScalpSurface(point: Vec3): Vec3 {
@@ -159,14 +163,17 @@ export function fittedOptodePositions(
   instance: LayoutInstance,
 ): Map<string, Vec3> {
   const anchor = projectToScalpSurface(instance.anchorRasMm);
-  const basis = tangentBasis(anchor, instance.rotationRad + (instance.mappingRotationRad ?? 0));
+  const rotationRad = instance.rotationRad + (instance.mappingRotationRad ?? 0);
+  const basis = tangentBasis(anchor, rotationRad);
   const digitized = new Map((instance.digitizerPositions ?? []).map((position) => [position.optodeId, position.scalpRasMm]));
   return new Map(layout.optodes.map((optode) => {
     const measured = digitized.get(optode.id);
     if (measured) return [optode.id, measured] as const;
     const uv = effectiveUv(layout, instance, optode.id);
-    const tangentPoint = add3(anchor, add3(scale3(basis.u, uv[0]), scale3(basis.v, uv[1])));
-    return [optode.id, projectToScalpSurface(tangentPoint)] as const;
+    const contact = scalpOffsetProjector
+      ? scalpOffsetProjector(anchor, rotationRad, uv)
+      : projectToScalpSurface(arcSurfaceSeed(anchor, [0, 0, 0], basis, uv));
+    return [optode.id, contact] as const;
   }));
 }
 

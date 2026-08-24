@@ -1,9 +1,7 @@
 .quick-target { margin-bottom: 10px; border: 1px solid var(--line-strong); background: #edf0ed; }
-.quick-target-toggle { width: 100%; min-height: 34px; display: grid; grid-template-columns: 1fr minmax(0, auto) 14px; align-items: center; gap: 9px; padding: 6px 9px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #dfe2df; text-align: left; }
+.quick-target-toggle { width: 100%; min-height: 34px; display: grid; grid-template-columns: 1fr 14px; align-items: center; gap: 9px; padding: 6px 9px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #dfe2df; text-align: left; }
 .quick-target-toggle:hover:not(:disabled) { color: var(--ink); background: #d5d9d6; border-color: var(--line-strong); }
 .quick-target-toggle > strong { font-size: 10px; letter-spacing: .1em; }
-.quick-target-toggle > span { overflow: hidden; color: #6a7376; font: 9px "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.quick-target.has-target .quick-target-toggle > span { color: #216848; font-weight: 800; }
 .quick-target-toggle > code { text-align: right; }
 .quick-target-body { max-height: 760px; overflow: hidden; opacity: 1; visibility: visible; transform: translateY(0); transition: max-height 320ms cubic-bezier(.22, .72, .18, 1), opacity 180ms ease 60ms, transform 240ms ease, visibility 0s; }
 .quick-target.is-collapsed .quick-target-toggle { border-bottom-color: transparent; }
@@ -50,9 +48,6 @@
 .target-guidance { margin: 10px 0 0; color: #4b5659; font-size: 10.5px; line-height: 1.5; }
 .target-guidance b { color: #20292c; }
 .target-change { width: 100%; min-height: 32px; margin-top: 10px; }
-.target-source-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-.target-source-actions .target-change { margin-top: 0; }
-.target-import-nifti { width: 100%; min-height: 32px; margin-bottom: 8px; }
 .target-error { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 9px 11px; color: #fff; background: #9b342f; font-size: 9.5px; }
 .target-error span { min-width: 0; overflow-wrap: anywhere; }
 .target-error button { flex: 0 0 auto; min-height: var(--control-height-compact); padding: 4px 8px; color: #fff; border-color: #e6b5b1; background: transparent; font-size: var(--text-meta); }

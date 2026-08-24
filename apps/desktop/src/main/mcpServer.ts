@@ -6,11 +6,15 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
 import {
+  AnatomicalCoverageRequestSchema,
   CortexLumeProjectSchema,
   FunctionalTargetMapSchema,
+  PlanningAnatomicalProfileSchema,
   type AgentPlanningRecord,
+  type AnatomicalCoverageRequest,
   type CortexLumeProject,
   type FunctionalTargetMap,
+  type PlanningAnatomicalProfile,
   type ProjectionResult,
   type Vec3,
 } from '@cortexlume/contracts';
@@ -20,6 +24,7 @@ import {
   distance3,
   loadHeadModelFromAssets,
   planLayouts,
+  summarizeTargetSurfaceComponents,
   type LoadedHeadModel,
   type PlannerCandidate,
   type PlannerPatchSpec,
@@ -40,6 +45,15 @@ interface PlanCacheEntry {
   plannedAt: string;
   optodeRadiusMm: number;
   transmissionDepthMm: number;
+  targetAnatomy: PlanningAnatomicalProfile;
+  guidance: {
+    targetSurfaceComponentCount: number;
+    significantTargetComponentCount: number;
+    significantTargetRegionCount: number;
+    requestedPatchCount: number;
+    recommendedPatchCount: number;
+    flags: string[];
+  };
 }
 
 export interface McpRuntimeOptions {
@@ -72,6 +86,63 @@ function defaultDevice() {
     manufacturer: 'Shimadzu', model: 'LABNIRS', wavelengthsNm: [780, 805, 830],
     measurementType: 'NIRSCWAMPLITUDE' as const, units: 'V', sourceType: 'LASER', detectorType: 'PMT', samplingFrequencyHz: null,
   };
+}
+
+const PLANNING_COVERAGE_SETTINGS = {
+  kernelSigmaMm: 12,
+  supportRadiusMm: 24,
+  minimumAtlasMembership: 0.05,
+} as const;
+
+function buildCandidateCoverageRequest(
+  head: LoadedHeadModel['headModel'],
+  candidate: PlannerCandidate,
+  radiusMm: number,
+  depthMm: number,
+): AnatomicalCoverageRequest {
+  const channels = candidate.instances.flatMap((instance, index) => {
+    const layout = candidate.layouts[index]!;
+    const positions = head.fittedOptodePositions(layout, instance);
+    return layout.pairs.flatMap((pair) => {
+      const source = positions.get(pair.sourceId);
+      const detector = positions.get(pair.detectorId);
+      if (!source || !detector) return [];
+      return [{
+        instanceId: instance.id,
+        pairId: pair.id,
+        ...(pair.channelNumber == null ? {} : { channelNumber: pair.channelNumber }),
+        pointsRasMm: channelSensitivityPath(head, source, detector, radiusMm, depthMm).points,
+      }];
+    });
+  }).sort((left, right) => `${left.instanceId}:${left.pairId}`.localeCompare(`${right.instanceId}:${right.pairId}`));
+  return AnatomicalCoverageRequestSchema.parse({ channels, settings: PLANNING_COVERAGE_SETTINGS });
+}
+
+function anatomicalProfileOverlap(target: PlanningAnatomicalProfile, candidate: PlanningAnatomicalProfile): number {
+  const candidateMass = new Map(candidate.regions.map((region) => [`${region.atlasId}\0${region.labelEn}`, region.massFraction]));
+  return target.regions.reduce((sum, region) => (
+    sum + Math.min(region.massFraction, candidateMass.get(`${region.atlasId}\0${region.labelEn}`) ?? 0)
+  ), 0);
+}
+
+export function rerankEnrichedCandidates(candidates: PlannerCandidate[]): void {
+  candidates.sort((left, right) => {
+    if (left.summary.accepted !== right.summary.accepted) return left.summary.accepted ? -1 : 1;
+    const lm = left.summary.metrics;
+    const rm = right.summary.metrics;
+    const nominalDifference = rm.nominalTargetMassCoverage - lm.nominalTargetMassCoverage;
+    if (Math.abs(nominalDifference) > 0.005) return nominalDifference;
+    return (rm.balancedTargetCoverage ?? 0) - (lm.balancedTargetCoverage ?? 0)
+      || (rm.cranialRobustPassFraction ?? 0) - (lm.cranialRobustPassFraction ?? 0)
+      || rm.robustP10TargetMassCoverage - lm.robustP10TargetMassCoverage
+      || rm.robustWorstTargetMassCoverage - lm.robustWorstTargetMassCoverage
+      || (rm.anatomicalTargetAlignment ?? 0) - (lm.anatomicalTargetAlignment ?? 0)
+      || (lm.maximumScalpCortexGapMm ?? Number.POSITIVE_INFINITY) - (rm.maximumScalpCortexGapMm ?? Number.POSITIVE_INFINITY)
+      || rm.minimumOptodeClearanceMm - lm.minimumOptodeClearanceMm
+      || lm.meanSpacingDistortionMm - rm.meanSpacingDistortionMm
+      || left.summary.stableId.localeCompare(right.summary.stableId);
+  });
+  candidates.forEach((candidate, index) => { candidate.summary.rank = index + 1; });
 }
 
 function buildProjectionResults(head: LoadedHeadModel['headModel'], candidate: PlannerCandidate, radiusMm: number, depthMm: number): ProjectionResult[] {
@@ -113,6 +184,7 @@ function buildProjectionResults(head: LoadedHeadModel['headModel'], candidate: P
 
 export class CortexLumeMcpRuntime {
   private readonly plans = new Map<string, PlanCacheEntry>();
+  private readonly targetAnatomyCache = new Map<string, PlanningAnatomicalProfile>();
   private readonly roots: string[];
   private headPromise: Promise<LoadedHeadModel> | null = null;
 
@@ -127,7 +199,7 @@ export class CortexLumeMcpRuntime {
 
   createServer(): McpServer {
     const server = new McpServer({ name: 'CortexLume', version: this.options.applicationVersion }, {
-      instructions: 'Use search_targets or list_atlas_regions before plan_project when target identity is uncertain. plan_project never writes files. save_project writes a unique derived .cortexlume archive and never overwrites. open_project starts a separate desktop window for human review.',
+      instructions: 'Read list_targets before searching or selecting a Quick Target. Use search_targets only to narrow the known catalog, and list_atlas_regions for anatomical targets. plan_project returns functional, robustness, specificity, and Harvard–Oxford anatomical summaries for three candidates without writing files. Broad distributed targets may recommend multiple patches. save_project writes a unique derived .cortexlume archive and never overwrites. open_project starts a separate desktop window for human review.',
     });
 
     server.registerTool('get_capabilities', {
@@ -148,15 +220,22 @@ export class CortexLumeMcpRuntime {
         template: { id: 'MNI152NLin6Asym', surface: 'Cedalion-ICBM152-25k', coordinateConvention: 'RAS+', units: 'mm' },
         targetSources: ['quick-target', 'harvard-oxford-region', 'mni-point', 'nifti'],
         defaultPatch: { columns: 5, rows: 3, pitchMm: 30, topLeft: 'source', pattern: 'checkerboard', optodes: 15, channels: 22 },
-        defaults: { longChannelRangeMm: [25, 40], surfaceDistanceToleranceMm: 1.5, kernelSigmaMm: 12, supportRadiusMm: 24, transmissionDepthMm: 25, candidateCount: 3, overlapThresholdMm: 12 },
+        defaults: { longChannelRangeMm: [25, 40], surfaceDistanceToleranceMm: 1.5, maximumScalpCortexGapMm: 40, kernelSigmaMm: 12, supportRadiusMm: 24, transmissionDepthMm: 25, candidateCount: 3, overlapThresholdMm: 12 },
+        quickTargetDiscovery: { firstTool: 'list_targets', thenTool: 'search_targets', catalogIsOffline: true },
         authorizedRoots: this.roots,
         assets: assetState,
       });
     });
 
+    server.registerTool('list_targets', {
+      title: 'List Quick Target catalog',
+      description: 'Read the complete compact offline Quick Target catalog, grouped by domain, before choosing search terms or a target ID.',
+      inputSchema: {},
+    }, async () => toolResult(await this.options.science.request<Record<string, unknown>>('/v1/targets/catalog')));
+
     server.registerTool('search_targets', {
       title: 'Search Quick Targets',
-      description: 'Search the installed offline Quick Target catalog.',
+      description: 'Narrow the installed offline Quick Target catalog after list_targets has established the available vocabulary.',
       inputSchema: { query: z.string().max(120).default(''), limit: z.number().int().min(1).max(50).default(20) },
     }, async ({ query, limit }) => toolResult(await this.options.science.request<Record<string, unknown>>(`/v1/targets?q=${encodeURIComponent(query)}&limit=${limit}`)));
 
@@ -216,10 +295,63 @@ export class CortexLumeMcpRuntime {
         sourceProjectSha256: source?.archiveProjectSha256 ?? null,
       } as Record<string, unknown>;
       const requestHash = sha256Text(canonical(canonicalRequest));
+      let targetAnatomy = this.targetAnatomyCache.get(target.provenance.mapSha256);
+      if (!targetAnatomy) {
+        try {
+          targetAnatomy = PlanningAnatomicalProfileSchema.parse(await this.options.science.request('/v1/coverage/target-profile', {
+            vertexIndices: target.vertexIndices,
+            vertexMasses: target.vertexIndices.map((vertex, index) => assets.headModel.vertexAreasMm2[vertex]! * target.values[index]!),
+            minimumAtlasMembership: PLANNING_COVERAGE_SETTINGS.minimumAtlasMembership,
+          }));
+          this.targetAnatomyCache.set(target.provenance.mapSha256, targetAnatomy);
+        } catch (error) {
+          throw new Error(`Target anatomical profile failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      // Resolve the target's atlas profile before the CPU- and memory-heavy
+      // placement search. This keeps the small science process out of the
+      // peak-memory window and makes repeated planning reuse the hash cache.
+      // MCP owns a dedicated sidecar, so release its loaded NumPy assets while
+      // the mesh search runs; the first candidate summary restarts it cleanly.
+      this.options.science.stop();
       const result = planLayouts(assets.headModel, {
         target, patches: request.patches as PlannerPatchSpec[], longChannelRangeMm: request.longChannelRangeMm,
         optodeRadiusMm: request.optodeRadiusMm, transmissionDepthMm: request.transmissionDepthMm, seed: `${request.seed}:${requestHash}`,
       });
+      // The local science sidecar intentionally stays single-workload here:
+      // three concurrent 25k-surface atlas reductions contend for the same
+      // NumPy buffers and can make larger multi-patch plans less predictable.
+      for (const [candidateIndex, candidate] of result.candidates.entries()) {
+        let fullProfile: PlanningAnatomicalProfile;
+        try {
+          fullProfile = PlanningAnatomicalProfileSchema.parse(await this.options.science.request(
+            '/v1/coverage/anatomical-summary',
+            buildCandidateCoverageRequest(assets.headModel, candidate, request.optodeRadiusMm, request.transmissionDepthMm),
+          ));
+        } catch (error) {
+          throw new Error(`Candidate ${candidateIndex + 1} anatomical summary failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        candidate.summary.anatomicalCoverage = { ...fullProfile, regions: fullProfile.regions.slice(0, 5) };
+        candidate.summary.metrics.anatomicalTargetAlignment = anatomicalProfileOverlap(targetAnatomy, fullProfile);
+      }
+      rerankEnrichedCandidates(result.candidates);
+      result.recommendedCandidateId = result.candidates.find((candidate) => candidate.summary.accepted)!.summary.stableId;
+      const components = summarizeTargetSurfaceComponents(assets.headModel, target);
+      const significantComponents = components.filter((component) => component.massFraction >= 0.05);
+      const significantRegionCount = targetAnatomy.regions.filter((region) => region.massFraction >= 0.05).length;
+      const recommendedPatchCount = Math.min(3, Math.max(
+        1,
+        significantComponents.length,
+        significantRegionCount >= 6 ? 2 : 1,
+      ));
+      const guidance = {
+        targetSurfaceComponentCount: components.length,
+        significantTargetComponentCount: Math.max(1, significantComponents.length),
+        significantTargetRegionCount: significantRegionCount,
+        requestedPatchCount: request.patches.length,
+        recommendedPatchCount,
+        flags: request.patches.length < recommendedPatchCount ? ['distributed_target_more_patches_recommended'] : [],
+      };
       const planId = `plan_${requestHash.slice(0, 24)}`;
       const entry: PlanCacheEntry = {
         planId, requestHash, canonicalRequest, seed: request.seed, target, candidates: result.candidates,
@@ -228,12 +360,16 @@ export class CortexLumeMcpRuntime {
         plannedAt: new Date().toISOString(),
         optodeRadiusMm: request.optodeRadiusMm,
         transmissionDepthMm: request.transmissionDepthMm,
+        targetAnatomy,
+        guidance,
       };
       this.plans.set(planId, entry);
       return toolResult({
         planId,
         recommendedCandidateId: entry.recommendedCandidateId,
         target: target.target,
+        targetAnatomy,
+        guidance,
         candidates: entry.candidates.map((candidate) => candidate.summary),
       });
     });
@@ -334,6 +470,8 @@ export class CortexLumeMcpRuntime {
       version: 1, engine: 'cortexlume-deterministic-planner', engineVersion: this.options.applicationVersion,
       plannedAt: entry.plannedAt, canonicalRequestSha256: entry.requestHash, canonicalRequest: entry.canonicalRequest,
       seed: entry.seed, assetHashes: { ...assets.assetHashes, manifest: manifestSha256 }, sourceProjectSha256: entry.sourceProjectSha256,
+      targetAnatomy: entry.targetAnatomy,
+      guidance: entry.guidance,
       candidates: entry.candidates.map((item) => item.summary), recommendedCandidateId: entry.recommendedCandidateId, selectedCandidateId: selectedId,
     };
     const source = entry.sourceProject;

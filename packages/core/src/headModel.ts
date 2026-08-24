@@ -1,7 +1,7 @@
 import type { LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import { add3, effectiveUv, radialTangentBasis, scale3 } from './geometry.js';
+import { add3, distance3, effectiveUv, radialTangentBasis, scale3 } from './geometry.js';
 
 export function threeFromRas(point: Vec3): [number, number, number] {
   return [point[0], point[2], -point[1]];
@@ -96,15 +96,37 @@ export class HeadModel {
     return this.projectCortex(point, 0);
   }
 
+  scalpCortexDistanceMm(point: Vec3): number {
+    const scalp = this.projectScalp(point);
+    return distance3(scalp, this.projectCorticalContact(scalp));
+  }
+
+  projectScalpOffset(anchorPoint: Vec3, rotationRad: number, uvMm: readonly [number, number]): Vec3 {
+    const anchorHit = this.closestScalpPoint(new THREE.Vector3(...threeFromRas(anchorPoint)));
+    const centerRas = rasFromThree(this.scalpCenter);
+    const anchorRas = rasFromThree(anchorHit.point);
+    const relativeAnchor = add3(anchorRas, scale3(centerRas, -1));
+    const basis = radialTangentBasis(relativeAnchor, rotationRad);
+    let u = new THREE.Vector3(...threeFromRas(basis.u)).projectOnPlane(anchorHit.normal).normalize();
+    let v = new THREE.Vector3(...threeFromRas(basis.v)).projectOnPlane(anchorHit.normal);
+    v.addScaledVector(u, -v.dot(u)).normalize();
+
+    const afterU = this.walkScalp(anchorHit, u, v, uvMm[0]);
+    u = afterU.primary;
+    v = afterU.secondary;
+    const afterV = this.walkScalp(afterU.hit, v, u, uvMm[1]);
+    return rasFromThree(afterV.hit.point);
+  }
+
   fittedOptodePositions(layout: LayoutDefinition, instance: LayoutInstance): Map<string, Vec3> {
     const anchor = this.projectScalp(instance.anchorRasMm);
-    const basis = radialTangentBasis(anchor, instance.rotationRad + (instance.mappingRotationRad ?? 0));
+    const rotationRad = instance.rotationRad + (instance.mappingRotationRad ?? 0);
     const digitized = new Map(instance.digitizerPositions.map((position) => [position.optodeId, position.scalpRasMm]));
     return new Map(layout.optodes.map((optode) => {
       const measured = digitized.get(optode.id);
       if (measured) return [optode.id, measured] as const;
       const uv = effectiveUv(layout, instance, optode.id);
-      return [optode.id, this.projectScalp(add3(anchor, add3(scale3(basis.u, uv[0]), scale3(basis.v, uv[1]))))] as const;
+      return [optode.id, this.projectScalpOffset(anchor, rotationRad, uv)] as const;
     }));
   }
 
@@ -170,6 +192,38 @@ export class HeadModel {
     return { vertexIndices, values };
   }
 
+  /** Return mesh-connected components for a sparse set of correspondence-backed surface vertices. */
+  surfaceConnectedComponents(vertexIndices: readonly number[]): number[][] {
+    const included = new Uint8Array(this.surfaceVerticesRasMm.length);
+    for (const vertex of vertexIndices) {
+      if (!Number.isInteger(vertex) || vertex < 0 || vertex >= included.length) {
+        throw new Error('Surface component input contains an invalid vertex index.');
+      }
+      included[vertex] = 1;
+    }
+    const graph = this.getSurfaceGraph();
+    const visited = new Uint8Array(included.length);
+    const components: number[][] = [];
+    for (const root of vertexIndices) {
+      if (visited[root]) continue;
+      const component: number[] = [];
+      const stack = [root];
+      visited[root] = 1;
+      while (stack.length) {
+        const vertex = stack.pop()!;
+        component.push(vertex);
+        for (const edge of graph[vertex]!) {
+          if (!included[edge.vertex] || visited[edge.vertex]) continue;
+          visited[edge.vertex] = 1;
+          stack.push(edge.vertex);
+        }
+      }
+      component.sort((left, right) => left - right);
+      components.push(component);
+    }
+    return components;
+  }
+
   private getSurfaceGraph(): Array<Array<{ vertex: number; distance: number }>> {
     if (this.surfaceGraph) return this.surfaceGraph;
     const graph = Array.from({ length: this.surfaceVerticesRasMm.length }, () => new Map<number, number>());
@@ -187,6 +241,81 @@ export class HeadModel {
     }
     this.surfaceGraph = graph.map((edges) => [...edges].map(([vertex, distance]) => ({ vertex, distance })));
     return this.surfaceGraph;
+  }
+
+  private closestScalpPoint(point: THREE.Vector3): { point: THREE.Vector3; normal: THREE.Vector3 } {
+    const hit = this.scalpBvh.closestPointToPoint(point);
+    if (!hit) throw new Error('Scalp BVH projection failed.');
+    return {
+      point: hit.point.clone(),
+      normal: hit.point.clone().sub(this.scalpCenter).normalize(),
+    };
+  }
+
+  private radialScalpPoint(point: THREE.Vector3): { point: THREE.Vector3; normal: THREE.Vector3 } {
+    const direction = point.clone().sub(this.scalpCenter).normalize();
+    const outside = this.scalpCenter.clone().addScaledVector(direction, 400);
+    const hit = this.scalpBvh.raycastFirst(
+      new THREE.Ray(outside, direction.clone().multiplyScalar(-1)),
+      THREE.DoubleSide,
+      0.05,
+      800,
+    );
+    if (!hit?.point) return this.closestScalpPoint(point);
+    return {
+      point: hit.point.clone(),
+      normal: hit.point.clone().sub(this.scalpCenter).normalize(),
+    };
+  }
+
+  private walkScalp(
+    start: { point: THREE.Vector3; normal: THREE.Vector3 },
+    primaryDirection: THREE.Vector3,
+    secondaryDirection: THREE.Vector3,
+    distanceMm: number,
+  ): {
+    hit: { point: THREE.Vector3; normal: THREE.Vector3 };
+    primary: THREE.Vector3;
+    secondary: THREE.Vector3;
+  } {
+    let hit = { point: start.point.clone(), normal: start.normal.clone() };
+    let primary = primaryDirection.clone().projectOnPlane(hit.normal).normalize();
+    let secondary = secondaryDirection.clone().projectOnPlane(hit.normal);
+    secondary.addScaledVector(primary, -secondary.dot(primary)).normalize();
+    const sign = Math.sign(distanceMm);
+    let remaining = Math.abs(distanceMm);
+    let iterations = 0;
+    while (remaining > 0.04 && iterations < 1024) {
+      const requested = Math.min(2.5, remaining);
+      const direction = primary.clone().multiplyScalar(sign);
+      const radial = hit.point.clone().sub(this.scalpCenter);
+      const radius = radial.length();
+      radial.normalize();
+      let angle = requested / Math.max(1, radius);
+      let next = hit;
+      let travelled = 0;
+      for (let refinement = 0; refinement < 3; refinement += 1) {
+        const nextRadial = radial.clone().multiplyScalar(Math.cos(angle))
+          .addScaledVector(direction, Math.sin(angle))
+          .normalize();
+        const seed = this.scalpCenter.clone().addScaledVector(nextRadial, radius);
+        next = this.radialScalpPoint(seed);
+        travelled = next.point.distanceTo(hit.point);
+        if (travelled < 0.01) break;
+        const correction = THREE.MathUtils.clamp(requested / travelled, 0.5, 1.8);
+        if (Math.abs(correction - 1) < 0.025) break;
+        angle *= correction;
+      }
+      if (travelled < 0.01 || next.point.clone().sub(hit.point).dot(direction) <= 0) break;
+      remaining = Math.max(0, remaining - travelled);
+      primary.projectOnPlane(next.normal).normalize();
+      secondary.projectOnPlane(next.normal);
+      secondary.addScaledVector(primary, -secondary.dot(primary)).normalize();
+      hit = next;
+      iterations += 1;
+    }
+    if (remaining > 0.04) throw new Error('Scalp surface walk exceeded its safe iteration limit.');
+    return { hit, primary, secondary };
   }
 
   private computeVertexAreas(): Float32Array {

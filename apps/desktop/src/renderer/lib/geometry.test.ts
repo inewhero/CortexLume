@@ -15,6 +15,7 @@ import {
   rasFromThree,
   threeFromRas,
 } from './geometry';
+import { arcSurfaceSeed } from '@cortexlume/core';
 import { FIVE_POINT_LANDMARKS, TEN_TEN_POINTS } from './anatomy';
 
 const layout: LayoutDefinition = {
@@ -55,6 +56,16 @@ describe('geometric head mapping', () => {
   it('projects points onto the scalp ellipsoid', () => {
     const point = projectToEllipsoid([25, -40, 85]);
     expect(ellipsoidEquation(point)).toBeCloseTo(1, 10);
+  });
+
+  it('uses arc length instead of tangent-plane compression for long offsets', () => {
+    const radius = 100;
+    const anchor: [number, number, number] = [0, 0, radius];
+    const basis = { u: [1, 0, 0] as [number, number, number], v: [0, 1, 0] as [number, number, number] };
+    const a = arcSurfaceSeed(anchor, [0, 0, 0], basis, [-105, 0]);
+    const b = arcSurfaceSeed(anchor, [0, 0, 0], basis, [-75, 0]);
+    const angle = Math.acos((a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / radius ** 2);
+    expect(angle * radius).toBeCloseTo(30, 8);
   });
 
   it('keeps an optode sphere outside the scalp and offsets cortical contact by its radius', () => {
