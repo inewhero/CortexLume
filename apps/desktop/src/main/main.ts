@@ -1,10 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { request as httpRequest } from 'node:http';
 import path from 'node:path';
+import { ScienceClient, type ScienceCommand } from '@cortexlume/science-client';
 import {
   CortexLumeProjectSchema,
   AnatomicalCoverageAnalysisSchema,
@@ -29,11 +28,11 @@ import { checkGithubUpdate } from './startupLifecycle';
 import type { UpdateCheckResult } from '../shared/startup';
 
 let mainWindow: BrowserWindow | null = null;
-let scienceProcess: ChildProcessWithoutNullStreams | null = null;
-let sciencePort: number | null = null;
-let scienceToken = '';
-let scienceReady: Promise<void> | null = null;
 const headlessSmokeTest = process.env.CORTEXLUME_HEADLESS_TEST === '1';
+const mcpMode = process.argv.includes('--mcp-stdio');
+const startupProjectPath = process.argv.find((argument, index) => (
+  index > 0 && !argument.startsWith('--') && argument.toLowerCase().endsWith('.cortexlume')
+)) ?? null;
 let validatedReleaseUrl: string | null = null;
 
 function quadraticPathThroughTarget(source: Vec3, target: Vec3, detector: Vec3, count = 33): Vec3[] {
@@ -55,138 +54,45 @@ function quadraticPathThroughTarget(source: Vec3, target: Vec3, detector: Vec3, 
   });
 }
 
-function resolveScienceCommand(): { command: string; args: string[]; cwd: string } {
+function resolveTemplateRoot(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'assets', 'templates', 'MNI152NLin6Asym')
+    : path.resolve(app.getAppPath(), '..', '..', 'assets', 'templates', 'MNI152NLin6Asym');
+}
+
+function resolveScienceCommand(): ScienceCommand {
   if (app.isPackaged) {
     const executable = path.join(process.resourcesPath, 'cortexlume-science', 'cortexlume-science.exe');
-    return { command: executable, args: [], cwd: path.dirname(executable) };
+    return { command: executable, args: [], cwd: path.dirname(executable), assetRoot: resolveTemplateRoot() };
   }
 
   const workspaceRoot = path.resolve(app.getAppPath(), '..', '..');
   const script = path.join(workspaceRoot, 'services', 'science', 'run.py');
   const configuredPython = process.env.CORTEXLUME_PYTHON;
   if (configuredPython) {
-    return { command: configuredPython, args: [script], cwd: path.dirname(script) };
+    return { command: configuredPython, args: [script], cwd: path.dirname(script), assetRoot: resolveTemplateRoot() };
   }
   // Development must execute the checked-out science source. A previously built
   // sidecar can legitimately lag behind new IPC/API endpoints and is therefore
   // only a fallback when the workspace virtual environment is unavailable.
   const workspacePython = path.join(workspaceRoot, '.venv', 'Scripts', 'python.exe');
   if (existsSync(workspacePython)) {
-    return { command: workspacePython, args: [script], cwd: path.dirname(script) };
+    return { command: workspacePython, args: [script], cwd: path.dirname(script), assetRoot: resolveTemplateRoot() };
   }
   const builtExecutable = path.resolve(
     workspaceRoot, 'services', 'science', 'dist',
     'cortexlume-science', 'cortexlume-science.exe',
   );
   if (existsSync(builtExecutable)) {
-    return { command: builtExecutable, args: [], cwd: path.dirname(builtExecutable) };
+    return { command: builtExecutable, args: [], cwd: path.dirname(builtExecutable), assetRoot: resolveTemplateRoot() };
   }
-  return { command: 'py', args: ['-3.12', script], cwd: path.dirname(script) };
+  return { command: 'py', args: ['-3.12', script], cwd: path.dirname(script), assetRoot: resolveTemplateRoot() };
 }
 
-function stopScienceSidecar(): void {
-  const child = scienceProcess;
-  scienceProcess = null;
-  sciencePort = null;
-  scienceReady = null;
-  child?.kill();
-}
-
-function startScienceSidecar(): Promise<void> {
-  if (scienceReady) return scienceReady;
-  const ready = (async () => {
-    scienceToken = randomBytes(32).toString('hex');
-    const { command, args, cwd } = resolveScienceCommand();
-
-    await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      windowsHide: true,
-      env: {
-        ...process.env,
-        CORTEXLUME_TOKEN: scienceToken,
-        CORTEXLUME_ASSET_DIR: app.isPackaged
-          ? path.join(process.resourcesPath, 'assets', 'templates', 'MNI152NLin6Asym')
-          : path.resolve(app.getAppPath(), '..', '..', 'assets', 'templates', 'MNI152NLin6Asym'),
-      },
-    });
-    scienceProcess = child;
-
-    let buffer = '';
-    const timeout = setTimeout(() => reject(new Error('Science sidecar startup timed out')), 20_000);
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString('utf8');
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line.startsWith('CORTEXLUME_READY ')) continue;
-        const ready = JSON.parse(line.slice('CORTEXLUME_READY '.length)) as { port: number };
-        sciencePort = ready.port;
-        clearTimeout(timeout);
-        resolve();
-      }
-    });
-    child.stderr.on('data', (chunk: Buffer) => console.error(`[science] ${chunk}`));
-    child.once('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.once('exit', () => {
-      if (scienceProcess !== child) return;
-      sciencePort = null;
-      scienceProcess = null;
-      scienceReady = null;
-    });
-    });
-  })();
-  scienceReady = ready;
-  void ready.catch(() => {
-    if (scienceReady === ready) scienceReady = null;
-  });
-  return ready;
-}
-
-async function scienceRequest<T>(pathname: string, payload?: unknown): Promise<T> {
-  await startScienceSidecar();
-  if (!sciencePort) throw new Error('Science sidecar did not provide a port');
-  const body = payload === undefined ? undefined : JSON.stringify(payload);
-  return new Promise<T>((resolve, reject) => {
-    const request = httpRequest({
-      hostname: '127.0.0.1',
-      port: sciencePort!,
-      path: pathname,
-      method: body === undefined ? 'GET' : 'POST',
-      headers: {
-        Authorization: `Bearer ${scienceToken}`,
-        ...(body === undefined ? {} : {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        }),
-      },
-      timeout: 30_000,
-    }, (response) => {
-      const chunks: Buffer[] = [];
-      response.on('data', (chunk: Buffer) => chunks.push(chunk));
-      response.on('end', () => {
-        const text = Buffer.concat(chunks).toString('utf8');
-        const status = response.statusCode ?? 500;
-        if (status < 200 || status >= 300) {
-          reject(new Error(`Science service ${status}: ${text}`));
-          return;
-        }
-        try {
-          resolve(JSON.parse(text) as T);
-        } catch (error) {
-          reject(new Error(`Science service returned invalid JSON: ${(error as Error).message}`));
-        }
-      });
-    });
-    request.on('timeout', () => request.destroy(new Error('Science service request timed out')));
-    request.on('error', reject);
-    request.end(body);
-  });
-}
+const scienceClient = new ScienceClient(resolveScienceCommand, (message) => console.error(message));
+const startScienceSidecar = () => scienceClient.start();
+const stopScienceSidecar = () => scienceClient.stop();
+const scienceRequest = <T,>(pathname: string, payload?: unknown) => scienceClient.request<T>(pathname, payload);
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -349,6 +255,13 @@ function registerIpc(): void {
     if (!validatedReleaseUrl) return false;
     await shell.openExternal(validatedReleaseUrl);
     return true;
+  });
+
+  ipcMain.handle('project:startup', async () => {
+    if (!startupProjectPath) return null;
+    const selectedPath = path.resolve(startupProjectPath);
+    const project = readProjectArchive(new Uint8Array(await readFile(selectedPath)));
+    return { project, path: selectedPath };
   });
 
   ipcMain.handle('project:open', async () => {
@@ -593,7 +506,33 @@ function registerIpc(): void {
   });
 }
 
+function startMcpStdioChild(): void {
+  const environment = {
+    ...process.env,
+    ELECTRON_RUN_AS_NODE: '1',
+    CORTEXLUME_MCP_CHILD: '1',
+    CORTEXLUME_APP_ROOT: app.getAppPath(),
+    CORTEXLUME_RESOURCES_ROOT: process.resourcesPath,
+    CORTEXLUME_APP_VERSION: app.getVersion(),
+    CORTEXLUME_IS_PACKAGED: app.isPackaged ? '1' : '0',
+  };
+  const child = spawn(
+    process.execPath,
+    [path.join(__dirname, 'mcpBootstrap.js'), ...process.argv.slice(1)],
+    { stdio: 'inherit', windowsHide: true, env: environment },
+  );
+  child.once('error', (error) => {
+    console.error(`Unable to start CortexLume MCP worker: ${error.message}`);
+    app.exit(1);
+  });
+  child.once('exit', (code) => app.exit(code ?? 1));
+}
+
 app.whenReady().then(async () => {
+  if (mcpMode) {
+    startMcpStdioChild();
+    return;
+  }
   registerIpc();
   void startScienceSidecar().catch((error) => console.error('Science sidecar unavailable:', error));
   await createWindow();
@@ -604,7 +543,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (!mcpMode && process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {

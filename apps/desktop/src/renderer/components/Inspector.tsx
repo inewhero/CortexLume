@@ -14,6 +14,7 @@ import type { DigitizerImport, Vec3 } from '@cortexlume/contracts';
 import { DigitizerDialog, type MappingScope } from './DigitizerDialog';
 import { FIVE_POINT_LABELS, type FivePointLabel } from '../lib/digitizer';
 import { TargetMapImportDialog } from './TargetMapImportDialog';
+import { QuickTargetController } from './QuickTarget';
 
 const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code: string }> = [
   { key: 'scalp', label: 'Scalp envelope', code: 'SCLP' },
@@ -284,7 +285,6 @@ export function Inspector() {
         <div className="workflow-row"><span>IMPORT</span><div className="project-actions">
           <button onClick={importDigitizer}>DIGITIZER</button>
           <button onClick={openFivePointEntry}>5-POINT</button>
-          <button onClick={() => setTargetMapDialog(true)}>TARGET MAP</button>
         </div></div>
         <div className="workflow-row"><span>EXPORT</span><div className="project-actions">
           <button onClick={exportBrainNet}>BRAINNET</button>
@@ -367,6 +367,8 @@ export function Inspector() {
           );})}
         </div>
       </section>
+
+      <QuickTargetController onImportNifti={() => setTargetMapDialog(true)} />
 
       <section className="control-block">
         <div className="control-block-title"><span>PROJECTION</span><code>MNI</code></div>

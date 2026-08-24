@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
+import { HeadModel } from '@cortexlume/core';
 import type { AnatomicalCoverageAnalysis, DigitizerSession, LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
 import { useProjectStore } from '../store/projectStore';
 import {
@@ -514,7 +515,9 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
 }) {
   const visibility = useProjectStore((state) => state.anatomyVisibility);
   const appearance = useProjectStore((state) => state.anatomyAppearance);
-  const functionalTarget = useProjectStore((state) => state.functionalTarget);
+  const storedFunctionalTarget = useProjectStore((state) => state.functionalTarget);
+  const functionalTargetVisible = useProjectStore((state) => state.project.surfaceOverlay === 'functional-target');
+  const functionalTarget = functionalTargetVisible ? storedFunctionalTarget : null;
   const anatomicalCoverage = useProjectStore((state) => state.anatomicalCoverage);
   const anatomicalCoverageEnabled = useProjectStore((state) => state.anatomicalCoverageEnabled);
   const anatomicalCoverageStatus = useProjectStore((state) => state.anatomicalCoverageStatus);
@@ -535,11 +538,9 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
     () => geometryFromScene(scientificBrain.scene),
     [scientificBrain.scene],
   );
-  const scalpBvh = useMemo(() => new MeshBVH(scalpGeometry), [scalpGeometry]);
-  const scientificBrainBvh = useMemo(
-    () => new MeshBVH(scientificBrainGeometry),
-    [scientificBrainGeometry],
-  );
+  const headModel = useMemo(() => new HeadModel({ scalpGeometry, cortexGeometry: scientificBrainGeometry }), [scalpGeometry, scientificBrainGeometry]);
+  const scalpBvh = headModel.scalpBvh;
+  const scientificBrainBvh = headModel.cortexBvh;
   const coverageActive = anatomicalCoverageEnabled && anatomicalCoverageStatus === 'ready' && anatomicalCoverage;
   const targetDisplayGeometry = visibility.grayMatter ? grayGeometry : visibility.whiteMatter ? whiteGeometry : null;
   const grayScientificVertexMap = useMemo(() => (
@@ -570,68 +571,13 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
   }, [grayGeometry, scientificBrainBvh, scientificBrainGeometry, whiteGeometry]);
 
   useEffect(() => {
-    const brainCenter = scientificBrainGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3(0, 12, 0);
-    const scalpCenter = scalpGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3();
-    const scalpContact = (rasPoint: Vec3) => {
-      const input = new THREE.Vector3(...threeFromRas(rasPoint));
-      return scalpBvh.closestPointToPoint(input)?.point.clone() ?? input;
-    };
-    const scalpSphereCenter = (rasPoint: Vec3, radiusMm: number) => {
-      const contact = scalpContact(rasPoint);
-      const outward = contact.clone().sub(scalpCenter).normalize();
-      return contact.addScaledVector(outward, radiusMm);
-    };
     registerSurfaceProjectors({
-      scalp: (rasPoint) => rasFromThree(scalpContact(rasPoint)),
-      scalpSphereCenter: (rasPoint, radiusMm) => rasFromThree(scalpSphereCenter(rasPoint, radiusMm)),
-      cortex: (rasPoint, radiusMm) => {
-        const origin = scalpSphereCenter(rasPoint, radiusMm);
-        // CortexLume's geometric projection is explicitly radial in MNI space.
-        const direction = origin.clone().multiplyScalar(-1).normalize();
-        if (radiusMm <= 0) {
-          const hit = scientificBrainBvh.raycastFirst(new THREE.Ray(origin, direction), THREE.DoubleSide, 0.05, 320);
-          if (hit?.point) return rasFromThree(hit.point);
-        } else {
-          const reference = Math.abs(direction.y) < 0.9
-            ? new THREE.Vector3(0, 1, 0)
-            : new THREE.Vector3(1, 0, 0);
-          const u = new THREE.Vector3().crossVectors(direction, reference).normalize();
-          const v = new THREE.Vector3().crossVectors(direction, u).normalize();
-          const samples: Array<{ x: number; y: number }> = [{ x: 0, y: 0 }];
-          for (const fraction of [0.48, 0.82]) {
-            for (let index = 0; index < 8; index += 1) {
-              const angle = index * Math.PI / 4;
-              samples.push({
-                x: Math.cos(angle) * radiusMm * fraction,
-                y: Math.sin(angle) * radiusMm * fraction,
-              });
-            }
-          }
-          let firstCenterDistance = Number.POSITIVE_INFINITY;
-          for (const sample of samples) {
-            const sampleOrigin = origin.clone()
-              .addScaledVector(u, sample.x)
-              .addScaledVector(v, sample.y);
-            const hit = scientificBrainBvh.raycastFirst(new THREE.Ray(sampleOrigin, direction), THREE.DoubleSide, 0.05, 320);
-            if (!hit) continue;
-            const lateralDistance = Math.hypot(sample.x, sample.y);
-            const sphereInset = Math.sqrt(Math.max(0, radiusMm ** 2 - lateralDistance ** 2));
-            firstCenterDistance = Math.min(firstCenterDistance, hit.distance - sphereInset);
-          }
-          if (Number.isFinite(firstCenterDistance)) {
-            return rasFromThree(origin.addScaledVector(direction, Math.max(0, firstCenterDistance)));
-          }
-        }
-        const nearest = scientificBrainBvh.closestPointToPoint(origin);
-        if (nearest) {
-          const outward = nearest.point.clone().sub(brainCenter).normalize();
-          return rasFromThree(nearest.point.clone().addScaledVector(outward, radiusMm));
-        }
-        return rasPoint;
-      },
+      scalp: (rasPoint) => headModel.projectScalp(rasPoint),
+      scalpSphereCenter: (rasPoint, radiusMm) => headModel.projectScalpSphereCenter(rasPoint, radiusMm),
+      cortex: (rasPoint, radiusMm) => headModel.projectCortex(rasPoint, radiusMm),
     });
     onReady();
-  }, [scientificBrainBvh, scientificBrainGeometry, scalpBvh, scalpGeometry]);
+  }, [headModel]);
 
   return (
     <group onPointerDown={onBlank}>
@@ -912,6 +858,8 @@ export function HeadViewport() {
     selectedCoverageRegionIndex, anatomicalCoverageSettings, anatomicalCoverageStatus,
     setAnatomicalCoverageResult, setAnatomicalCoverageStatus,
   } = useProjectStore();
+  const functionalTargetVisible = project.surfaceOverlay === 'functional-target';
+  const displayedFunctionalTarget = functionalTargetVisible ? functionalTarget : null;
   const selected = project.instances.find((instance) => instance.id === selectedInstanceId);
   const selectedLayout = project.layouts.find((layout) => layout.id === selected?.definitionId);
   const editable = selected && selected.visible !== false;
@@ -919,10 +867,10 @@ export function HeadViewport() {
     project.layouts, project.instances.filter((instance) => instance.visible !== false),
   ), [project.layouts, project.instances, surfaceRevision]);
   const targetDisplayRange = useMemo(() => {
-    if (!functionalTarget) return null;
-    const values = [...functionalTarget.values].sort((a, b) => a - b);
+    if (!displayedFunctionalTarget) return null;
+    const values = [...displayedFunctionalTarget.values].sort((a, b) => a - b);
     return [values[0]!, values[Math.min(values.length - 1, Math.floor(values.length * 0.98))]!] as const;
-  }, [functionalTarget]);
+  }, [displayedFunctionalTarget]);
   const coverageRegionColors = useMemo(
     () => anatomicalCoverage ? anatomicalCoverageRegionColors(anatomicalCoverage) : new Map<number, string>(),
     [anatomicalCoverage],
@@ -988,7 +936,7 @@ export function HeadViewport() {
   };
 
   return (
-    <div className={`head-viewport ${functionalTarget ? 'has-target-map' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+    <div className={`head-viewport ${displayedFunctionalTarget ? 'has-target-map' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
       event.preventDefault();
       const layoutId = event.dataTransfer.getData('application/x-cortexlume-layout');
       if (layoutId) placeLayout(layoutId);
@@ -1044,10 +992,10 @@ export function HeadViewport() {
         <span>{project.instances.length} PATCH{project.instances.length === 1 ? '' : 'ES'}</span>
         {project.digitizerSessions.length > 0 && <span>{project.digitizerSessions.reduce((sum, session) => sum + session.points.length, 0)} DIGITIZED PTS</span>}
       </div>
-      {functionalTarget && (
+      {displayedFunctionalTarget && (
         <div className="viewport-overlay target-map-legend">
-          <strong>{functionalTarget.target.label}</strong>
-          <span>{functionalTarget.provenance.statistic.toUpperCase()}</span>
+          <strong>{displayedFunctionalTarget.target.label}</strong>
+          <span>{displayedFunctionalTarget.provenance.statistic.toUpperCase()}</span>
           <i aria-hidden="true" />
           <div className="target-map-range"><small>{targetDisplayRange?.[0].toFixed(2)}</small><small>{targetDisplayRange?.[1].toFixed(2)}</small></div>
         </div>

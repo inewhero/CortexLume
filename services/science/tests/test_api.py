@@ -110,6 +110,35 @@ def test_atlas_query_endpoint_preserves_raw_percentages() -> None:
     assert body["results"][0]["corticalRegions"][0]["probability"] == 0.45
 
 
+def test_harvard_oxford_region_catalog_and_sparse_target() -> None:
+    catalog = client.get("/v1/atlas/cortical-regions", headers=headers)
+    assert catalog.status_code == 200, catalog.text
+    regions = catalog.json()["regions"]
+    assert "Left Precentral Gyrus" in regions
+
+    response = client.post(
+        "/v1/atlas/cortical-region-target",
+        headers=headers,
+        json={"label": "Left Precentral Gyrus"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["target"]["label"] == "Left Precentral Gyrus"
+    assert body["vertexCount"] == 25_000
+    assert len(body["vertexIndices"]) == len(body["values"]) > 0
+    assert body["vertexIndices"] == sorted(body["vertexIndices"])
+    assert 0 < max(body["values"]) <= 1
+    assert body["provenance"]["sourceKind"] == "harvard-oxford-region"
+    assert body["provenance"]["validation"]["probabilities"] == "original percent not renormalized"
+
+    unknown = client.post(
+        "/v1/atlas/cortical-region-target",
+        headers=headers,
+        json={"label": "Definitely not an atlas region"},
+    )
+    assert unknown.status_code == 404
+
+
 def test_anatomical_coverage_endpoint_returns_single_sparse_mosaic() -> None:
     vertices = load_surface_atlas_data().vertices_ras_mm
     response = client.post("/v1/coverage/anatomical", headers=headers, json={

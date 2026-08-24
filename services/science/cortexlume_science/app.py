@@ -8,7 +8,12 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, status
 
 from . import __version__
-from .anatomical_coverage import AnatomicalCoverageError, compute_anatomical_coverage
+from .anatomical_coverage import (
+    AnatomicalCoverageError,
+    compute_anatomical_coverage,
+    cortical_region_target,
+    list_cortical_regions,
+)
 from .atlas import atlas_status, query_probability_path, query_probability_volume
 from .geometry import cortex_projection, fit_errors, fitted_positions, inward_depth_target, pair_midpoint
 from .models import (
@@ -89,6 +94,31 @@ def get_quick_target(
     if target is None:
         raise HTTPException(status_code=404, detail="Quick Target not found")
     return target
+
+
+@app.get("/v1/atlas/cortical-regions")
+def atlas_cortical_regions(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    authorize(authorization)
+    try:
+        return {"atlasId": "Harvard-Oxford cortical lateralized", "regions": list(list_cortical_regions())}
+    except AnatomicalCoverageError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/v1/atlas/cortical-region-target")
+def atlas_cortical_region_target(
+    payload: dict[str, Any],
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    authorize(authorization)
+    label = payload.get("label")
+    if not isinstance(label, str) or not label.strip():
+        raise HTTPException(status_code=422, detail="A Harvard-Oxford cortical region label is required")
+    try:
+        return cortical_region_target(label)
+    except AnatomicalCoverageError as error:
+        status_code = 404 if str(error) == "unknown_harvard_oxford_cortical_region" else 503
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
 @app.post("/v1/targets/import")

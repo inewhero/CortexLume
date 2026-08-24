@@ -6,6 +6,7 @@ import { LayoutEditor } from './components/LayoutEditor';
 import { LayoutLibrary } from './components/LayoutLibrary';
 import { TopBar } from './components/TopBar';
 import type { UpdateCheckResult } from '../shared/startup';
+import { useProjectStore } from './store/projectStore';
 
 function PanelFrame({ title, side, collapsed = false, children }: {
   title: string;
@@ -27,6 +28,9 @@ function PanelFrame({ title, side, collapsed = false, children }: {
 }
 
 export function App() {
+  const loadProject = useProjectStore((state) => state.loadProject);
+  const setProjectPath = useProjectStore((state) => state.setProjectPath);
+  const setToast = useProjectStore((state) => state.setToast);
   const [leftVisible, setLeftVisible] = useState(true);
   const [rightVisible, setRightVisible] = useState(true);
   const [availableUpdate, setAvailableUpdate] = useState<UpdateCheckResult | null>(null);
@@ -35,6 +39,19 @@ export function App() {
     'minmax(460px, 1fr)',
     rightVisible ? 'clamp(300px, 22vw, 350px)' : '0px',
   ].join(' '), [leftVisible, rightVisible]);
+
+  useEffect(() => {
+    let active = true;
+    void window.cortexlume?.project.startup().then((opened) => {
+      if (!active || !opened) return;
+      loadProject(opened.project);
+      setProjectPath(opened.path);
+      setToast(`Loaded ${opened.project.name}.`);
+    }).catch((error) => {
+      if (active) setToast(`Open error: ${error instanceof Error ? error.message : String(error)}`);
+    });
+    return () => { active = false; };
+  }, [loadProject, setProjectPath, setToast]);
 
   useEffect(() => {
     let active = true;

@@ -16,6 +16,10 @@
   },
   "dependencies": {
     "@cortexlume/contracts": "workspace:*",
+    "@cortexlume/core": "workspace:*",
+    "@cortexlume/project-io": "workspace:*",
+    "@cortexlume/science-client": "workspace:*",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@react-three/drei": "^10.6.1",
     "@react-three/fiber": "^9.3.0",
     "fflate": "^0.8.2",
@@ -25,8 +29,8 @@
     "react-konva": "^19.0.7",
     "three": "^0.178.0",
     "three-mesh-bvh": "^0.9.1",
-    "zustand": "^5.0.6",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6",
+    "zustand": "^5.0.6"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.8.1",
@@ -36,6 +40,7 @@
     "@electron-forge/plugin-fuses": "^7.8.1",
     "@electron-forge/plugin-vite": "^7.8.1",
     "@electron/fuses": "^1.8.0",
+    "@modelcontextprotocol/client": "^2.0.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^24.0.10",

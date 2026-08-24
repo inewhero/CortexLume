@@ -83,7 +83,7 @@ function createProject(): CortexLumeProject {
   const timestamp = now();
   return {
     format: 'cortexlume-project',
-    formatVersion: 1,
+    formatVersion: 2,
     id: id(),
     name: 'Untitled layout study',
     createdAt: timestamp,
@@ -94,7 +94,7 @@ function createProject(): CortexLumeProject {
       coordinateConvention: 'RAS+',
       units: 'mm',
       verified: true,
-      manifestSha256: '27ab30e8a6b3b6419937b26adbd930d32adfe26afbbf73795ea30505619abe42',
+      manifestSha256: '4e522c5a68e316f449dad1cd47c35f3c051951b0987d7f43eadc615b2cd7f46e',
       scalpMeshSha256: '28836d0d13d22ccbd16e039e28f49b2357c15fb398a2a9e630ef484d7a95f01d',
       cortexMeshSha256: 'e4c9033a515fd7693eb07fb80708509352b7f8044f860e690acf52cbc98119f1',
       atlasSha256: '8591df9e9b37df27748d5ae3c8ca0478201834bac8014950115ba46697c4f6d0',
@@ -127,6 +127,10 @@ function createProject(): CortexLumeProject {
     },
     verifiedResults: [],
     digitizerSessions: [],
+    functionalTarget: null,
+    surfaceOverlay: 'none',
+    coverageRegion: null,
+    planning: null,
   };
 }
 
@@ -187,6 +191,7 @@ interface ProjectStore {
   confirmFivePointCalibration(session: DigitizerSession, targetInstanceIds: string[]): void;
   setDigitizerPreview(preview: { session: DigitizerSession; mappings: DigitizerOptodeMapping[] } | null): void;
   setFunctionalTarget(target: FunctionalTargetMap | null): void;
+  setFunctionalTargetVisible(visible: boolean): void;
   setAnatomicalCoverageEnabled(enabled: boolean): void;
   setAnatomicalCoverageResult(result: AnatomicalCoverageAnalysis | null): void;
   setAnatomicalCoverageMode(mode: AnatomicalCoverageMode): void;
@@ -324,20 +329,48 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       activeDigitizerSessionId: session.id,
     })),
     setDigitizerPreview: (digitizerPreview) => set({ digitizerPreview }),
-    setFunctionalTarget: (functionalTarget) => set({
-      functionalTarget,
-      ...(functionalTarget ? {
+    setFunctionalTarget: (functionalTarget) => set((state) => {
+      const activateTarget = functionalTarget !== null;
+      return {
+        project: {
+          ...state.project,
+          updatedAt: now(),
+          functionalTarget,
+          surfaceOverlay: activateTarget
+            ? 'functional-target'
+            : state.project.surfaceOverlay === 'functional-target' ? 'none' : state.project.surfaceOverlay,
+        },
+        functionalTarget,
+        anatomicalCoverageEnabled: activateTarget ? false : state.anatomicalCoverageEnabled,
+        anatomicalCoverageStatus: activateTarget ? 'idle' as const : state.anatomicalCoverageStatus,
+        anatomicalCoverageError: activateTarget ? null : state.anatomicalCoverageError,
+      };
+    }),
+    setFunctionalTargetVisible: (visible) => set((state) => {
+      if (visible && !state.functionalTarget) return state;
+      return {
+        project: {
+          ...state.project,
+          updatedAt: now(),
+          surfaceOverlay: visible ? 'functional-target' : state.project.surfaceOverlay === 'functional-target' ? 'none' : state.project.surfaceOverlay,
+        },
         anatomicalCoverageEnabled: false,
         anatomicalCoverageStatus: 'idle' as const,
         anatomicalCoverageError: null,
-      } : {}),
+      };
     }),
-    setAnatomicalCoverageEnabled: (anatomicalCoverageEnabled) => set({
+    setAnatomicalCoverageEnabled: (anatomicalCoverageEnabled) => set((state) => ({
+      project: {
+        ...state.project,
+        updatedAt: now(),
+        surfaceOverlay: anatomicalCoverageEnabled
+          ? state.anatomicalCoverageMode === 'region' ? 'coverage-region' : 'coverage-mosaic'
+          : state.project.surfaceOverlay.startsWith('coverage-') ? 'none' : state.project.surfaceOverlay,
+      },
       anatomicalCoverageEnabled,
-      ...(anatomicalCoverageEnabled ? { functionalTarget: null } : {}),
       anatomicalCoverageStatus: anatomicalCoverageEnabled ? 'loading' : 'idle',
       anatomicalCoverageError: null,
-    }),
+    })),
     setAnatomicalCoverageResult: (anatomicalCoverage) => set((state) => ({
       anatomicalCoverage,
       anatomicalCoverageStatus: anatomicalCoverage ? 'ready' : 'idle',
@@ -345,12 +378,33 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       selectedCoverageRegionIndex: state.selectedCoverageRegionIndex != null
         && anatomicalCoverage?.regions.some((region) => region.regionIndex === state.selectedCoverageRegionIndex)
         ? state.selectedCoverageRegionIndex
-        : null,
+        : anatomicalCoverage?.regions.find((region) => (
+          region.atlasId === state.project.coverageRegion?.atlasId
+          && region.labelEn === state.project.coverageRegion?.labelEn
+        ))?.regionIndex ?? null,
     })),
-    setAnatomicalCoverageMode: (anatomicalCoverageMode) => set({ anatomicalCoverageMode }),
-    setSelectedCoverageRegion: (selectedCoverageRegionIndex) => set({
-      selectedCoverageRegionIndex,
-      anatomicalCoverageMode: selectedCoverageRegionIndex == null ? 'mosaic' : 'region',
+    setAnatomicalCoverageMode: (anatomicalCoverageMode) => set((state) => ({
+      anatomicalCoverageMode,
+      project: state.anatomicalCoverageEnabled ? {
+        ...state.project,
+        updatedAt: now(),
+        surfaceOverlay: anatomicalCoverageMode === 'region' ? 'coverage-region' : 'coverage-mosaic',
+      } : state.project,
+    })),
+    setSelectedCoverageRegion: (selectedCoverageRegionIndex) => set((state) => {
+      const region = state.anatomicalCoverage?.regions.find((item) => item.regionIndex === selectedCoverageRegionIndex);
+      return {
+        selectedCoverageRegionIndex,
+        anatomicalCoverageMode: selectedCoverageRegionIndex == null ? 'mosaic' : 'region',
+        project: {
+          ...state.project,
+          updatedAt: now(),
+          coverageRegion: region ? { atlasId: region.atlasId, labelEn: region.labelEn } : null,
+          ...(state.anatomicalCoverageEnabled ? {
+            surfaceOverlay: selectedCoverageRegionIndex == null ? 'coverage-mosaic' as const : 'coverage-region' as const,
+          } : {}),
+        },
+      };
     }),
     setAnatomicalCoverageStatus: (anatomicalCoverageStatus, anatomicalCoverageError = null) => set({
       anatomicalCoverageStatus,
@@ -394,7 +448,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         selectedInstanceId: clones[0]?.instance.id ?? state.selectedInstanceId,
         activeDigitizerSessionId: session.id,
         digitizerPreview: null,
-        functionalTarget: null,
         anatomicalCoverage: null,
         anatomicalCoverageEnabled: false,
         anatomicalCoverageMode: 'mosaic',
@@ -478,7 +531,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         bidsValidationFields: [],
         activeDigitizerSessionId: null,
         digitizerPreview: null,
-        functionalTarget: null,
+        functionalTarget: project.functionalTarget,
+        anatomicalCoverage: null,
+        anatomicalCoverageEnabled: project.surfaceOverlay === 'coverage-mosaic' || project.surfaceOverlay === 'coverage-region',
+        anatomicalCoverageMode: project.surfaceOverlay === 'coverage-region' ? 'region' : 'mosaic',
+        selectedCoverageRegionIndex: null,
+        anatomicalCoverageStatus: project.surfaceOverlay === 'coverage-mosaic' || project.surfaceOverlay === 'coverage-region' ? 'loading' : 'idle',
+        anatomicalCoverageError: null,
       });
     },
     loadProject: (project) => set(() => {
@@ -512,12 +571,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         bidsValidationFields: [],
         activeDigitizerSessionId: hydrated.digitizerSessions.at(-1)?.id ?? null,
         digitizerPreview: null,
-        functionalTarget: null,
+        functionalTarget: hydrated.functionalTarget,
         anatomicalCoverage: null,
-        anatomicalCoverageEnabled: false,
-        anatomicalCoverageMode: 'mosaic',
+        anatomicalCoverageEnabled: hydrated.surfaceOverlay === 'coverage-mosaic' || hydrated.surfaceOverlay === 'coverage-region',
+        anatomicalCoverageMode: hydrated.surfaceOverlay === 'coverage-region' ? 'region' : 'mosaic',
         selectedCoverageRegionIndex: null,
-        anatomicalCoverageStatus: 'idle',
+        anatomicalCoverageStatus: hydrated.surfaceOverlay === 'coverage-mosaic' || hydrated.surfaceOverlay === 'coverage-region' ? 'loading' : 'idle',
         anatomicalCoverageError: null,
       };
     }),

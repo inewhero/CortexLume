@@ -12,7 +12,7 @@ The application combines literature-derived functional target heatmaps, strict s
 
 ### Functional target guidance
 
-Choose a Quick Target before drawing the array. CortexLume maps positive, FDR-corrected Neurosynth association z statistics onto the correspondence-backed Cedalion 25k cortical surface, focuses the 3D view on the strongest target vertex, and leaves layout decisions under direct user control. Compose, NiMARE, SPM, FSL, and NeuroVault statistical maps can also be imported as `.nii` or `.nii.gz` volumes through the **Target Map** workflow.
+Open **Info Panel → Functional Target** before drawing the array. CortexLume maps positive, FDR-corrected Neurosynth association z statistics onto the correspondence-backed Cedalion 25k cortical surface, focuses the 3D view on the strongest target vertex, and leaves layout decisions under direct user control. Compose, NiMARE, SPM, FSL, and NeuroVault statistical maps can be imported as `.nii` or `.nii.gz` volumes from the same project-level target control.
 
 ![Quick Target guided layout](./screenshots/ScreenShot_music_target.png)
 
@@ -72,7 +72,7 @@ The complete anatomical correspondence evidence is stored in [`cedalion-correspo
 
 ## How to use
 
-1. **Choose a target.** Search **Quick Target** in **Optode Design** to load a Neurosynth heatmap in **3D Align**. For a Compose or analysis-workflow map, select **Info Panel → Import → Target Map**, declare its template, and import the `.nii` or `.nii.gz` file after validation.
+1. **Choose a target.** Expand **Info Panel → Functional Target** and search Quick Target to load a Neurosynth heatmap in **3D Align**. For a Compose or analysis-workflow map, choose **NIfTI Map** in the same section, declare its template, and import the `.nii` or `.nii.gz` file after validation.
 2. **Design a patch.** Create an S/D pattern under the target guide, or generate an `x × y` grid. Adjust optode positions and channel numbering directly on the canvas. Changing or clearing a target never modifies the layout.
 3. **Place it on the head.** Drag the layout into **3D Align** and position it over the highlighted cortex. Add further patches for bilateral or distributed coverage.
 4. **Align the mapping.** Select one patch, move it over the scalp, and use the rotation controls. Enable single-optode editing only for local corrections.
@@ -81,6 +81,24 @@ The complete anatomical correspondence evidence is stored in [`cedalion-correspo
 7. **Inspect array coverage.** Enable **Anatomical Coverage** to view the overall Harvard–Oxford mosaic for every visible patch, then switch to **Single Region** when checking one anatomical target.
 8. **Describe the recording.** Expand **Device** when preparing BIDS output and enter the subject, task, acquisition, run, sampling frequency, and instrument metadata.
 9. **Save or export.** Save the editable workspace as `.cortexlume`, or select CSV, BIDS, or BrainNet Viewer output.
+
+## Agent planning through MCP
+
+CortexLume also provides a local machine interface for AI agents. The agent plans and writes a complete `.cortexlume` project; the desktop application remains a focused human workspace for visual review and fine adjustment. No chat surface or provider-specific integration is added to the GUI.
+
+Start the installed application as a stdio MCP server and grant one or more working roots explicitly:
+
+```powershell
+& "C:\Path\To\CortexLume.exe" --mcp-stdio --mcp-root="D:\fnirs-projects"
+```
+
+An MCP client configuration uses the executable as `command` and passes `--mcp-stdio` plus one or more `--mcp-root=...` arguments. `CORTEXLUME_MCP_ROOTS` may provide additional roots separated by the Windows path delimiter. The MCP process is local and offline: it creates no window, exposes no network API, performs no update check, and writes protocol messages only to stdout. Its token-authenticated loopback science worker is private to the process.
+
+The interface exposes `get_capabilities`, `search_targets`, `list_atlas_regions`, `plan_project`, `save_project`, `inspect_project`, and `open_project`. Planning accepts Quick Target IDs, exact Harvard–Oxford cortical regions, RAS+ MNI points, or authorized local NIfTI files. It uses the same locked scalp and Cedalion 25k meshes, BVHs, sphere collision, projection, channel kernel, atlas assets, and QC rules as the GUI. Missing or altered planning assets stop the request; no ellipsoid fallback is used.
+
+`plan_project` returns three deterministic candidates with target-mass coverage, perturbation robustness, optode clearance, and spacing-distortion metrics. `save_project` writes the selected candidate as a new format-v2 archive and never overwrites an existing path. When planning from an existing project, the result records the source project hash and is always saved as a derived file. `open_project` launches a separate CortexLume desktop process so another window's unsaved work remains untouched.
+
+Format-v2 `.cortexlume` archives retain the sparse Functional Target map, active surface overlay, and complete Agent planning provenance in the hash-verified `project.json + manifest.json` archive. NIfTI projects store the mapped Cedalion 25k values, original filename, and SHA-256 rather than embedding the source volume. CortexLume migrates valid v1 archives in memory when opening them. The v2 version marker also makes older readers reject the archive instead of silently dropping its target and planning data; future unsupported versions are rejected explicitly.
 
 ## Data integrity and exports
 
@@ -119,7 +137,7 @@ $env:CORTEXLUME_PYTHON = "$PWD\.venv\Scripts\python.exe"
 pnpm dev
 ```
 
-Run checks with `pnpm typecheck`, `pnpm test`, and `pnpm build`.
+Run checks with `pnpm typecheck`, `pnpm test`, and `pnpm build`. After packaging, `pnpm smoke:packaged:mcp` verifies the real EXE's protocol-only stdout, MCP handshake, Quick Target planning, v2 archive round-trip, and project-file GUI launch.
 
 ## Windows distribution
 

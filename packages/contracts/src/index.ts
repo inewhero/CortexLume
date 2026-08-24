@@ -244,7 +244,7 @@ export const QuickTargetSummarySchema = z.object({
 export type QuickTargetSummary = z.infer<typeof QuickTargetSummarySchema>;
 
 export const FunctionalTargetProvenanceSchema = z.object({
-  sourceKind: z.enum(['neurosynth-quick', 'nifti-import']),
+  sourceKind: z.enum(['neurosynth-quick', 'nifti-import', 'harvard-oxford-region', 'mni-point']),
   sourceSpace: z.string().min(1),
   targetSpace: z.literal('MNI152NLin6Asym'),
   targetSurface: z.literal('Cedalion-ICBM152-25k'),
@@ -502,9 +502,64 @@ export const AnatomicalCoverageAnalysisSchema = z.object({
 });
 export type AnatomicalCoverageAnalysis = z.infer<typeof AnatomicalCoverageAnalysisSchema>;
 
-export const CortexLumeProjectSchema = z.object({
+export const SurfaceOverlaySchema = z.enum([
+  'none',
+  'functional-target',
+  'coverage-mosaic',
+  'coverage-region',
+]);
+export type SurfaceOverlay = z.infer<typeof SurfaceOverlaySchema>;
+
+export const PlanningCandidateMetricsSchema = z.object({
+  nominalTargetMassCoverage: z.number().finite().min(0).max(1),
+  robustP10TargetMassCoverage: z.number().finite().min(0).max(1),
+  robustWorstTargetMassCoverage: z.number().finite().min(0).max(1),
+  minimumOptodeClearanceMm: z.number().finite().nonnegative(),
+  meanSpacingDistortionMm: z.number().finite().nonnegative(),
+});
+export type PlanningCandidateMetrics = z.infer<typeof PlanningCandidateMetricsSchema>;
+
+export const PlanningCandidateSummarySchema = z.object({
+  stableId: z.string().min(1),
+  rank: z.number().int().positive(),
+  accepted: z.boolean(),
+  rejectionReasons: z.array(z.string()),
+  metrics: PlanningCandidateMetricsSchema,
+  placements: z.array(z.object({
+    layoutId: z.string().uuid(),
+    instanceId: z.string().uuid(),
+    anchorRasMm: Vec3Schema,
+    rotationRad: z.number().finite(),
+  })),
+});
+export type PlanningCandidateSummary = z.infer<typeof PlanningCandidateSummarySchema>;
+
+export const AgentPlanningRecordSchema = z.object({
+  version: z.literal(1),
+  engine: z.literal('cortexlume-deterministic-planner'),
+  engineVersion: z.string().min(1),
+  plannedAt: z.string().datetime(),
+  canonicalRequestSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  canonicalRequest: z.record(z.unknown()),
+  seed: z.string().min(1),
+  assetHashes: z.record(z.string().regex(/^[a-f0-9]{64}$/)),
+  sourceProjectSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
+  candidates: z.array(PlanningCandidateSummarySchema).length(3),
+  recommendedCandidateId: z.string().min(1),
+  selectedCandidateId: z.string().min(1),
+}).superRefine((value, context) => {
+  const ids = new Set(value.candidates.map((candidate) => candidate.stableId));
+  if (ids.size !== value.candidates.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Planning candidate IDs must be unique.' });
+  }
+  if (!ids.has(value.recommendedCandidateId) || !ids.has(value.selectedCandidateId)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Planning record references an unknown candidate.' });
+  }
+});
+export type AgentPlanningRecord = z.infer<typeof AgentPlanningRecordSchema>;
+
+const CortexLumeProjectBaseSchema = z.object({
   format: z.literal('cortexlume-project'),
-  formatVersion: z.literal(1),
   id: z.string().uuid(),
   name: z.string().min(1),
   createdAt: z.string().datetime(),
@@ -524,6 +579,43 @@ export const CortexLumeProjectSchema = z.object({
   verifiedResults: z.array(ProjectionResultSchema),
   digitizerSessions: z.array(DigitizerSessionSchema).default([]),
 });
+
+export const CortexLumeProjectV1Schema = CortexLumeProjectBaseSchema.extend({
+  formatVersion: z.literal(1),
+});
+export type CortexLumeProjectV1 = z.infer<typeof CortexLumeProjectV1Schema>;
+
+export const CortexLumeProjectV2Schema = CortexLumeProjectBaseSchema.extend({
+  formatVersion: z.literal(2),
+  functionalTarget: FunctionalTargetMapSchema.nullable().default(null),
+  surfaceOverlay: SurfaceOverlaySchema.default('none'),
+  coverageRegion: z.object({
+    atlasId: z.string().min(1),
+    labelEn: z.string().min(1),
+  }).nullable().default(null),
+  planning: AgentPlanningRecordSchema.nullable().default(null),
+});
+export type CortexLumeProjectV2 = z.infer<typeof CortexLumeProjectV2Schema>;
+
+export function migrateProjectV1ToV2(project: CortexLumeProjectV1): CortexLumeProjectV2 {
+  return CortexLumeProjectV2Schema.parse({
+    ...project,
+    formatVersion: 2,
+    functionalTarget: null,
+    surfaceOverlay: 'none',
+    coverageRegion: null,
+    planning: null,
+  });
+}
+
+/** Parses current projects and explicitly migrates legacy v1 data in memory. */
+export const CortexLumeProjectSchema = z.preprocess((value) => {
+  if (value && typeof value === 'object' && 'formatVersion' in value
+    && (value as { formatVersion?: unknown }).formatVersion === 1) {
+    return migrateProjectV1ToV2(CortexLumeProjectV1Schema.parse(value));
+  }
+  return value;
+}, CortexLumeProjectV2Schema);
 export type CortexLumeProject = z.infer<typeof CortexLumeProjectSchema>;
 
 export const FitPlacementRequestSchema = z.object({
@@ -551,6 +643,7 @@ export interface DesktopApi {
     close(): Promise<void>;
   };
   project: {
+    startup(): Promise<{ project: CortexLumeProject; path: string } | null>;
     open(): Promise<{ project: CortexLumeProject; path: string } | null>;
     save(project: CortexLumeProject, currentPath?: string): Promise<{ path: string } | null>;
   };

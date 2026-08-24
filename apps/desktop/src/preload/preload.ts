@@ -21,6 +21,7 @@ const api: CortexLumeDesktopApi = {
     openRelease: () => ipcRenderer.invoke('startup:open-release'),
   },
   project: {
+    startup: () => ipcRenderer.invoke('project:startup'),
     open: () => ipcRenderer.invoke('project:open'),
     save: (project: CortexLumeProject, currentPath?: string) =>
       ipcRenderer.invoke('project:save', project, currentPath),

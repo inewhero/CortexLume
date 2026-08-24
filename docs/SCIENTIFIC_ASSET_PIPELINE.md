@@ -21,6 +21,7 @@ All downloaded inputs must be pinned by URL, version, license, and SHA-256 befor
 6. Estimate a new registration such as ANTs SyN only when no trustworthy existing mapping is available. Record its images, command, seed, RAS/LPS conversions, parameters, forward/inverse transforms, and QC.
 7. Generate canonical scientific meshes and renderer GLBs without discarding the official Cedalion vertex and voxel correspondence. The invisible picking mesh must retain a traceable mapping to canonical vertices.
 8. Losslessly flip the FSL first axis into TemplateFlow's positive-diagonal RAS+ grid and generate the compact 1 mm top-three index. Runtime queries use the nearest voxel, retain original integer percentages, and never renormalize the returned regions.
+9. Run `scripts/build_planner_surface_assets.py` to calculate per-vertex triangle area on the unsimplified Cedalion 25k mesh and sample every Harvard–Oxford cortical probability field onto the official vertex-MNI correspondence. The resulting float32 area array, full uint8 surface atlas, and planner metadata are individually SHA-256 locked in the template manifest.
 
 ## Release gate
 

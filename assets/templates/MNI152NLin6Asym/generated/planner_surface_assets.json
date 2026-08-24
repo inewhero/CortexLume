@@ -1,0 +1,17 @@
+{
+  "format": "cortexlume-planner-surface-assets",
+  "formatVersion": 1,
+  "surface": "Cedalion-ICBM152-25k",
+  "coordinateConvention": "RAS+",
+  "vertexArea": {
+    "file": "brain_vertex_areas_f32.bin",
+    "dtype": "float32-le",
+    "units": "mm2",
+    "sha256": "248176af885bd1b36b57aad03b4ce6751dc711dee9acd2861af05541eee2728e"
+  },
+  "corticalAtlas": {
+    "file": "harvard_oxford_cortical_surface_25k.npz",
+    "probabilityUnit": "percent",
+    "sha256": "907d882dfe58d297e9510526fd6eb3a10ebb4d098f8c755362b4e7bb7c3eedab"
+  }
+}

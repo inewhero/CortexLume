@@ -14,6 +14,7 @@
     "science:build": ".\\.venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --distpath services/science/dist --workpath services/science/build services/science/cortexlume-science.spec",
     "package:win": "pnpm science:build && pnpm --dir node_modules/electron-winstaller run install && set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& pnpm --filter @cortexlume/desktop make",
     "science:dev": ".\\.venv\\Scripts\\python.exe services/science/run.py",
-    "science:test": ".\\.venv\\Scripts\\python.exe -m pytest services/science/tests"
+    "science:test": ".\\.venv\\Scripts\\python.exe -m pytest services/science/tests",
+    "smoke:packaged:mcp": "node scripts/smoke_packaged_mcp.mjs"
   }
 }

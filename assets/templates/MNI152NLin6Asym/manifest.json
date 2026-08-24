@@ -68,6 +68,9 @@
     "corticalLabels": { "path": "upstream/fsl/data/atlases/HarvardOxford-Cortical-Lateralized.xml", "sha256": "c4dcb7830b9006dc2f1f62ddb29f890122b0638a7418e0f6fb736f85f678f61b" },
     "subcorticalLabels": { "path": "upstream/fsl/data/atlases/HarvardOxford-Subcortical.xml", "sha256": "576f825bcc51e2afaa5411aef85858091fcaf823e27415f9f263fbca4743ba8b" },
     "harvardOxfordIndex": { "path": "generated/harvard_oxford_top3_1mm.npz", "sha256": "8591df9e9b37df27748d5ae3c8ca0478201834bac8014950115ba46697c4f6d0" },
-    "harvardOxfordIndexMetadata": { "path": "generated/harvard_oxford_top3_1mm.json", "sha256": "097843e228407b609602c6a8752e263550b170a9f2e4d36bae2a7a9ada15cf87" }
+    "harvardOxfordIndexMetadata": { "path": "generated/harvard_oxford_top3_1mm.json", "sha256": "097843e228407b609602c6a8752e263550b170a9f2e4d36bae2a7a9ada15cf87" },
+    "brainVertexAreas": { "path": "generated/brain_vertex_areas_f32.bin", "sha256": "248176af885bd1b36b57aad03b4ce6751dc711dee9acd2861af05541eee2728e", "vertices": 25000, "dtype": "float32-le", "units": "mm2" },
+    "harvardOxfordSurface25k": { "path": "generated/harvard_oxford_cortical_surface_25k.npz", "sha256": "907d882dfe58d297e9510526fd6eb3a10ebb4d098f8c755362b4e7bb7c3eedab", "probabilities": "full-original-percent", "vertices": 25000 },
+    "plannerSurfaceAssets": { "path": "generated/planner_surface_assets.json", "sha256": "c910f505af6936ff69718d468ff0f20642fb533fab6ab19732901e0e07cf2f34" }
   }
 }

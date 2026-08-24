@@ -23,11 +23,14 @@ function TargetDescription({ description }: { description: string }) {
 export interface QuickTargetProps {
   selectedTarget: QuickTargetSummary | null;
   statistic?: string | undefined;
+  visible?: boolean;
   onSelect(id: string): Promise<void> | void;
   onClear(): void;
+  onToggleVisible?(): void;
+  onImportNifti?(): void;
 }
 
-export function QuickTarget({ selectedTarget, statistic, onSelect, onClear }: QuickTargetProps) {
+export function QuickTarget({ selectedTarget, statistic, visible = false, onSelect, onClear, onToggleVisible, onImportNifti }: QuickTargetProps) {
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<QuickTargetSearchItem[]>([]);
@@ -112,7 +115,7 @@ export function QuickTarget({ selectedTarget, statistic, onSelect, onClear }: Qu
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
       >
-        <strong id={`${resultsId}-title`}>QUICK TARGET</strong>
+        <strong id={`${resultsId}-title`}>FUNCTIONAL TARGET</strong>
         <span>{target ? target.label : 'UNTARGETED'}</span>
         <code>{expanded ? '−' : '+'}</code>
       </button>
@@ -122,7 +125,10 @@ export function QuickTarget({ selectedTarget, statistic, onSelect, onClear }: Qu
           <div className="quick-target-active">
             <div className="target-active-head">
               <div><strong>{target.label}</strong>{(target.domain || target.subdomain) && <span>{[target.domain, target.subdomain].filter(Boolean).join(' / ')}</span>}<span>{statistic?.toUpperCase() ?? 'ASSOCIATION Z'}</span></div>
-              <button type="button" onClick={clearTarget} aria-label={`Clear ${target.label} target`}>CLEAR</button>
+              <div className="target-active-actions">
+                {onToggleVisible && <button type="button" className={visible ? 'active' : ''} onClick={onToggleVisible}>{visible ? 'HIDE' : 'SHOW'}</button>}
+                <button type="button" onClick={clearTarget} aria-label={`Clear ${target.label} target`}>CLEAR</button>
+              </div>
             </div>
             {target.description && <TargetDescription description={target.description} />}
             <dl className="target-facts">
@@ -131,11 +137,15 @@ export function QuickTarget({ selectedTarget, statistic, onSelect, onClear }: Qu
             </dl>
             {(target.peakRegions?.length ?? 0) > 0 && <div className="target-regions"><span>PEAK REGIONS</span><ol>{target.peakRegions?.slice(0, 3).map((region) => <li key={region}><span>{region}</span></li>)}</ol></div>}
             <p className="target-guidance"><b>HEATMAP ACTIVE IN 3D ALIGN.</b> Design the S/D geometry below, then place the patch over the highlighted cortex.</p>
-            <button className="target-change" type="button" onClick={() => { setChanging(true); setQuery(''); void runSearch(''); }}>CHANGE TARGET</button>
+            <div className="target-source-actions">
+              <button className="target-change" type="button" onClick={() => { setChanging(true); setQuery(''); void runSearch(''); }}>QUICK TARGET</button>
+              {onImportNifti && <button type="button" onClick={onImportNifti}>NIFTI MAP</button>}
+            </div>
           </div>
         ) : (
           <div className="quick-target-picker">
             <div className="target-picker-intro"><p>{target ? `Choose a replacement for ${target.label}. The current layout will not change.` : 'Choose a literature-derived cortical target before designing the optode geometry.'}</p>{target && <button type="button" onClick={() => setChanging(false)}>CANCEL</button>}</div>
+            {onImportNifti && <button className="target-import-nifti" type="button" onClick={onImportNifti}>IMPORT NIFTI TARGET MAP</button>}
             <form role="search" onSubmit={(event) => { event.preventDefault(); void runSearch(); }}>
               <input
                 type="search"
@@ -170,16 +180,21 @@ export function QuickTarget({ selectedTarget, statistic, onSelect, onClear }: Qu
 }
 
 /** Bridge-backed owner kept separate so QuickTarget remains reusable and controlled. */
-export function QuickTargetController() {
+export function QuickTargetController({ onImportNifti }: { onImportNifti?: () => void }) {
   const functionalTarget = useProjectStore((state) => state.functionalTarget);
+  const visible = useProjectStore((state) => state.project.surfaceOverlay === 'functional-target');
   const setFunctionalTarget = useProjectStore((state) => state.setFunctionalTarget);
+  const setFunctionalTargetVisible = useProjectStore((state) => state.setFunctionalTargetVisible);
   return <QuickTarget
     selectedTarget={functionalTarget?.target ?? null}
     statistic={functionalTarget?.provenance.statistic}
+    visible={visible}
     onSelect={async (id) => {
       const nextTarget = await loadQuickTarget(id);
       setFunctionalTarget(nextTarget);
     }}
     onClear={() => setFunctionalTarget(null)}
+    onToggleVisible={() => setFunctionalTargetVisible(!visible)}
+    {...(onImportNifti ? { onImportNifti } : {})}
   />;
 }

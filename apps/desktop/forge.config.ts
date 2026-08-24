@@ -37,13 +37,14 @@ const config = {
     new VitePlugin({
       build: [
         { entry: 'src/main/main.ts', config: 'vite.main.config.ts' },
+        { entry: 'src/main/mcpBootstrap.ts', config: 'vite.main.config.ts' },
         { entry: 'src/preload/preload.ts', config: 'vite.preload.config.ts' },
       ],
       renderer: [{ name: 'main_window', config: 'vite.renderer.config.ts' }],
     }),
     new FusesPlugin({
       version: FuseVersion.V1,
-      [FuseV1Options.RunAsNode]: false,
+      [FuseV1Options.RunAsNode]: true,
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,

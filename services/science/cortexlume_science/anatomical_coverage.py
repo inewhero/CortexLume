@@ -40,10 +40,77 @@ TARGET_SURFACE = "Cedalion-ICBM152-25k"
 TEMPLATE_ASSET_VERSION = "templateflow-c906e8d_cedalion-icbm152-26.5.1"
 VERTEX_COORDINATES_SHA256 = "8b5c0e45f58f0e5741b6d16dc6cfcb73d9014fe923eee1d7474b86d3f0e5b92c"
 SURFACE_MESH_SHA256 = "e4c9033a515fd7693eb07fb80708509352b7f8044f860e690acf52cbc98119f1"
+SURFACE_ATLAS_SHA256 = "907d882dfe58d297e9510526fd6eb3a10ebb4d098f8c755362b4e7bb7c3eedab"
 
 
 class AnatomicalCoverageError(RuntimeError):
     """Raised when a coverage request or one of its locked assets is invalid."""
+
+
+@lru_cache(maxsize=1)
+def load_full_surface_atlas() -> tuple[np.ndarray, tuple[str, ...]]:
+    path = template_directory() / "generated" / "harvard_oxford_cortical_surface_25k.npz"
+    if sha256_file(path) != SURFACE_ATLAS_SHA256:
+        raise AnatomicalCoverageError("coverage_full_surface_atlas_hash_mismatch")
+    try:
+        with np.load(path, allow_pickle=False) as archive:
+            memberships = np.asarray(archive["memberships"], dtype=np.uint8)
+            labels = tuple(str(label).strip() for label in archive["labels"])
+    except (OSError, KeyError, ValueError) as error:
+        raise AnatomicalCoverageError(f"coverage_full_surface_atlas_unavailable:{type(error).__name__}") from error
+    if memberships.shape != (VERTEX_COUNT, len(labels)) or not labels:
+        raise AnatomicalCoverageError("coverage_full_surface_atlas_shape_mismatch")
+    if int(memberships.max()) != 100:
+        raise AnatomicalCoverageError("coverage_full_surface_atlas_scale_invalid")
+    return memberships, labels
+
+
+def list_cortical_regions() -> tuple[str, ...]:
+    return load_full_surface_atlas()[1]
+
+
+def cortical_region_target(label: str) -> dict:
+    memberships, labels = load_full_surface_atlas()
+    matches = [index for index, candidate in enumerate(labels) if candidate.casefold() == label.strip().casefold()]
+    if not matches:
+        raise AnatomicalCoverageError("unknown_harvard_oxford_cortical_region")
+    values_all = memberships[:, matches[0]].astype(np.float64) / 100.0
+    indices = np.flatnonzero(values_all > 0).astype(np.int64)
+    values = values_all[indices]
+    if indices.size == 0:
+        raise AnatomicalCoverageError("harvard_oxford_cortical_region_is_empty")
+    digest = hashlib.sha256()
+    digest.update(indices.astype("<i4").tobytes())
+    digest.update(values.astype("<f4").tobytes())
+    canonical_label = labels[matches[0]]
+    return {
+        "target": {
+            "id": f"harvard-oxford:{matches[0]}",
+            "label": canonical_label,
+            "aliases": [],
+            "domain": "anatomy",
+            "subdomain": "Harvard-Oxford cortical",
+            "description": "Original Harvard-Oxford cortical probability sampled on the locked Cedalion 25k surface.",
+            "peakRegions": [canonical_label],
+        },
+        "vertexCount": VERTEX_COUNT,
+        "vertexIndices": indices.tolist(),
+        "values": values.tolist(),
+        "provenance": {
+            "sourceKind": "harvard-oxford-region",
+            "sourceSpace": "MNI152NLin6Asym",
+            "targetSpace": "MNI152NLin6Asym",
+            "targetSurface": TARGET_SURFACE,
+            "statistic": "Harvard-Oxford probability",
+            "mapSha256": digest.hexdigest(),
+            "interpolation": "nearest-voxel full original membership",
+            "validation": {
+                "atlasId": CORTICAL_ATLAS_ID,
+                "surfaceAtlasSha256": SURFACE_ATLAS_SHA256,
+                "probabilities": "original percent not renormalized",
+            },
+        },
+    }
 
 
 @dataclass(frozen=True)

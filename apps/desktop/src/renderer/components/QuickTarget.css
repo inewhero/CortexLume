@@ -30,6 +30,8 @@
 .target-active-head strong { display: block; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
 .target-active-head span { display: block; margin-top: 3px; color: #626d70; font: 9.5px "Cascadia Mono", Consolas, monospace; }
 .target-active-head button { min-height: var(--control-height-compact); padding: 4px 8px; font-size: var(--text-meta); }
+.target-active-actions { display: flex; gap: 5px; }
+.target-active-actions button.active { color: #fff; background: var(--panel-dark); }
 .target-description { margin: 9px 0 0; color: #515c5f; font-size: 10.5px; line-height: 1.5; }
 .target-description a { font: inherit; }
 .target-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 10px 0 0; border: 1px solid #c2c9c6; }
@@ -48,6 +50,9 @@
 .target-guidance { margin: 10px 0 0; color: #4b5659; font-size: 10.5px; line-height: 1.5; }
 .target-guidance b { color: #20292c; }
 .target-change { width: 100%; min-height: 32px; margin-top: 10px; }
+.target-source-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.target-source-actions .target-change { margin-top: 0; }
+.target-import-nifti { width: 100%; min-height: 32px; margin-bottom: 8px; }
 .target-error { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 9px 11px; color: #fff; background: #9b342f; font-size: 9.5px; }
 .target-error span { min-width: 0; overflow-wrap: anywhere; }
 .target-error button { flex: 0 0 auto; min-height: var(--control-height-compact); padding: 4px 8px; color: #fff; border-color: #e6b5b1; background: transparent; font-size: var(--text-meta); }

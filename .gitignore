@@ -57,6 +57,9 @@ __pycache__/
 !/assets/templates/MNI152NLin6Asym/generated/voxel_to_vertex_brain.mtx.gz
 !/assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-assets.json
 !/assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-qc.json
+!/assets/templates/MNI152NLin6Asym/generated/brain_vertex_areas_f32.bin
+!/assets/templates/MNI152NLin6Asym/generated/harvard_oxford_cortical_surface_25k.npz
+!/assets/templates/MNI152NLin6Asym/generated/planner_surface_assets.json
 !/assets/templates/MNI152NLin6Asym/generated/quick_targets/
 !/assets/templates/MNI152NLin6Asym/generated/quick_targets/**
 

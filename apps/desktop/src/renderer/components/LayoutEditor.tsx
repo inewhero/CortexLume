@@ -8,7 +8,6 @@ import {
   uvFromScreen,
 } from '../lib/editorGrid';
 import { useProjectStore } from '../store/projectStore';
-import { QuickTargetController } from './QuickTarget';
 
 export function LayoutEditor() {
   const shellRef = useRef<HTMLDivElement>(null);
@@ -98,7 +97,6 @@ export function LayoutEditor() {
 
   return (
     <div className="layout-editor-content">
-      <QuickTargetController />
       <div className="module-summary">
         <div className="layout-name-editor">
           <input

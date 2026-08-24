@@ -1,0 +1,34 @@
+{
+  "name": "@cortexlume/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./node": {
+      "types": "./src/node.ts",
+      "default": "./src/node.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cortexlume/contracts": "workspace:*",
+    "three": "^0.178.0",
+    "three-mesh-bvh": "^0.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "@types/three": "^0.178.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
