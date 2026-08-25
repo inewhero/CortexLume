@@ -4,6 +4,33 @@
 
 # CortexLume
 
+[![Latest release](https://img.shields.io/github/v/release/inewhero/CortexLume?display_name=tag&sort=semver)](https://github.com/inewhero/CortexLume/releases/latest)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/inewhero/CortexLume)
+
+## How to use
+
+### Install with an AI coding agent
+
+Paste the prompt below into Claude Code, Codex, or another coding agent with local file and MCP configuration access. The agent will install the latest Windows release and connect CortexLume as a local stdio MCP server. It will ask which project folders CortexLume may access before changing the MCP configuration.
+
+```text
+Install the latest stable CortexLume release from
+https://github.com/inewhero/CortexLume/releases/latest on this Windows machine.
+
+Use the portable x64 package unless an installed application is more appropriate
+for this environment. Configure CortexLume as a local stdio MCP server for this
+agent using CortexLume.exe --mcp-stdio. Before editing the MCP configuration, ask
+me which working folders to authorize, then pass each approved folder as an
+--mcp-root=<absolute-path> argument. Do not grant broader filesystem access.
+
+After installation, start a clean MCP session, call get_capabilities, and report
+the installed CortexLume version, asset status, authorized roots, and available
+planning tools. Do not create a layout project until I provide a target and patch
+requirements.
+```
+
+To work manually, download either the installer or portable ZIP from the [latest release](https://github.com/inewhero/CortexLume/releases/latest), open CortexLume, and follow the desktop workflow below. Agent-generated `.cortexlume` projects open in the same interface for visual inspection and adjustment.
+
 CortexLume is a scientifically validated, offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp, display, and cortical coordinates in MNI space.
 
 The application combines literature-derived functional target heatmaps, strict statistical NIfTI import, a high-density 2D array editor, multi-patch 3D alignment, sphere-aware scalp and cortical projection, five-point and 10–10 references, Harvard–Oxford probability-volume lookup, anatomical coverage mosaics, project archives, focused CSV results, BIDS-NIRS geometry sidecars, and direct BrainNet Viewer export.
@@ -70,7 +97,7 @@ Quick Target values are meta-analytic association z statistics, not activation p
 
 The complete anatomical correspondence evidence is stored in [`cedalion-correspondence-qc.json`](./assets/templates/MNI152NLin6Asym/generated/cedalion-correspondence-qc.json), with the reproducible process documented in [`SCIENTIFIC_ASSET_PIPELINE.md`](./docs/SCIENTIFIC_ASSET_PIPELINE.md). Quick Target generation and release checks are documented in [`quick-target-data.md`](./docs/quick-target-data.md) and the [`curated v1 QC report`](./docs/quick-target-qc-v1.md).
 
-## How to use
+## Desktop workflow
 
 1. **Choose a target.** Expand **Optode Design → Quick Target** to load a Neurosynth heatmap in **3D Align**. For a Compose or analysis-workflow map, choose **Info Panel → Workflow → NIfTI Map**, declare its template, and import the `.nii` or `.nii.gz` file after validation. The most recently loaded source replaces the previous Functional Map; its visibility is controlled in **Anatomy Layers**.
 2. **Design a patch.** Create an S/D pattern under the target guide, or generate an `x × y` grid. Adjust optode positions and channel numbering directly on the canvas. Changing or clearing a target never modifies the layout.
