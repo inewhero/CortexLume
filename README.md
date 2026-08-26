@@ -11,25 +11,14 @@
 
 ### Install with an AI coding agent
 
-Paste the prompt below into Claude Code, Codex, or another coding agent with local file and MCP configuration access. The agent will install the latest Windows release and connect CortexLume as a local stdio MCP server. It will ask which project folders CortexLume may access before changing the MCP configuration.
+Send this prompt to Claude Code, Codex, or another local coding agent:
 
 ```text
-Install the latest stable CortexLume release from
-https://github.com/inewhero/CortexLume/releases/latest on this Windows machine.
-
-Use the portable x64 package unless an installed application is more appropriate
-for this environment. Configure CortexLume as a local stdio MCP server for this
-agent using CortexLume.exe --mcp-stdio. Before editing the MCP configuration, ask
-me which working folders to authorize, then pass each approved folder as an
---mcp-root=<absolute-path> argument. Do not grant broader filesystem access.
-
-After installation, start a clean MCP session, call get_capabilities, and report
-the installed CortexLume version, asset status, authorized roots, and available
-planning tools. Do not create a layout project until I provide a target and patch
-requirements.
+Install CortexLume and connect its MCP server by following the Agent Guide:
+https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md
 ```
 
-To work manually, download either the installer or portable ZIP from the [latest release](https://github.com/inewhero/CortexLume/releases/latest), open CortexLume, and follow the desktop workflow below. Agent-generated `.cortexlume` projects open in the same interface for visual inspection and adjustment.
+To work manually, download and run `CortexLume-*-win-x64-Setup.exe` from the [latest release](https://github.com/inewhero/CortexLume/releases/latest), open CortexLume, and follow the desktop workflow below. Agent-generated `.cortexlume` projects open in the same interface for visual inspection and adjustment.
 
 CortexLume is a scientifically validated, offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp, display, and cortical coordinates in MNI space.
 
@@ -112,6 +101,8 @@ The complete anatomical correspondence evidence is stored in [`cedalion-correspo
 ## Agent planning through MCP
 
 CortexLume also provides a local machine interface for AI agents. The agent plans and writes a complete `.cortexlume` project; the desktop application remains a focused human workspace for visual review and fine adjustment. No chat surface or provider-specific integration is added to the GUI.
+
+Installation and client setup are documented in the [Agent Guide](./AGENT_README.md).
 
 Start the installed application as a stdio MCP server and grant one or more working roots explicitly:
 
