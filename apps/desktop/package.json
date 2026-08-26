@@ -1,9 +1,9 @@
 {
   "name": "@cortexlume/desktop",
   "productName": "CortexLume",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Validated fNIRS layout design and anatomical projection",
-  "author": "CortexLume Contributors",
+  "author": "CortexLume",
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {
@@ -22,6 +22,7 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "@react-three/drei": "^10.6.1",
     "@react-three/fiber": "^9.3.0",
+    "electron-squirrel-startup": "^1.0.1",
     "fflate": "^0.8.2",
     "konva": "^9.3.22",
     "react": "^19.1.0",

@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import squirrelStartupHandled from 'electron-squirrel-startup';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ScienceClient, type ScienceCommand } from '@cortexlume/science-client';
@@ -33,9 +34,38 @@ import type { UpdateCheckResult } from '../shared/startup';
 let mainWindow: BrowserWindow | null = null;
 const headlessSmokeTest = process.env.CORTEXLUME_HEADLESS_TEST === '1';
 const mcpMode = process.argv.includes('--mcp-stdio');
+const squirrelFirstRun = process.argv.includes('--squirrel-firstrun');
+const squirrelUninstall = process.argv.includes('--squirrel-uninstall');
+const uninstallMode = process.argv.includes('--uninstall-cortexlume');
+const installTestMarker = process.env.CORTEXLUME_INSTALL_TEST_MARKER;
 const startupProjectPath = process.argv.find((argument, index) => (
   index > 0 && !argument.startsWith('--') && argument.toLowerCase().endsWith('.cortexlume')
 )) ?? null;
+
+function getInstallRoot(): string {
+  return path.resolve(path.dirname(process.execPath), '..');
+}
+
+function getUninstallShortcutPath(): string | null {
+  const appData = process.env.APPDATA;
+  if (!appData) return null;
+  return path.join(
+    appData,
+    'Microsoft',
+    'Windows',
+    'Start Menu',
+    'Programs',
+    'CortexLume',
+    'Uninstall CortexLume.lnk',
+  );
+}
+
+function removeUninstallShortcut(): void {
+  const shortcutPath = getUninstallShortcutPath();
+  if (shortcutPath) rmSync(shortcutPath, { force: true });
+}
+
+if (squirrelUninstall) removeUninstallShortcut();
 let validatedReleaseUrl: string | null = null;
 let closeApproved = false;
 let closeRequestPending = false;
@@ -658,7 +688,61 @@ function startMcpStdioChild(): void {
   child.once('exit', (code) => app.exit(code ?? 1));
 }
 
-app.whenReady().then(async () => {
+async function ensureUninstallShortcut(): Promise<void> {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  const shortcutPath = getUninstallShortcutPath();
+  if (!shortcutPath) throw new Error('APPDATA is unavailable; cannot create the uninstall shortcut.');
+
+  const installRoot = getInstallRoot();
+  const stableExecutable = path.join(installRoot, 'CortexLume.exe');
+  const updateExecutable = path.join(installRoot, 'Update.exe');
+  if (!existsSync(stableExecutable) || !existsSync(updateExecutable)) return;
+
+  await mkdir(path.dirname(shortcutPath), { recursive: true });
+  const operation = existsSync(shortcutPath) ? 'replace' : 'create';
+  const written = shell.writeShortcutLink(shortcutPath, operation, {
+    target: stableExecutable,
+    args: '--uninstall-cortexlume',
+    cwd: installRoot,
+    description: 'Uninstall CortexLume Workstation',
+    icon: process.execPath,
+    iconIndex: 0,
+  });
+  if (!written) throw new Error(`Failed to create uninstall shortcut: ${shortcutPath}`);
+}
+
+async function runUninstallPrompt(): Promise<void> {
+  const result = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'Uninstall CortexLume Workstation',
+    message: 'Uninstall CortexLume Workstation?',
+    detail: 'The application and its shortcuts will be removed. Your CortexLume project files will not be deleted.',
+    buttons: ['Cancel', 'Uninstall'],
+    defaultId: 1,
+    cancelId: 0,
+    noLink: true,
+  });
+  if (result.response !== 1) {
+    app.quit();
+    return;
+  }
+
+  removeUninstallShortcut();
+  const updateExecutable = path.join(getInstallRoot(), 'Update.exe');
+  const child = spawn(updateExecutable, ['--uninstall'], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: false,
+  });
+  child.unref();
+  app.quit();
+}
+
+if (!squirrelStartupHandled) app.whenReady().then(async () => {
+  if (uninstallMode) {
+    await runUninstallPrompt();
+    return;
+  }
   if (mcpMode) {
     startMcpStdioChild();
     return;
@@ -666,6 +750,27 @@ app.whenReady().then(async () => {
   registerIpc();
   void startScienceSidecar().catch((error) => console.error('Science sidecar unavailable:', error));
   await createWindow();
+  await ensureUninstallShortcut().catch((error) => console.error('Uninstall shortcut unavailable:', error));
+  if (squirrelFirstRun && installTestMarker) {
+    await writeFile(installTestMarker, `${process.execPath}\n`, 'utf8');
+  }
+  if (squirrelFirstRun && mainWindow && !headlessSmokeTest) {
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'CortexLume Workstation',
+      message: 'CortexLume Workstation is ready.',
+      detail: [
+        'Desktop and Start Menu shortcuts have been created.',
+        `Application files: ${path.dirname(process.execPath)}`,
+        'To remove CortexLume, use Uninstall CortexLume in the Start Menu or Windows Installed apps.',
+      ].join('\n\n'),
+      buttons: ['Start CortexLume', 'Open installation folder'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (result.response === 1) shell.showItemInFolder(process.execPath);
+  }
   if (headlessSmokeTest) setTimeout(() => app.quit(), 5_000);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();

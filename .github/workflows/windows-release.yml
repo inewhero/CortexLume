@@ -63,6 +63,22 @@ jobs:
         if: github.event_name != 'pull_request'
         run: pnpm --filter @cortexlume/desktop make
 
+      - name: Verify installed Windows application
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/package.json | ConvertFrom-Json).version
+          $setup = Get-ChildItem `
+            "apps/desktop/out/make/squirrel.windows/x64" `
+            -Filter "*Setup.exe" |
+            Select-Object -First 1
+          if (-not $setup) {
+            throw "Expected Squirrel Setup was not generated."
+          }
+          ./scripts/verify-squirrel-install.ps1 `
+            -SetupPath $setup.FullName `
+            -Version $version
+
       - name: Package optional example dataset
         if: github.event_name != 'pull_request'
         run: pnpm examples:package
