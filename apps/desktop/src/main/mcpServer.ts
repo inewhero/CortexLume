@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, open, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -25,6 +25,7 @@ import {
   loadHeadModelFromAssets,
   planLayouts,
   summarizeTargetSurfaceComponents,
+  validatePlannerPatchSpecs,
   type LoadedHeadModel,
   type PlannerCandidate,
   type PlannerPatchSpec,
@@ -32,7 +33,8 @@ import {
 import {
   createProjectArchive, PROJECT_ARCHIVE_LIMITS, readProjectArchiveDetailed, sha256Bytes,
 } from '@cortexlume/project-io';
-import type { ScienceClient } from '@cortexlume/science-client';
+import { withStagedNiftiFile, type ScienceClient } from '@cortexlume/science-client';
+import { MCP_ROOT_CONFIGURATION_ERROR } from './mcpBootstrapConfig';
 
 interface PlanCacheEntry {
   planId: string;
@@ -192,7 +194,10 @@ export class CortexLumeMcpRuntime {
   private headPromise: Promise<LoadedHeadModel> | null = null;
 
   constructor(private readonly options: McpRuntimeOptions) {
-    const configured = options.authorizedRoots?.length ? options.authorizedRoots : [process.cwd()];
+    const configured = (options.authorizedRoots ?? [])
+      .map((root) => root.trim())
+      .filter((root) => root.length > 0);
+    if (configured.length === 0) throw new Error(MCP_ROOT_CONFIGURATION_ERROR);
     this.roots = configured.map((root) => path.resolve(root));
   }
 
@@ -279,6 +284,9 @@ export class CortexLumeMcpRuntime {
         sourceProjectPath: z.string().min(1).optional(),
       },
     }, async (request) => {
+      // Reject layouts that cannot satisfy the shared project graph limits
+      // before resolving targets, starting science, or running placement.
+      validatePlannerPatchSpecs(request.patches as PlannerPatchSpec[]);
       const assets = await this.head();
       const source = request.sourceProjectPath ? await this.readAuthorizedProject(request.sourceProjectPath) : null;
       const target = await this.resolveTarget(request.target, assets);
@@ -440,12 +448,13 @@ export class CortexLumeMcpRuntime {
     if (target.kind === 'nifti') {
       const inputPath = await this.authorizedPath(String(target.path), true);
       if (!/\.nii(?:\.gz)?$/i.test(inputPath)) throw new Error('NIfTI target path must end in .nii or .nii.gz.');
-      if ((await stat(inputPath)).size > 128 * 1024 * 1024) throw new Error('NIfTI target exceeds 128 MB.');
-      const response = await this.options.science.request<Record<string, unknown>>('/v1/targets/import', {
-        fileName: path.basename(inputPath), declaredSpace: target.declaredSpace, dataBase64: (await readFile(inputPath)).toString('base64'),
+      return withStagedNiftiFile(inputPath, async (stagedPath, sourceFileName) => {
+        const response = await this.options.science.request<Record<string, unknown>>('/v1/targets/import', {
+          fileName: sourceFileName, declaredSpace: target.declaredSpace, filePath: stagedPath,
+        });
+        if (!response.accepted || !response.map) throw new Error(`NIfTI target was rejected: ${JSON.stringify(response.diagnostics ?? [])}`);
+        return FunctionalTargetMapSchema.parse(response.map);
       });
-      if (!response.accepted || !response.map) throw new Error(`NIfTI target was rejected: ${JSON.stringify(response.diagnostics ?? [])}`);
-      return FunctionalTargetMapSchema.parse(response.map);
     }
     if (target.kind === 'mni-point') {
       const rasMm = target.rasMm as Vec3;

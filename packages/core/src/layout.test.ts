@@ -44,4 +44,14 @@ describe('createGridLayout', () => {
       activeCells: [[true, false], [false, true]],
     }, 'disconnected-test', TIMESTAMP)).toThrow('connected long-channel');
   });
+
+  it('rejects a 12 x 12 grid that exceeds the shared optode and pair limits', () => {
+    expect(() => createGridLayout({ columns: 12, rows: 12 }, 'oversized-grid-test', TIMESTAMP))
+      .toThrow(/optodes|pairs|100|256/);
+  });
+
+  it('rejects short-channel detectors that push a valid grid over graph limits', () => {
+    expect(() => createGridLayout({ columns: 10, rows: 10, shortChannelCount: 1 }, 'oversized-short-test', TIMESTAMP))
+      .toThrow(/optodes|pairs|100|256/);
+  });
 });

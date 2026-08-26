@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { LayoutDefinition, OptodeType } from '@cortexlume/contracts';
+import { LayoutDefinitionSchema, type LayoutDefinition, type OptodeType } from '@cortexlume/contracts';
 
 function deterministicUuid(namespace: string, value: string): string {
   const hex = createHash('sha256').update(`${namespace}\0${value}`).digest('hex').slice(0, 32).split('');
@@ -75,7 +75,13 @@ export function createGridLayout(spec: GridPatchSpec, namespace: string, timesta
     optodes.push(detector);
     addPair(source, detector, true);
   }
-  return { id: layoutId, version: 1, name: spec.name?.trim() || 'Agent patch', createdAt: timestamp, updatedAt: timestamp, gridSpacingMm: pitchMm, optodes, pairs };
+  // LayoutDefinitionSchema is the shared graph-limit boundary for every
+  // caller. Keep this assertion in the core constructor so a generated
+  // layout can never escape with more optodes/pairs than a project can save.
+  return LayoutDefinitionSchema.parse({
+    id: layoutId, version: 1, name: spec.name?.trim() || 'Agent patch', createdAt: timestamp, updatedAt: timestamp,
+    gridSpacingMm: pitchMm, optodes, pairs,
+  });
 }
 
 export { deterministicUuid };

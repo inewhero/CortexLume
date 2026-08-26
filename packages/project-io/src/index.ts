@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { TextDecoder, TextEncoder } from 'node:util';
-import { unzipSync, zipSync, strToU8 } from 'fflate';
+import { unzipSync, zipSync } from 'fflate';
 import { z } from 'zod';
 import {
   CortexLumeProjectSchema,
@@ -27,6 +27,29 @@ const ALLOWED_ARCHIVE_ENTRIES = new Map<string, number>([
   ['project.json', PROJECT_ARCHIVE_LIMITS.projectBytes],
   ['manifest.json', PROJECT_ARCHIVE_LIMITS.manifestBytes],
 ]);
+
+function validateArchiveEntrySize(name: string, uncompressedSize: number): void {
+  const entryLimit = ALLOWED_ARCHIVE_ENTRIES.get(name);
+  if (entryLimit == null) zipError(`unexpected entry ${JSON.stringify(name)}`);
+  if (uncompressedSize > entryLimit) zipError(`${name} exceeds its uncompressed size limit`);
+}
+
+function validateArchiveTotalUncompressedSize(totalUncompressed: number): void {
+  if (totalUncompressed > PROJECT_ARCHIVE_LIMITS.totalUncompressedBytes) {
+    zipError('total uncompressed size exceeds its limit');
+  }
+}
+
+function validateArchiveUncompressedSizes(
+  entries: ReadonlyArray<readonly [name: string, bytes: Uint8Array]>,
+): void {
+  let totalUncompressed = 0;
+  for (const [name, bytes] of entries) {
+    validateArchiveEntrySize(name, bytes.byteLength);
+    totalUncompressed += bytes.byteLength;
+  }
+  validateArchiveTotalUncompressedSize(totalUncompressed);
+}
 
 function readU16(data: Uint8Array, offset: number): number {
   return data[offset]! | (data[offset + 1]! << 8);
@@ -118,11 +141,9 @@ export function preflightProjectArchive(data: Uint8Array): void {
     } catch {
       zipError('entry name is not valid UTF-8');
     }
-    const entryLimit = ALLOWED_ARCHIVE_ENTRIES.get(name);
-    if (entryLimit == null) zipError(`unexpected entry ${JSON.stringify(name)}`);
+    validateArchiveEntrySize(name, uncompressedSize);
     if (names.has(name)) zipError(`duplicate entry ${JSON.stringify(name)}`);
     names.add(name);
-    if (uncompressedSize > entryLimit) zipError(`${name} exceeds its uncompressed size limit`);
     if (uncompressedSize > 0 && compressedSize === 0) zipError(`${name} has an invalid compression ratio`);
     if (uncompressedSize / Math.max(1, compressedSize) > PROJECT_ARCHIVE_LIMITS.maximumCompressionRatio) {
       zipError(`${name} exceeds the maximum compression ratio`);
@@ -159,9 +180,7 @@ export function preflightProjectArchive(data: Uint8Array): void {
     || [...ALLOWED_ARCHIVE_ENTRIES.keys()].some((name) => !names.has(name))) {
     zipError('archive entry set is incomplete or malformed');
   }
-  if (totalUncompressed > PROJECT_ARCHIVE_LIMITS.totalUncompressedBytes) {
-    zipError('total uncompressed size exceeds its limit');
-  }
+  validateArchiveTotalUncompressedSize(totalUncompressed);
   if (totalUncompressed / Math.max(1, totalCompressed) > PROJECT_ARCHIVE_LIMITS.maximumCompressionRatio) {
     zipError('archive exceeds the maximum aggregate compression ratio');
   }
@@ -190,7 +209,7 @@ export function canonicalProjectBytes(project: CortexLumeProject): Uint8Array {
 export function createProjectArchive(project: CortexLumeProject, applicationVersion?: string): Uint8Array {
   const validated = CortexLumeProjectSchema.parse(project);
   const projectBytes = canonicalProjectBytes(validated);
-  const manifest: ProjectArchiveManifest = {
+  const manifest = ProjectArchiveManifestSchema.parse({
     format: validated.format,
     formatVersion: 2,
     projectId: validated.id,
@@ -199,11 +218,20 @@ export function createProjectArchive(project: CortexLumeProject, applicationVers
     ...(applicationVersion ? { applicationVersion } : {}),
     projectSha256: sha256Bytes(projectBytes),
     template: validated.template,
-  };
-  return zipSync({
-    'manifest.json': strToU8(JSON.stringify(manifest, null, 2)),
+  });
+  const manifestBytes = encoder.encode(JSON.stringify(manifest, null, 2));
+  validateArchiveUncompressedSizes([
+    ['project.json', projectBytes],
+    ['manifest.json', manifestBytes],
+  ]);
+
+  const archive = zipSync({
+    'manifest.json': manifestBytes,
     'project.json': projectBytes,
   }, { level: 6 });
+  // Keep the writer and reader on the same ZIP metadata, size, and compression invariants.
+  preflightProjectArchive(archive);
+  return archive;
 }
 
 export interface ReadProjectArchiveResult {

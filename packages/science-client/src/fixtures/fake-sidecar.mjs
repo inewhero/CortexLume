@@ -31,9 +31,11 @@ const server = http.createServer((request, response) => {
   });
 });
 
-if (!process.argv.includes('--invalid-ready')) server.listen(0, '127.0.0.1', () => {
+const announceReady = () => server.listen(0, '127.0.0.1', () => {
   const address = server.address();
   process.stdout.write(`CORTEXLUME_READY ${JSON.stringify({ port: address.port })}\n`);
 });
+if (!process.argv.includes('--invalid-ready') && !process.argv.includes('--delay-ready')) announceReady();
+if (process.argv.includes('--delay-ready')) setTimeout(announceReady, 10_000);
 
 process.on('SIGTERM', () => server.close(() => process.exit(0)));

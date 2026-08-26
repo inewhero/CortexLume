@@ -1,14 +1,26 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { HeadViewport } from './components/HeadViewport';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { BidsSettings } from './components/BidsSettings';
 import { Inspector } from './components/Inspector';
-import { LayoutEditor } from './components/LayoutEditor';
 import { LayoutLibrary } from './components/LayoutLibrary';
 import { QuickTargetController } from './components/QuickTarget';
 import { TopBar } from './components/TopBar';
 import type { UpdateCheckResult } from '../shared/startup';
 import { useProjectStore } from './store/projectStore';
 import { confirmProjectTransition } from './lib/unsavedChanges';
+
+const HeadViewport = lazy(async () => {
+  const module = await import('./components/HeadViewport');
+  return { default: module.HeadViewport };
+});
+
+const LayoutEditor = lazy(async () => {
+  const module = await import('./components/LayoutEditor');
+  return { default: module.LayoutEditor };
+});
+
+function WorkspaceLoadingFallback({ label }: { label: string }) {
+  return <div className="workspace-loading" role="status">LOADING {label}…</div>;
+}
 
 function PanelFrame({ title, side, collapsed = false, children }: {
   title: string;
@@ -101,10 +113,15 @@ export function App() {
       />
       <main className="workspace" style={{ gridTemplateColumns: columns }}>
         <PanelFrame title="Optode Design" side="left" collapsed={!leftVisible}>
-          <div className="scroll-panel"><QuickTargetController /><LayoutEditor /><BidsSettings /><LayoutLibrary /></div>
+          <div className="scroll-panel">
+            <QuickTargetController />
+            <Suspense fallback={<WorkspaceLoadingFallback label="2D EDITOR" />}><LayoutEditor /></Suspense>
+            <BidsSettings />
+            <LayoutLibrary />
+          </div>
         </PanelFrame>
         <PanelFrame title="3D Align">
-          <HeadViewport />
+          <Suspense fallback={<WorkspaceLoadingFallback label="3D VIEW" />}><HeadViewport /></Suspense>
           <button className="boundary-toggle boundary-left" onClick={() => setLeftVisible((value) => !value)} title={leftVisible ? 'Collapse Optode Design' : 'Open Optode Design'}>{leftVisible ? '‹' : '›'}</button>
           <button className="boundary-toggle boundary-right" onClick={() => setRightVisible((value) => !value)} title={rightVisible ? 'Collapse Info Panel' : 'Open Info Panel'}>{rightVisible ? '›' : '‹'}</button>
         </PanelFrame>

@@ -30,6 +30,26 @@ export interface PlannerRequest {
   seed: string;
 }
 
+const LAYOUT_VALIDATION_TIMESTAMP = '2000-01-01T00:00:00.000Z';
+
+function buildPlannerLayouts(patches: readonly PlannerPatchSpec[], namespace: string): LayoutDefinition[] {
+  return patches.map((spec, patchIndex) => createGridLayout(
+    { ...spec, name: spec.name ?? `Agent patch ${patchIndex + 1}` },
+    `${namespace}:patch:${patchIndex}`,
+    LAYOUT_VALIDATION_TIMESTAMP,
+  ));
+}
+
+/**
+ * Validate patch graph limits before loading assets or running placement.
+ * createGridLayout() owns the shared LayoutDefinitionSchema invariant, so
+ * this helper gives non-planning callers the same fail-fast boundary.
+ */
+export function validatePlannerPatchSpecs(patches?: readonly PlannerPatchSpec[]): void {
+  const normalized: PlannerPatchSpec[] = patches?.length ? [...patches] : [{}];
+  buildPlannerLayouts(normalized, 'validation');
+}
+
 export interface PlannerCandidate {
   summary: PlanningCandidateSummary;
   layouts: LayoutDefinition[];
@@ -514,11 +534,7 @@ export function planLayouts(head: HeadModel, input: PlannerRequest): PlannerResu
   };
   if (request.supportRadiusMm < request.kernelSigmaMm) throw new Error('Coverage support radius must be at least one sigma.');
   const namespace = createHash('sha256').update(`${request.seed}\0placement-beam`).digest('hex');
-  const layouts = request.patches.map((spec, patchIndex) => createGridLayout(
-    { ...spec, name: spec.name ?? `Agent patch ${patchIndex + 1}` },
-    `${namespace}:patch:${patchIndex}`,
-    '2000-01-01T00:00:00.000Z',
-  ));
+  const layouts = buildPlannerLayouts(request.patches, namespace);
   const anchorCount = Math.max(20, Math.min(32, request.patches.length * 8 + 12));
   const peaks = targetPeakAnchors(head, request.target, anchorCount);
   const beam = placementBeam(head, request, layouts, peaks, namespace);

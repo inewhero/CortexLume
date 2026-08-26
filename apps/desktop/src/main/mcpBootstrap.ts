@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ScienceClient, type ScienceCommand } from '@cortexlume/science-client';
 import { CortexLumeMcpRuntime } from './mcpServer';
+import { requireConfiguredRoots } from './mcpBootstrapConfig';
 
 const appRoot = path.resolve(process.env.CORTEXLUME_APP_ROOT ?? process.cwd());
 const resourcesRoot = path.resolve(
@@ -27,14 +28,6 @@ function scienceCommand(): ScienceCommand {
   return { command: 'py', args: ['-3.12', script], cwd: path.dirname(script), assetRoot: templateRoot };
 }
 
-function configuredRoots(): string[] {
-  const argumentsRoots = process.argv.flatMap((argument) => (
-    argument.startsWith('--mcp-root=') ? [argument.slice('--mcp-root='.length)] : []
-  ));
-  const environmentRoots = (process.env.CORTEXLUME_MCP_ROOTS ?? '').split(path.delimiter).filter(Boolean);
-  return [...argumentsRoots, ...environmentRoots].map((root) => path.resolve(root));
-}
-
 function openGui(projectPath: string): void {
   const environment = { ...process.env };
   delete environment.ELECTRON_RUN_AS_NODE;
@@ -54,7 +47,7 @@ const runtime = new CortexLumeMcpRuntime({
   templateRoot,
   science,
   applicationVersion: process.env.CORTEXLUME_APP_VERSION ?? 'development',
-  authorizedRoots: configuredRoots(),
+  authorizedRoots: requireConfiguredRoots(),
   openGui,
 });
 const keepAlive = setInterval(() => {}, 0x7fffffff);

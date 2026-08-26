@@ -5,7 +5,63 @@ import {
 } from '../shared/startup';
 
 const LATEST_RELEASE_API = 'https://api.github.com/repos/inewhero/CortexLume/releases/latest';
-const MAX_RELEASE_RESPONSE_BYTES = 512 * 1024;
+export const MAX_RELEASE_RESPONSE_BYTES = 512 * 1024;
+
+class ReleaseResponseTooLargeError extends Error {
+  constructor() {
+    super('The release response exceeded the accepted size.');
+    this.name = 'ReleaseResponseTooLargeError';
+  }
+}
+
+async function abortResponse(response: Response, controller: AbortController): Promise<void> {
+  controller.abort();
+  try {
+    await response.body?.cancel();
+  } catch {
+    // The fetch may already have released or aborted the stream.
+  }
+}
+
+async function readReleaseResponseText(response: Response, controller: AbortController): Promise<string> {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_RELEASE_RESPONSE_BYTES) {
+    await abortResponse(response, controller);
+    throw new ReleaseResponseTooLargeError();
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // Native fetch responses expose a stream. This fallback keeps the helper
+    // usable with minimal test doubles while retaining a post-read guard.
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > MAX_RELEASE_RESPONSE_BYTES) {
+      await abortResponse(response, controller);
+      throw new ReleaseResponseTooLargeError();
+    }
+    return text;
+  }
+
+  const decoder = new TextDecoder();
+  let receivedBytes = 0;
+  let text = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      receivedBytes += value.byteLength;
+      if (receivedBytes > MAX_RELEASE_RESPONSE_BYTES) {
+        await abortResponse(response, controller);
+        try { await reader.cancel(); } catch { /* stream is already aborted */ }
+        throw new ReleaseResponseTooLargeError();
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 export async function checkGithubUpdate(
   currentVersion: string,
@@ -31,10 +87,7 @@ export async function checkGithubUpdate(
     if (!response.ok) {
       return { status: 'offline', currentVersion, detail: `GitHub Releases returned HTTP ${response.status}.` };
     }
-    const text = await response.text();
-    if (new TextEncoder().encode(text).byteLength > MAX_RELEASE_RESPONSE_BYTES) {
-      return { status: 'invalid-response', currentVersion, detail: 'The release response exceeded the accepted size.' };
-    }
+    const text = await readReleaseResponseText(response, controller);
     let raw: unknown;
     try {
       raw = JSON.parse(text);
@@ -58,6 +111,9 @@ export async function checkGithubUpdate(
       portableAvailable: release.portableAvailable,
     };
   } catch (error) {
+    if (error instanceof ReleaseResponseTooLargeError) {
+      return { status: 'invalid-response', currentVersion, detail: error.message };
+    }
     return {
       status: 'offline',
       currentVersion,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { strToU8, unzipSync, zipSync } from 'fflate';
-import type { CortexLumeProject } from '@cortexlume/contracts';
+import { CortexLumeProjectSchema, type CortexLumeProject } from '@cortexlume/contracts';
 import {
   PROJECT_ARCHIVE_LIMITS,
   createProjectArchive,
@@ -62,6 +62,27 @@ describe('shared project IO', () => {
   it('round-trips v2 sparse targets exactly', () => {
     const project = fixtureProject();
     expect(readProjectArchive(createProjectArchive(project))).toEqual(project);
+  });
+
+  it('rejects a schema-valid project that exceeds the project entry limit before zipping', () => {
+    const project = fixtureProject();
+    const target = project.functionalTarget;
+    if (!target) throw new Error('fixture must include a functional target');
+    const oversized = {
+      ...project,
+      functionalTarget: {
+        ...target,
+        provenance: {
+          ...target.provenance,
+          validation: { payload: 'x'.repeat(PROJECT_ARCHIVE_LIMITS.projectBytes) },
+        },
+      },
+    };
+
+    expect(CortexLumeProjectSchema.safeParse(oversized).success).toBe(true);
+    expect(() => createProjectArchive(oversized)).toThrow(
+      'project.json exceeds its uncompressed size limit',
+    );
   });
 
   it('migrates a hash-verified v1 archive in memory', () => {

@@ -3,6 +3,9 @@ from __future__ import annotations
 import base64
 import binascii
 import os
+import stat as stat_module
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, status
@@ -41,6 +44,44 @@ def authorize(authorization: str | None = Header(default=None)) -> None:
     expected = os.environ.get("CORTEXLUME_TOKEN", "development-token")
     if authorization != f"Bearer {expected}":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid sidecar token")
+
+
+def _read_authorized_nifti_file(file_path: object) -> bytes:
+    """Read only a sidecar-staged NIfTI path under the private temp root."""
+    if not isinstance(file_path, str) or not file_path:
+        raise HTTPException(status_code=422, detail="filePath must be a non-empty absolute path")
+    root_config = os.environ.get(
+        "CORTEXLUME_NIFTI_TEMP_DIR",
+        str(Path(tempfile.gettempdir()) / "cortexlume-nifti"),
+    )
+    try:
+        candidate = Path(file_path)
+        if not candidate.is_absolute():
+            raise ValueError("path is not absolute")
+        root = Path(root_config).resolve(strict=True)
+        resolved = candidate.resolve(strict=True)
+        if not root.is_dir() or resolved == root:
+            raise ValueError("path is not a file below the staging root")
+        resolved.relative_to(root)
+        # Staging uses an exclusive random filename. Reject a final symlink as
+        # an additional guard against a path being substituted between checks.
+        if candidate.is_symlink():
+            raise ValueError("staged path must not be a symbolic link")
+        metadata = resolved.stat()
+        if not stat_module.S_ISREG(metadata.st_mode):
+            raise ValueError("staged path is not a regular file")
+    except (OSError, RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=403, detail="filePath is outside the authorized NIfTI staging directory") from error
+    if metadata.st_size > MAX_COMPRESSED_BYTES:
+        raise HTTPException(status_code=413, detail="Target map exceeds the import size limit")
+    try:
+        with resolved.open("rb") as stream:
+            raw = stream.read(MAX_COMPRESSED_BYTES + 1)
+    except OSError as error:
+        raise HTTPException(status_code=422, detail="The staged NIfTI file could not be read") from error
+    if len(raw) > MAX_COMPRESSED_BYTES:
+        raise HTTPException(status_code=413, detail="Target map exceeds the import size limit")
+    return raw
 
 
 @app.get("/v1/health")
@@ -160,16 +201,22 @@ def import_functional_target(
     file_name = payload.get("fileName")
     declared_space = payload.get("declaredSpace")
     encoded = payload.get("dataBase64")
-    if not isinstance(file_name, str) or not isinstance(encoded, str):
-        raise HTTPException(status_code=422, detail="fileName and dataBase64 are required")
+    file_path = payload.get("filePath")
+    if not isinstance(file_name, str) or (encoded is None and file_path is None) or (encoded is not None and file_path is not None):
+        raise HTTPException(status_code=422, detail="fileName and exactly one of filePath or dataBase64 are required")
     if declared_space not in ("MNI152NLin6Asym", "NeurosynthMNI152-2mm"):
         raise HTTPException(status_code=422, detail="Unsupported declared target space")
-    if len(encoded) > ((MAX_COMPRESSED_BYTES + 2) // 3) * 4:
-        raise HTTPException(status_code=413, detail="Target map exceeds the import size limit")
-    try:
-        raw = base64.b64decode(encoded, validate=True)
-    except (binascii.Error, ValueError) as error:
-        raise HTTPException(status_code=422, detail="Target map payload is not valid base64") from error
+    if file_path is not None:
+        raw = _read_authorized_nifti_file(file_path)
+    else:
+        if not isinstance(encoded, str):
+            raise HTTPException(status_code=422, detail="dataBase64 must be a string")
+        if len(encoded) > ((MAX_COMPRESSED_BYTES + 2) // 3) * 4:
+            raise HTTPException(status_code=413, detail="Target map exceeds the import size limit")
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise HTTPException(status_code=422, detail="Target map payload is not valid base64") from error
     return process_target_map_import(raw, file_name, declared_space)
 
 

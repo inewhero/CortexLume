@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -127,6 +128,62 @@ describe('CortexLume MCP runtime', () => {
     await Promise.all(clients.splice(0).map((client) => client.close()));
   });
 
+  it('fails closed when no authorized MCP roots are provided', () => {
+    const options = {
+      templateRoot: TEMPLATE_ROOT,
+      science: { stop: vi.fn(), request: vi.fn() } as unknown as ScienceClient,
+      applicationVersion: 'test',
+      openGui: vi.fn(),
+    };
+    expect(() => new CortexLumeMcpRuntime({ ...options, authorizedRoots: [] }))
+      .toThrow('requires at least one authorized project root');
+    expect(() => new CortexLumeMcpRuntime({ ...options, authorizedRoots: [''] }))
+      .toThrow('requires at least one authorized project root');
+    expect(() => new CortexLumeMcpRuntime({ ...options, authorizedRoots: ['   '] }))
+      .toThrow('requires at least one authorized project root');
+    expect(() => new CortexLumeMcpRuntime(options))
+      .toThrow('requires at least one authorized project root');
+  });
+
+  it('rejects over-limit patches before loading assets or running science', async () => {
+    const openGui = vi.fn();
+    const science = {
+      stop: vi.fn(),
+      request: vi.fn(),
+    } as unknown as ScienceClient;
+    const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-validation-'));
+    const runtime = new CortexLumeMcpRuntime({
+      templateRoot: path.join(root, 'missing-assets'),
+      science,
+      applicationVersion: 'test',
+      authorizedRoots: [root],
+      openGui,
+    });
+    const server = runtime.createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: 'cortexlume-validation-test', version: '1.0.0' });
+    clients.push(client);
+    await client.connect(clientTransport);
+
+    for (const patches of [
+      [{ columns: 12, rows: 12 }],
+      [{ columns: 10, rows: 10, shortChannelCount: 1 }],
+    ]) {
+      const result = await client.callTool({
+        name: 'plan_project',
+        arguments: {
+          target: { kind: 'mni-point', rasMm: [0, 0, 0] },
+          patches,
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toMatch(/optodes|pairs|100|256/);
+    }
+    expect(science.request).not.toHaveBeenCalled();
+    expect(science.stop).not.toHaveBeenCalled();
+  });
+
   it('keeps functional specificity ahead of atlas-profile similarity for comparable coverage', () => {
     const candidates = [
       rankingCandidate('atlas-biased', 0.210, 0.18, 0.50),
@@ -146,11 +203,15 @@ describe('CortexLume MCP runtime', () => {
     const niftiPath = path.join(root, 'fixture.nii.gz');
     await writeFile(niftiPath, 'mocked NIfTI bytes');
     const openGui = vi.fn();
+    let niftiImportPayload: Record<string, unknown> | undefined;
     const science = {
       stop: vi.fn(),
       request: vi.fn(async (pathname: string, payload?: unknown) => {
         if (pathname === '/v1/health') return { ok: true, templateVerified: true, atlasVerified: true };
-        if (pathname === '/v1/targets/import') return { accepted: true, diagnostics: [], map: fixtureTarget('nifti-import') };
+        if (pathname === '/v1/targets/import') {
+          niftiImportPayload = payload as Record<string, unknown>;
+          return { accepted: true, diagnostics: [], map: fixtureTarget('nifti-import') };
+        }
         if (pathname === '/v1/targets/catalog') return { count: 1, targets: [{ id: 'neurosynth:fixture', label: 'fixture' }], domains: [], provenance: {} };
         if (pathname === '/v1/coverage/target-profile') return {
           atlasId: 'Harvard-Oxford fixture', atlasSupportFraction: 1,
@@ -222,6 +283,14 @@ describe('CortexLume MCP runtime', () => {
       expect((plan.candidates as Array<{ anatomicalCoverage: { regions: unknown[] } }>)[0]!.anatomicalCoverage.regions).toHaveLength(1);
       plans.push(plan);
     }
+    expect(niftiImportPayload).toEqual(expect.objectContaining({
+      fileName: 'fixture.nii.gz', declaredSpace: 'MNI152NLin6Asym',
+    }));
+    expect(niftiImportPayload).not.toHaveProperty('dataBase64');
+    const stagedPath = niftiImportPayload?.filePath;
+    expect(typeof stagedPath).toBe('string');
+    expect(stagedPath).not.toBe(niftiPath);
+    expect(existsSync(stagedPath as string)).toBe(false);
 
     const selectedPlan = plans[2]!;
     const candidateId = selectedPlan.recommendedCandidateId as string;

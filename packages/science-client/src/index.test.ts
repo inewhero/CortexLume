@@ -53,4 +53,24 @@ describe('ScienceClient', () => {
       client.stop();
     }
   });
+
+  it('settles an in-flight startup when stopped and can restart cleanly', async () => {
+    const fixture = path.resolve(process.cwd(), 'src/fixtures/fake-sidecar.mjs');
+    let delayReady = true;
+    const client = new ScienceClient(() => ({
+      command: process.execPath,
+      args: [fixture, ...(delayReady ? ['--delay-ready'] : [])],
+      cwd: process.cwd(),
+      assetRoot: process.cwd(),
+    }), () => undefined, 20_000);
+    const startup = client.start();
+    client.stop();
+    await expect(startup).rejects.toThrow('startup cancelled');
+    delayReady = false;
+    try {
+      await expect(client.start()).resolves.toBeUndefined();
+    } finally {
+      client.stop();
+    }
+  }, 20_000);
 });

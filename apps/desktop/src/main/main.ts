@@ -5,7 +5,12 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, rmSync } from 'node:fs';
 import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ScienceClient, type ScienceCommand } from '@cortexlume/science-client';
+import {
+  ScienceClient,
+  type ScienceCommand,
+  withStagedNiftiFile,
+} from '@cortexlume/science-client';
+import { isAllowedDevNavigation } from './navigationPolicy';
 import { PROJECT_ARCHIVE_LIMITS } from '@cortexlume/project-io';
 import {
   CortexLumeProjectSchema,
@@ -157,7 +162,7 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const isDevNavigation = MAIN_WINDOW_VITE_DEV_SERVER_URL?.startsWith(url);
+    const isDevNavigation = isAllowedDevNavigation(url, MAIN_WINDOW_VITE_DEV_SERVER_URL);
     if (!isDevNavigation) event.preventDefault();
   });
 
@@ -487,13 +492,17 @@ function registerIpc(): void {
     if (!fileName.toLowerCase().endsWith('.nii') && !fileName.toLowerCase().endsWith('.nii.gz')) {
       throw new Error('Select a .nii or .nii.gz NIfTI statistical map.');
     }
-    const bytes = await readBoundedFile(selectedPath, 128 * 1024 * 1024, 'Target map');
-    const response = await scienceRequest<unknown>('/v1/targets/import', {
-      fileName,
-      declaredSpace,
-      dataBase64: bytes.toString('base64'),
+    // Keep the sidecar request small: the bounded source is copied by the
+    // filesystem into its private staging root and removed after processing.
+    // This avoids Buffer → base64 → JSON duplication for large maps.
+    return withStagedNiftiFile(selectedPath, async (stagedPath, stagedFileName) => {
+      const response = await scienceRequest<unknown>('/v1/targets/import', {
+        fileName: stagedFileName,
+        declaredSpace,
+        filePath: stagedPath,
+      });
+      return TargetImportResultSchema.parse(response);
     });
-    return TargetImportResultSchema.parse(response);
   });
 
   ipcMain.handle('export:csv', async (_event, rawProject: CortexLumeProject) => {

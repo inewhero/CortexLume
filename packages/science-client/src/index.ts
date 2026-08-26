@@ -1,6 +1,79 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
+import { copyFile, mkdir, realpath, rm, stat } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+
+/**
+ * NIfTI files are staged here before a request is sent to the local science
+ * sidecar.  Keeping one deterministic, private directory lets the Python
+ * service enforce the same realpath containment rule for every caller.
+ */
+export const NIFTI_TEMP_DIRECTORY = path.join(os.tmpdir(), 'cortexlume-nifti');
+export const NIFTI_MAX_FILE_BYTES = 128 * 1024 * 1024;
+
+function samePath(left: string, right: string): boolean {
+  return process.platform === 'win32'
+    ? left.toLowerCase() === right.toLowerCase()
+    : left === right;
+}
+
+function assertContained(root: string, candidate: string): void {
+  const relative = path.relative(root, candidate);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('NIfTI staging path escaped its temporary directory');
+  }
+}
+
+/**
+ * Copy a bounded NIfTI source into the sidecar's private temporary directory,
+ * run a request against the staged path, and always remove the staged file.
+ * The copy is performed by the filesystem rather than read into a Node
+ * Buffer, so the request body remains a small JSON path reference.
+ */
+export async function withStagedNiftiFile<T>(
+  sourcePath: string,
+  operation: (stagedPath: string, sourceFileName: string) => Promise<T>,
+): Promise<T> {
+  const configuredRoot = path.resolve(NIFTI_TEMP_DIRECTORY);
+  await mkdir(configuredRoot, { recursive: true, mode: 0o700 });
+  const root = await realpath(configuredRoot);
+  if (!samePath(root, configuredRoot)) {
+    throw new Error('NIfTI staging directory must not be a symbolic link');
+  }
+
+  const source = await realpath(sourcePath);
+  const sourceFileName = path.basename(source);
+  if (!/\.nii(?:\.gz)?$/i.test(sourceFileName)) {
+    throw new Error('NIfTI target path must end in .nii or .nii.gz.');
+  }
+  const sourceStats = await stat(source);
+  if (!sourceStats.isFile()) throw new Error('NIfTI target is not a regular file.');
+  if (sourceStats.size > NIFTI_MAX_FILE_BYTES) {
+    throw new Error('NIfTI target exceeds the 128 MB import limit.');
+  }
+
+  const extension = sourceFileName.toLowerCase().endsWith('.nii.gz') ? '.nii.gz' : '.nii';
+  const stagedPath = path.join(root, `${randomUUID()}${extension}`);
+  assertContained(root, stagedPath);
+  try {
+    await copyFile(source, stagedPath, fsConstants.COPYFILE_EXCL);
+    const stagedRealpath = await realpath(stagedPath);
+    if (!samePath(stagedRealpath, stagedPath)) {
+      throw new Error('NIfTI staging file must not be a symbolic link');
+    }
+    const stagedStats = await stat(stagedRealpath);
+    if (!stagedStats.isFile()) throw new Error('NIfTI staging file is not regular.');
+    if (stagedStats.size > NIFTI_MAX_FILE_BYTES) {
+      throw new Error('NIfTI target exceeds the 128 MB import limit.');
+    }
+    return await operation(stagedRealpath, sourceFileName);
+  } finally {
+    await rm(stagedPath, { force: true });
+  }
+}
 
 export interface ScienceCommand {
   command: string;
@@ -15,6 +88,8 @@ export class ScienceClient {
   private port: number | null = null;
   private token = '';
   private ready: Promise<void> | null = null;
+  private generation = 0;
+  private cancelStartup: (() => void) | null = null;
 
   constructor(
     private readonly configuration: () => ScienceCommand,
@@ -24,17 +99,22 @@ export class ScienceClient {
 
   start(): Promise<void> {
     if (this.ready) return this.ready;
-    const ready = this.startProcess();
+    const generation = ++this.generation;
+    const ready = this.startProcess(generation);
     this.ready = ready;
     void ready.catch(() => { if (this.ready === ready) this.ready = null; });
     return ready;
   }
 
   stop(): void {
+    this.generation += 1;
     const child = this.child;
+    const cancelStartup = this.cancelStartup;
     this.child = null;
     this.port = null;
     this.ready = null;
+    this.cancelStartup = null;
+    cancelStartup?.();
     child?.kill();
   }
 
@@ -82,30 +162,47 @@ export class ScienceClient {
     });
   }
 
-  private async startProcess(): Promise<void> {
+  private async startProcess(generation: number): Promise<void> {
     this.token = randomBytes(32).toString('hex');
     const configuration = this.configuration();
     await new Promise<void>((resolve, reject) => {
       const child = spawn(configuration.command, configuration.args, {
         cwd: configuration.cwd,
         windowsHide: true,
-        env: { ...process.env, CORTEXLUME_TOKEN: this.token, CORTEXLUME_ASSET_DIR: configuration.assetRoot },
+        env: {
+          ...process.env,
+          CORTEXLUME_TOKEN: this.token,
+          CORTEXLUME_ASSET_DIR: configuration.assetRoot,
+          CORTEXLUME_NIFTI_TEMP_DIR: NIFTI_TEMP_DIRECTORY,
+        },
       });
       this.child = child;
       let buffer = '';
       let settled = false;
+      let timeout: ReturnType<typeof setTimeout>;
       const finish = (error?: Error) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        if (this.cancelStartup === cancel) this.cancelStartup = null;
         if (error) reject(error);
         else resolve();
       };
-      const timeout = setTimeout(() => {
+      const cancel = () => {
+        if (this.child === child) {
+          this.child = null;
+          this.port = null;
+        }
+        finish(new Error('Science sidecar startup cancelled'));
+      };
+      this.cancelStartup = cancel;
+      timeout = setTimeout(() => {
+        if (this.generation !== generation || this.child !== child) return;
         child.kill();
         finish(new Error('Science sidecar startup timed out'));
       }, this.startupTimeoutMs);
       child.stdout.on('data', (chunk: Buffer) => {
+        if (this.generation !== generation || this.child !== child) return;
         buffer += chunk.toString('utf8');
         const lines = buffer.split(/\r?\n/);
         buffer = lines.pop() ?? '';
@@ -125,7 +222,12 @@ export class ScienceClient {
         }
       });
       child.stderr.on('data', (chunk: Buffer) => this.log(`[science] ${chunk.toString('utf8').trimEnd()}`));
-      child.once('error', (error) => finish(error));
+      child.once('error', (error) => {
+        if (this.generation !== generation || this.child !== child) return;
+        this.child = null;
+        this.port = null;
+        finish(error);
+      });
       child.once('exit', (code, signal) => {
         if (this.child !== child) return;
         this.child = null; this.port = null; this.ready = null;

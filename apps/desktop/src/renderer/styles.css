@@ -239,6 +239,18 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
 .library-card button { min-height: var(--control-height-compact); padding: 4px 7px; font-size: var(--text-meta); }
 
 .head-viewport { position: relative; width: 100%; height: 100%; min-width: 0; min-height: 0; background: #171d1f; }
+.workspace-loading {
+  display: grid;
+  min-height: 96px;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #778287;
+  background: #171d1f;
+  font: 600 11px/1.4 var(--mono);
+  letter-spacing: 0.08em;
+}
+.panel-left .workspace-loading { height: 360px; background: #f1f3f1; }
 .head-viewport canvas { display: block; }
 .viewport-overlay { position: absolute; z-index: 5; pointer-events: none; }
 .viewport-overlay button { pointer-events: auto; }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { checkGithubUpdate } from './startupLifecycle';
+import { checkGithubUpdate, MAX_RELEASE_RESPONSE_BYTES } from './startupLifecycle';
 
 function releaseResponse(tag = 'v1.3.0') {
   return new Response(JSON.stringify({
@@ -36,5 +36,28 @@ describe('startup lifecycle', () => {
       .resolves.toMatchObject({ status: 'invalid-response' });
     await expect(checkGithubUpdate('1.2.0', vi.fn(async () => { throw new Error('offline'); }) as typeof fetch))
       .resolves.toMatchObject({ status: 'offline' });
+  });
+
+  it('aborts a streaming release response as soon as it crosses the byte limit', async () => {
+    let cancelled = false;
+    let signal: AbortSignal | undefined;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_RELEASE_RESPONSE_BYTES + 1));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      signal = init?.signal as AbortSignal | undefined;
+      return new Response(body, { status: 200 });
+    });
+
+    await expect(checkGithubUpdate('1.2.0', fetchImpl as typeof fetch)).resolves.toMatchObject({
+      status: 'invalid-response', detail: expect.stringContaining('exceeded the accepted size'),
+    });
+    expect(cancelled).toBe(true);
+    expect(signal?.aborted).toBe(true);
   });
 });
