@@ -1,0 +1,38 @@
+{
+  "file": "bilateral_visual_target_z.nii.gz",
+  "declaredSpace": "NeurosynthMNI152-2mm",
+  "statistic": "continuous z statistic",
+  "affine": [
+    [
+      2,
+      0,
+      0,
+      -90
+    ],
+    [
+      0,
+      2,
+      0,
+      -126
+    ],
+    [
+      0,
+      0,
+      2,
+      -72
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "shape": [
+    91,
+    109,
+    91
+  ],
+  "spatialUnits": "mm",
+  "sha256": "1ff28217c4b99a8a8c7356bb939e146b2de1fe1117bfd2353f87ab14801a6881"
+}

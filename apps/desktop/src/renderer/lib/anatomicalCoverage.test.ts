@@ -5,11 +5,13 @@ import {
   anatomicalCoverageRegionColors,
   anatomicalRegionColor,
   anatomicalCoverageDisplayLayer,
+  anatomicalCoverageRequestKey,
   buildAnatomicalCoverageRequest,
   clearAnatomicalCoverageCache,
   requestAnatomicalCoverage,
   scientificCoverageAttributes,
 } from './anatomicalCoverage';
+import { registerVerifiedTestSurfaceProjectors } from './testSurfaceProjectors';
 
 const analysis: AnatomicalCoverageAnalysis = {
   version: 1,
@@ -62,7 +64,10 @@ const analysis: AnatomicalCoverageAnalysis = {
 };
 
 describe('anatomical coverage renderer data', () => {
-  beforeEach(() => clearAnatomicalCoverageCache());
+  beforeEach(() => {
+    clearAnatomicalCoverageCache();
+    registerVerifiedTestSurfaceProjectors();
+  });
 
   it('keeps coverage on its cortical surface when only WM anatomy is visible', () => {
     expect(anatomicalCoverageDisplayLayer(true, true)).toBe('grayMatter');
@@ -80,6 +85,17 @@ describe('anatomical coverage renderer data', () => {
     const instanceId = useProjectStore.getState().project.instances[0]!.id;
     useProjectStore.getState().toggleInstanceVisibility(instanceId);
     expect(buildAnatomicalCoverageRequest(useProjectStore.getState().project)).toBeNull();
+  });
+
+  it('keeps the analysis key stable across channel-selection lock state changes', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = structuredClone(useProjectStore.getState().project);
+    const unlocked = structuredClone(project);
+    unlocked.instances[0]!.locked = false;
+    const lockedRequest = buildAnatomicalCoverageRequest(project)!;
+    const unlockedRequest = buildAnatomicalCoverageRequest(unlocked)!;
+    expect(anatomicalCoverageRequestKey(unlockedRequest)).toBe(anatomicalCoverageRequestKey(lockedRequest));
   });
 
   it('keeps atlas region colors stable independently of rank', () => {

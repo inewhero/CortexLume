@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -29,7 +29,9 @@ import {
   type PlannerCandidate,
   type PlannerPatchSpec,
 } from '@cortexlume/core/node';
-import { createProjectArchive, readProjectArchiveDetailed, sha256Bytes } from '@cortexlume/project-io';
+import {
+  createProjectArchive, PROJECT_ARCHIVE_LIMITS, readProjectArchiveDetailed, sha256Bytes,
+} from '@cortexlume/project-io';
 import type { ScienceClient } from '@cortexlume/science-client';
 
 interface PlanCacheEntry {
@@ -160,8 +162,8 @@ function buildProjectionResults(head: LoadedHeadModel['headModel'], candidate: P
       results.push({
         instanceId: instance.id, subjectKind: 'optode', subjectId: optode.id,
         scalpRasMm: scalp, displayRasMm: display, corticalRasMm: head.projectCorticalContact(contact), depthTargetRasMm: null,
-        underlyingCorticalRegions: [], deepTargetStructures: [], tissueAtTarget: 'cortical gray matter',
-        claimLevel: 'geometric', status: 'verified', qcFlags: ['atlas_lookup_pending'],
+        underlyingCorticalRegions: [], deepTargetStructures: [], tissueAtTarget: null,
+        claimLevel: 'geometric', status: 'verified', qcFlags: ['surface_model_verified', 'atlas_lookup_pending'],
       });
     }
     for (const pair of layout.pairs) {
@@ -170,12 +172,13 @@ function buildProjectionResults(head: LoadedHeadModel['headModel'], candidate: P
       const sourceDisplay = displayCenters.get(pair.sourceId)!; const detectorDisplay = displayCenters.get(pair.detectorId)!;
       const midpoint = (a: Vec3, b: Vec3): Vec3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
       const spacingError = Math.abs(distance3(sourceScalp, detectorScalp) - pair.nominalDistanceMm);
+      const sensitivity = channelSensitivityPath(head, source, detector, radiusMm, depthMm);
       results.push({
         instanceId: instance.id, subjectKind: 'pair', subjectId: pair.id,
         scalpRasMm: midpoint(sourceScalp, detectorScalp), displayRasMm: midpoint(sourceDisplay, detectorDisplay),
-        corticalRasMm: channelSensitivityPath(head, source, detector, radiusMm, depthMm).target, depthTargetRasMm: null,
-        underlyingCorticalRegions: [], deepTargetStructures: [], tissueAtTarget: 'cortical gray matter',
-        claimLevel: 'geometric', status: 'verified', qcFlags: spacingError > 5 ? ['distance_distortion_gt_5mm', 'atlas_lookup_pending'] : spacingError > 2 ? ['distance_distortion_gt_2mm', 'atlas_lookup_pending'] : ['atlas_lookup_pending'],
+        corticalRasMm: sensitivity.corticalContact, depthTargetRasMm: sensitivity.target,
+        underlyingCorticalRegions: [], deepTargetStructures: [], tissueAtTarget: null,
+        claimLevel: 'geometric', status: 'verified', qcFlags: spacingError > 5 ? ['surface_model_verified', 'distance_distortion_gt_5mm', 'atlas_lookup_pending'] : spacingError > 2 ? ['surface_model_verified', 'distance_distortion_gt_2mm', 'atlas_lookup_pending'] : ['surface_model_verified', 'atlas_lookup_pending'],
       });
     }
   });
@@ -505,7 +508,27 @@ export class CortexLumeMcpRuntime {
 
   private async readAuthorizedProject(projectPath: string) {
     const resolved = await this.authorizedPath(projectPath, true);
-    return readProjectArchiveDetailed(await readFile(resolved));
+    const handle = await open(resolved, 'r');
+    try {
+      const before = await handle.stat();
+      if (before.size > PROJECT_ARCHIVE_LIMITS.compressedBytes) {
+        throw new Error(`Project archive exceeds the ${PROJECT_ARCHIVE_LIMITS.compressedBytes} byte limit.`);
+      }
+      const bytes = Buffer.alloc(before.size);
+      let offset = 0;
+      while (offset < bytes.byteLength) {
+        const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+        if (bytesRead === 0) break;
+        offset += bytesRead;
+      }
+      const after = await handle.stat();
+      if (offset !== bytes.byteLength || after.size !== before.size) {
+        throw new Error('Project archive changed while it was being read.');
+      }
+      return readProjectArchiveDetailed(bytes);
+    } finally {
+      await handle.close();
+    }
   }
 
   private async authorizedPath(candidate: string, mustExist: boolean): Promise<string> {
@@ -520,7 +543,20 @@ export class CortexLumeMcpRuntime {
       const realRoot = existsSync(root) ? await realpath(root) : path.resolve(root);
       return realRoot;
     }));
-    const canonicalCandidate = path.join(await realpath(path.dirname(resolved)), path.basename(resolved));
+    let canonicalCandidate: string;
+    if (existsSync(resolved)) {
+      canonicalCandidate = await realpath(resolved);
+    } else {
+      let existingAncestor = path.dirname(resolved);
+      const missingSegments = [path.basename(resolved)];
+      while (!existsSync(existingAncestor)) {
+        const parent = path.dirname(existingAncestor);
+        if (parent === existingAncestor) throw new Error(`Could not resolve path parent: ${candidate}`);
+        missingSegments.unshift(path.basename(existingAncestor));
+        existingAncestor = parent;
+      }
+      canonicalCandidate = path.join(await realpath(existingAncestor), ...missingSegments);
+    }
     if (!canonicalRoots.some((root) => within(canonicalCandidate, root))) {
       throw new Error(`Path is outside MCP authorized roots: ${candidate}`);
     }
@@ -534,8 +570,9 @@ export class CortexLumeMcpRuntime {
   private async writeUniqueAuthorizedOutput(requested: string, data: Uint8Array): Promise<string> {
     const extensionPath = requested.toLowerCase().endsWith('.cortexlume') ? requested : `${requested}.cortexlume`;
     const resolved = await this.authorizedPath(extensionPath, false);
-    const parent = await this.authorizedPath(path.dirname(resolved), true);
+    const parent = await this.authorizedPath(path.dirname(resolved), false);
     await mkdir(parent, { recursive: true });
+    await this.authorizedPath(parent, true);
     const extension = path.extname(resolved); const base = resolved.slice(0, -extension.length);
     for (let suffix = 0; suffix < 10_000; suffix += 1) {
       const candidate = suffix === 0 ? resolved : `${base} (${suffix + 1})${extension}`;

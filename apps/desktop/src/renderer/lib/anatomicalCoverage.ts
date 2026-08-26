@@ -57,7 +57,7 @@ export function buildAnatomicalCoverageRequest(
   return channels.length > 0 ? { channels, settings } : null;
 }
 
-function requestKey(request: AnatomicalCoverageRequest): string {
+export function anatomicalCoverageRequestKey(request: AnatomicalCoverageRequest): string {
   return JSON.stringify(request);
 }
 
@@ -67,7 +67,7 @@ export function requestAnatomicalCoverage(
   request: AnatomicalCoverageRequest,
   analyze: (request: AnatomicalCoverageRequest) => Promise<AnatomicalCoverageAnalysis>,
 ): Promise<AnatomicalCoverageAnalysis> {
-  const key = requestKey(request);
+  const key = anatomicalCoverageRequestKey(request);
   const cached = resultCache.get(key);
   if (cached) return cached;
   const pending = Promise.resolve().then(() => analyze(request)).catch((error) => {

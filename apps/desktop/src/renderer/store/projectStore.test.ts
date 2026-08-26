@@ -3,6 +3,17 @@ import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore } from './projectStore';
 
 describe('default optode matrix', () => {
+  it('tracks persisted dirty state from project content without revision bookkeeping', () => {
+    useProjectStore.getState().newProject();
+    expect(useProjectStore.getState().isProjectDirty()).toBe(false);
+    const revision = useProjectStore.getState().projectRevision;
+    useProjectStore.getState().setProjectName('Changed without revision bookkeeping');
+    expect(useProjectStore.getState().projectRevision).toBe(revision);
+    expect(useProjectStore.getState().isProjectDirty()).toBe(true);
+    const saved = structuredClone(useProjectStore.getState().project);
+    useProjectStore.getState().markProjectSaved(saved, 'C:\\saved.cortexlume');
+    expect(useProjectStore.getState().isProjectDirty()).toBe(false);
+  });
   it('starts with neutral gray- and white-matter materials', () => {
     expect(useProjectStore.getState().anatomyAppearance).toEqual({
       grayMatter: { color: '#e3e3e3', opacity: 1 },
@@ -36,6 +47,46 @@ describe('default optode matrix', () => {
       [14, -60, -15], [15, -30, -15], [16, 0, -15], [17, 30, -15], [18, 60, -15],
       [19, -45, -30], [20, -15, -30], [21, 15, -30], [22, 45, -30],
     ]);
+  });
+
+  it('preserves channel numbers and reports a conflict when renumbering would duplicate one', () => {
+    useProjectStore.getState().newProject();
+    const layout = useProjectStore.getState().project.layouts.find(
+      (candidate) => candidate.id === useProjectStore.getState().activeLayoutId,
+    )!;
+    const first = layout.pairs[0]!;
+    const second = layout.pairs[1]!;
+    const original = first.channelNumber;
+
+    useProjectStore.getState().updatePairChannelNumber(first.id, second.channelNumber!);
+
+    const state = useProjectStore.getState();
+    const updated = state.project.layouts.find((candidate) => candidate.id === layout.id)!;
+    expect(updated.pairs.find((pair) => pair.id === first.id)?.channelNumber).toBe(original);
+    expect(state.toast).toBe(
+      `Channel number conflict: CH${second.channelNumber} is already assigned in this layout. Existing channel numbers were preserved.`,
+    );
+    expect(new Set(updated.pairs.map((pair) => pair.channelNumber)).size).toBe(updated.pairs.length);
+
+    useProjectStore.getState().updatePairChannelNumber(first.id, 99);
+    expect(useProjectStore.getState().toast).toBeNull();
+    expect(useProjectStore.getState().project.layouts.find((candidate) => candidate.id === layout.id)
+      ?.pairs.find((pair) => pair.id === first.id)?.channelNumber).toBe(99);
+  });
+
+  it('does not mutate project geometry when selecting a channel already in group mode', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const before = useProjectStore.getState();
+    const instance = before.project.instances[0]!;
+    const layout = before.project.layouts.find((candidate) => candidate.id === instance.definitionId)!;
+    const projectReference = before.project;
+    const updatedAt = before.project.updatedAt;
+    before.selectChannel(instance.id, layout.pairs[0]!.id);
+    const after = useProjectStore.getState();
+    expect(after.project).toBe(projectReference);
+    expect(after.project.updatedAt).toBe(updatedAt);
+    expect(after.selectedHeadPairId).toBe(layout.pairs[0]!.id);
   });
 
   it('renames the default layout and keeps its reusable library entry in sync', () => {
@@ -117,6 +168,19 @@ describe('default optode matrix', () => {
     expect(mappedState.project.instances.find((candidate) => candidate.id === instance.id)?.visible).toBe(false);
     expect(derived.digitizerPositions[0]).toMatchObject({ optodeId: optode.id, scalpRasMm: [-50, 20, 80] });
     expect(mappedState.library.find((candidate) => candidate.id === derived.definitionId)?.name).toBe(`${layout.name}D`);
+    useProjectStore.getState().commitPlacement({
+      ...derived,
+      // The science wire DTO does not carry these desktop-only fields.
+      digitizerPositions: [],
+      derivedFromInstanceId: null,
+      digitizerSessionId: null,
+    }, []);
+    expect(useProjectStore.getState().project.instances.find((candidate) => candidate.id === derived.id))
+      .toMatchObject({
+        derivedFromInstanceId: instance.id,
+        digitizerSessionId: sessionId,
+        digitizerPositions: [{ optodeId: optode.id, digitizerPointId: pointId }],
+      });
     useProjectStore.getState().removeDigitizerSession(sessionId);
     const restoredState = useProjectStore.getState();
     expect(restoredState.project.instances).toHaveLength(1);

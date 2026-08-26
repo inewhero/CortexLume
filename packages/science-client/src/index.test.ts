@@ -39,4 +39,18 @@ describe('ScienceClient', () => {
       invalid.stop();
     }
   });
+
+  it('rejects a response whose declared body exceeds the boundary limit', async () => {
+    const client = new ScienceClient(() => ({
+      command: process.execPath,
+      args: [path.resolve(process.cwd(), 'src/fixtures/fake-sidecar.mjs')],
+      cwd: process.cwd(),
+      assetRoot: process.cwd(),
+    }));
+    try {
+      await expect(client.request('/oversized')).rejects.toThrow('exceeded the 16 MB limit');
+    } finally {
+      client.stop();
+    }
+  });
 });

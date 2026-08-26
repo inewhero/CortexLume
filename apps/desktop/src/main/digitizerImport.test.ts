@@ -19,4 +19,13 @@ describe('digitizer imports', () => {
     ])));
     expect(imported.suggestedUnit).toBe('m');
   });
+
+  it('rejects oversized lines and labels before producing points', () => {
+    expect(() => parseDigitizerFile('points.tsv', bytes(`x\ty\tz\n${'1'.repeat(70_000)}`)))
+      .toThrow(/excessively long line/);
+    const json = JSON.stringify(Array.from({ length: 5 }, (_, index) => ({
+      name: index === 0 ? 'L'.repeat(257) : `P${index}`, x: index, y: index, z: index,
+    })));
+    expect(() => parseDigitizerFile('points.json', bytes(json))).toThrow(/labels must not exceed/);
+  });
 });

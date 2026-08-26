@@ -10,6 +10,7 @@ export interface ScienceCommand {
 }
 
 export class ScienceClient {
+  private static readonly MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
   private child: ChildProcessWithoutNullStreams | null = null;
   private port: number | null = null;
   private token = '';
@@ -52,7 +53,21 @@ export class ScienceClient {
         timeout: 30_000,
       }, (response) => {
         const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        let receivedBytes = 0;
+        response.once('error', reject);
+        const declaredLength = Number(response.headers['content-length']);
+        if (Number.isFinite(declaredLength) && declaredLength > ScienceClient.MAX_RESPONSE_BYTES) {
+          response.destroy(new Error('Science service response exceeded the 16 MB limit'));
+          return;
+        }
+        response.on('data', (chunk: Buffer) => {
+          receivedBytes += chunk.byteLength;
+          if (receivedBytes > ScienceClient.MAX_RESPONSE_BYTES) {
+            response.destroy(new Error('Science service response exceeded the 16 MB limit'));
+            return;
+          }
+          chunks.push(chunk);
+        });
         response.on('end', () => {
           const text = Buffer.concat(chunks).toString('utf8');
           const status = response.statusCode ?? 500;

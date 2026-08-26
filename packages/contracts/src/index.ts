@@ -1,7 +1,29 @@
 import { z } from 'zod';
 
-export const Vec2Schema = z.tuple([z.number(), z.number()]);
-export const Vec3Schema = z.tuple([z.number(), z.number(), z.number()]);
+const FiniteNumberSchema = z.number().finite();
+const BoundedNameSchema = z.string().min(1).max(256);
+const BoundedFlagSchema = z.string().min(1).max(256);
+
+export const PROJECT_GRAPH_LIMITS = Object.freeze({
+  layouts: 128,
+  optodesPerLayout: 100,
+  pairsPerLayout: 256,
+  instances: 2_048,
+  overridesPerInstance: 100,
+  digitizerPositionsPerInstance: 100,
+  verifiedResults: 65_536,
+  digitizerSessions: 128,
+  digitizerPointsPerSession: 100_000,
+  mappingsPerSession: 100_000,
+  atlasLabelsPerResult: 512,
+  targetVertices: 25_000,
+  targetSummaryItems: 256,
+  planningRegions: 1_024,
+  planningPlacementsPerCandidate: 128,
+});
+
+export const Vec2Schema = z.tuple([FiniteNumberSchema, FiniteNumberSchema]);
+export const Vec3Schema = z.tuple([FiniteNumberSchema, FiniteNumberSchema, FiniteNumberSchema]);
 export type Vec2 = z.infer<typeof Vec2Schema>;
 export type Vec3 = z.infer<typeof Vec3Schema>;
 
@@ -10,7 +32,7 @@ export type OptodeType = z.infer<typeof OptodeTypeSchema>;
 
 export const OptodeSchema = z.object({
   id: z.string().uuid(),
-  label: z.string().min(1),
+  label: BoundedNameSchema,
   type: OptodeTypeSchema,
   uvMm: Vec2Schema,
 });
@@ -20,8 +42,8 @@ export const PairSchema = z.object({
   id: z.string().uuid(),
   sourceId: z.string().uuid(),
   detectorId: z.string().uuid(),
-  channelNumber: z.number().int().positive().optional(),
-  nominalDistanceMm: z.number().positive(),
+  channelNumber: FiniteNumberSchema.int().positive().optional(),
+  nominalDistanceMm: FiniteNumberSchema.positive(),
   shortChannel: z.boolean().default(false),
 });
 export type Pair = z.infer<typeof PairSchema>;
@@ -29,19 +51,19 @@ export type Pair = z.infer<typeof PairSchema>;
 export const LayoutDefinitionSchema = z.object({
   id: z.string().uuid(),
   version: z.number().int().positive(),
-  name: z.string().min(1),
+  name: BoundedNameSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
-  gridSpacingMm: z.number().positive(),
-  optodes: z.array(OptodeSchema),
-  pairs: z.array(PairSchema),
+  gridSpacingMm: FiniteNumberSchema.positive(),
+  optodes: z.array(OptodeSchema).max(PROJECT_GRAPH_LIMITS.optodesPerLayout),
+  pairs: z.array(PairSchema).max(PROJECT_GRAPH_LIMITS.pairsPerLayout),
 });
 export type LayoutDefinition = z.infer<typeof LayoutDefinitionSchema>;
 
 export const MeshAnchorSchema = z.object({
   meshSha256: z.string(),
   faceIndex: z.number().int().nonnegative(),
-  barycentric: z.tuple([z.number(), z.number(), z.number()]),
+  barycentric: z.tuple([FiniteNumberSchema, FiniteNumberSchema, FiniteNumberSchema]),
   rasMm: Vec3Schema,
 });
 export type MeshAnchor = z.infer<typeof MeshAnchorSchema>;
@@ -49,9 +71,9 @@ export type MeshAnchor = z.infer<typeof MeshAnchorSchema>;
 export const FitQcSchema = z.object({
   converged: z.boolean(),
   iterations: z.number().int().nonnegative(),
-  meanAbsoluteErrorMm: z.number().nonnegative(),
-  maxAbsoluteErrorMm: z.number().nonnegative(),
-  flags: z.array(z.string()),
+  meanAbsoluteErrorMm: FiniteNumberSchema.nonnegative(),
+  maxAbsoluteErrorMm: FiniteNumberSchema.nonnegative(),
+  flags: z.array(BoundedFlagSchema).max(256),
 });
 export type FitQc = z.infer<typeof FitQcSchema>;
 
@@ -65,16 +87,16 @@ export const LayoutInstanceSchema = z.object({
   id: z.string().uuid(),
   definitionId: z.string().uuid(),
   anchorRasMm: Vec3Schema,
-  rotationRad: z.number(),
-  mappingRotationRad: z.number().default(0),
+  rotationRad: FiniteNumberSchema,
+  mappingRotationRad: FiniteNumberSchema.default(0),
   visible: z.boolean().default(true),
   locked: z.boolean().default(true),
-  overrides: z.array(OptodeOverrideSchema),
+  overrides: z.array(OptodeOverrideSchema).max(PROJECT_GRAPH_LIMITS.overridesPerInstance),
   digitizerPositions: z.array(z.object({
     optodeId: z.string().uuid(),
     digitizerPointId: z.string().uuid(),
     scalpRasMm: Vec3Schema,
-  })).default([]),
+  })).max(PROJECT_GRAPH_LIMITS.digitizerPositionsPerInstance).default([]),
   derivedFromInstanceId: z.string().uuid().nullable().default(null),
   digitizerSessionId: z.string().uuid().nullable().default(null),
   fitQc: FitQcSchema.optional(),
@@ -82,11 +104,11 @@ export const LayoutInstanceSchema = z.object({
 export type LayoutInstance = z.infer<typeof LayoutInstanceSchema>;
 
 export const DeviceProfileSchema = z.object({
-  manufacturer: z.string().min(1).default('Shimadzu'),
-  model: z.string().min(1).default('LABNIRS'),
+  manufacturer: BoundedNameSchema.default('Shimadzu'),
+  model: BoundedNameSchema.default('LABNIRS'),
   wavelengthsNm: z.preprocess(
     (value) => Array.isArray(value) && value.length === 0 ? undefined : value,
-    z.array(z.number().positive()).min(1).default([780, 805, 830]),
+    z.array(FiniteNumberSchema.positive()).min(1).max(32).default([780, 805, 830]),
   ),
   measurementType: z.preprocess(
     (value) => value === 'CW_AMPLITUDE' ? 'NIRSCWAMPLITUDE' : value,
@@ -98,14 +120,14 @@ export const DeviceProfileSchema = z.object({
       'NIRSCWMUA',
     ]).default('NIRSCWAMPLITUDE'),
   ),
-  units: z.string().min(1).default('V'),
-  sourceType: z.string().min(1).default('LASER'),
-  detectorType: z.string().min(1).default('PMT'),
-  samplingFrequencyHz: z.number().positive().nullable().default(null),
+  units: BoundedNameSchema.default('V'),
+  sourceType: BoundedNameSchema.default('LASER'),
+  detectorType: BoundedNameSchema.default('PMT'),
+  samplingFrequencyHz: FiniteNumberSchema.positive().nullable().default(null),
 });
 export type DeviceProfile = z.infer<typeof DeviceProfileSchema>;
 
-const BidsLabelSchema = z.string().regex(/^[A-Za-z0-9]+$/);
+const BidsLabelSchema = z.string().max(64).regex(/^[A-Za-z0-9]+$/);
 export const BidsSettingsSchema = z.object({
   subjectLabel: BidsLabelSchema.default('01'),
   sessionLabel: BidsLabelSchema.or(z.literal('')).default(''),
@@ -132,8 +154,8 @@ export const ProjectionSettingsSchema = z.object({
 export type ProjectionSettings = z.infer<typeof ProjectionSettingsSchema>;
 
 export const AtlasLabelSchema = z.object({
-  atlasId: z.string(),
-  labelEn: z.string(),
+  atlasId: BoundedNameSchema,
+  labelEn: BoundedNameSchema,
   probability: z.number().min(0).max(1),
 });
 export type AtlasLabel = z.infer<typeof AtlasLabelSchema>;
@@ -146,25 +168,25 @@ export const ProjectionResultSchema = z.object({
   displayRasMm: Vec3Schema.nullable().default(null),
   corticalRasMm: Vec3Schema.nullable(),
   depthTargetRasMm: Vec3Schema.nullable(),
-  underlyingCorticalRegions: z.array(AtlasLabelSchema),
-  deepTargetStructures: z.array(AtlasLabelSchema),
-  tissueAtTarget: z.string().nullable(),
+  underlyingCorticalRegions: z.array(AtlasLabelSchema).max(PROJECT_GRAPH_LIMITS.atlasLabelsPerResult),
+  deepTargetStructures: z.array(AtlasLabelSchema).max(PROJECT_GRAPH_LIMITS.atlasLabelsPerResult),
+  tissueAtTarget: z.string().max(256).nullable(),
   claimLevel: z.enum(['development_only', 'geometric', 'modeled']),
   status: z.enum(['provisional', 'verified', 'blocked']),
-  qcFlags: z.array(z.string()),
+  qcFlags: z.array(BoundedFlagSchema).max(256),
 });
 export type ProjectionResult = z.infer<typeof ProjectionResultSchema>;
 
 export const TemplateRefSchema = z.object({
   id: z.literal('MNI152NLin6Asym'),
-  assetVersion: z.string(),
+  assetVersion: z.string().max(256),
   coordinateConvention: z.literal('RAS+'),
   units: z.literal('mm'),
   verified: z.boolean(),
-  manifestSha256: z.string(),
-  scalpMeshSha256: z.string(),
-  cortexMeshSha256: z.string(),
-  atlasSha256: z.string(),
+  manifestSha256: z.string().max(256),
+  scalpMeshSha256: z.string().max(256),
+  cortexMeshSha256: z.string().max(256),
+  atlasSha256: z.string().max(256),
 });
 export type TemplateRef = z.infer<typeof TemplateRefSchema>;
 
@@ -173,7 +195,7 @@ export type DigitizerPointKind = z.infer<typeof DigitizerPointKindSchema>;
 
 export const DigitizerPointSchema = z.object({
   id: z.string().uuid(),
-  label: z.string().min(1),
+  label: BoundedNameSchema,
   kind: DigitizerPointKindSchema,
   rawPosition: Vec3Schema,
 });
@@ -182,15 +204,15 @@ export type DigitizerPoint = z.infer<typeof DigitizerPointSchema>;
 export const DigitizerCalibrationSchema = z.object({
   method: z.literal('five-point-similarity'),
   sourceUnit: z.enum(['mm', 'cm', 'm']),
-  matrix: z.array(z.number()).length(16),
-  scale: z.number().positive(),
-  rmsResidualMm: z.number().nonnegative(),
-  maxResidualMm: z.number().nonnegative(),
+  matrix: z.array(FiniteNumberSchema).length(16),
+  scale: FiniteNumberSchema.positive(),
+  rmsResidualMm: FiniteNumberSchema.nonnegative(),
+  maxResidualMm: FiniteNumberSchema.nonnegative(),
   residuals: z.array(z.object({
     label: z.enum(['Nz', 'Iz', 'LPA', 'RPA', 'Cz']),
     measuredRasMm: Vec3Schema,
     targetRasMm: Vec3Schema,
-    residualMm: z.number().nonnegative(),
+    residualMm: FiniteNumberSchema.nonnegative(),
   })).length(5),
   calibratedAt: z.string().datetime(),
 });
@@ -200,23 +222,24 @@ export const DigitizerOptodeMappingSchema = z.object({
   pointId: z.string().uuid(),
   instanceId: z.string().uuid(),
   optodeId: z.string().uuid(),
-  distanceMm: z.number().nonnegative(),
+  distanceMm: FiniteNumberSchema.nonnegative(),
 });
 export type DigitizerOptodeMapping = z.infer<typeof DigitizerOptodeMappingSchema>;
 
 export const DigitizerSessionSchema = z.object({
   id: z.string().uuid(),
-  name: z.string().min(1),
+  name: BoundedNameSchema,
   importedAt: z.string().datetime(),
   source: z.object({
-    format: z.string().min(1),
-    fileName: z.string().nullable(),
-    sha256: z.string().nullable(),
+    format: BoundedNameSchema,
+    fileName: z.string().max(1_024).nullable(),
+    sha256: z.string().max(256).nullable(),
   }),
-  points: z.array(DigitizerPointSchema).min(5),
-  calibratedPoints: z.array(z.object({ pointId: z.string().uuid(), rasMm: Vec3Schema })),
+  points: z.array(DigitizerPointSchema).min(5).max(PROJECT_GRAPH_LIMITS.digitizerPointsPerSession),
+  calibratedPoints: z.array(z.object({ pointId: z.string().uuid(), rasMm: Vec3Schema }))
+    .max(PROJECT_GRAPH_LIMITS.digitizerPointsPerSession),
   calibration: DigitizerCalibrationSchema,
-  optodeMappings: z.array(DigitizerOptodeMappingSchema).default([]),
+  optodeMappings: z.array(DigitizerOptodeMappingSchema).max(PROJECT_GRAPH_LIMITS.mappingsPerSession).default([]),
   visible: z.boolean().default(true),
 });
 export type DigitizerSession = z.infer<typeof DigitizerSessionSchema>;
@@ -231,38 +254,38 @@ export const DigitizerImportSchema = z.object({
 export type DigitizerImport = z.infer<typeof DigitizerImportSchema>;
 
 export const QuickTargetSummarySchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  aliases: z.array(z.string()).default([]),
-  domain: z.string().min(1).optional(),
-  subdomain: z.string().min(1).optional(),
+  id: BoundedNameSchema,
+  label: BoundedNameSchema,
+  aliases: z.array(BoundedNameSchema).max(PROJECT_GRAPH_LIMITS.targetSummaryItems).default([]),
+  domain: BoundedNameSchema.optional(),
+  subdomain: BoundedNameSchema.optional(),
   studyCount: z.number().int().nonnegative().nullable().optional(),
-  description: z.string().optional(),
-  peakRegions: z.array(z.string()).default([]),
-  laterality: z.string().optional(),
+  description: z.string().max(8_192).optional(),
+  peakRegions: z.array(BoundedNameSchema).max(PROJECT_GRAPH_LIMITS.targetSummaryItems).default([]),
+  laterality: BoundedNameSchema.optional(),
 });
 export type QuickTargetSummary = z.infer<typeof QuickTargetSummarySchema>;
 
 export const FunctionalTargetProvenanceSchema = z.object({
   sourceKind: z.enum(['neurosynth-quick', 'nifti-import', 'harvard-oxford-region', 'mni-point']),
-  sourceSpace: z.string().min(1),
+  sourceSpace: BoundedNameSchema,
   targetSpace: z.literal('MNI152NLin6Asym'),
   targetSurface: z.literal('Cedalion-ICBM152-25k'),
-  statistic: z.string().min(1),
-  mapSha256: z.string().min(1),
-  fileName: z.string().nullable().optional(),
-  interpolation: z.string().optional(),
+  statistic: BoundedNameSchema,
+  mapSha256: BoundedNameSchema,
+  fileName: z.string().max(1_024).nullable().optional(),
+  interpolation: z.string().max(256).optional(),
   validation: z.record(z.unknown()).optional(),
-  packId: z.string().optional(),
-  distributionRole: z.string().optional(),
+  packId: z.string().max(256).optional(),
+  distributionRole: z.string().max(256).optional(),
 });
 export type FunctionalTargetProvenance = z.infer<typeof FunctionalTargetProvenanceSchema>;
 
 export const FunctionalTargetMapSchema = z.object({
   target: QuickTargetSummarySchema,
   vertexCount: z.literal(25_000),
-  vertexIndices: z.array(z.number().int().min(0).max(24_999)).min(1),
-  values: z.array(z.number().finite().positive()).min(1),
+  vertexIndices: z.array(z.number().int().min(0).max(24_999)).min(1).max(PROJECT_GRAPH_LIMITS.targetVertices),
+  values: z.array(z.number().finite().positive()).min(1).max(PROJECT_GRAPH_LIMITS.targetVertices),
   provenance: FunctionalTargetProvenanceSchema,
 }).superRefine((value, context) => {
   if (value.vertexIndices.length !== value.values.length) {
@@ -296,7 +319,7 @@ export const TargetImportResultSchema = z.object({
   declaredSpace: TargetImportSpaceSchema,
   recognizedSpace: z.string().nullable(),
   shape: z.array(z.number().int().positive()).nullable(),
-  affine: z.array(z.array(z.number())).nullable(),
+  affine: z.array(z.array(FiniteNumberSchema).max(16)).max(16).nullable(),
   units: z.string().nullable(),
   valueMin: z.number().finite().nullable(),
   valueMax: z.number().finite().nullable(),
@@ -532,24 +555,24 @@ export const PlanningCandidateMetricsSchema = z.object({
 export type PlanningCandidateMetrics = z.infer<typeof PlanningCandidateMetricsSchema>;
 
 export const PlanningAnatomicalRegionSchema = z.object({
-  atlasId: z.string().min(1),
-  labelEn: z.string().min(1),
+  atlasId: BoundedNameSchema,
+  labelEn: BoundedNameSchema,
   massFraction: z.number().finite().min(0).max(1),
 });
 export type PlanningAnatomicalRegion = z.infer<typeof PlanningAnatomicalRegionSchema>;
 
 export const PlanningAnatomicalProfileSchema = z.object({
-  atlasId: z.string().min(1),
+  atlasId: BoundedNameSchema,
   atlasSupportFraction: z.number().finite().min(0).max(1),
-  regions: z.array(PlanningAnatomicalRegionSchema),
+  regions: z.array(PlanningAnatomicalRegionSchema).max(PROJECT_GRAPH_LIMITS.planningRegions),
 });
 export type PlanningAnatomicalProfile = z.infer<typeof PlanningAnatomicalProfileSchema>;
 
 export const PlanningCandidateSummarySchema = z.object({
-  stableId: z.string().min(1),
+  stableId: BoundedNameSchema,
   rank: z.number().int().positive(),
   accepted: z.boolean(),
-  rejectionReasons: z.array(z.string()),
+  rejectionReasons: z.array(BoundedFlagSchema).max(256),
   metrics: PlanningCandidateMetricsSchema,
   anatomicalCoverage: PlanningAnatomicalProfileSchema.optional(),
   placements: z.array(z.object({
@@ -557,18 +580,18 @@ export const PlanningCandidateSummarySchema = z.object({
     instanceId: z.string().uuid(),
     anchorRasMm: Vec3Schema,
     rotationRad: z.number().finite(),
-  })),
+  })).max(PROJECT_GRAPH_LIMITS.planningPlacementsPerCandidate),
 });
 export type PlanningCandidateSummary = z.infer<typeof PlanningCandidateSummarySchema>;
 
 export const AgentPlanningRecordSchema = z.object({
   version: z.literal(1),
   engine: z.literal('cortexlume-deterministic-planner'),
-  engineVersion: z.string().min(1),
+  engineVersion: BoundedNameSchema,
   plannedAt: z.string().datetime(),
   canonicalRequestSha256: z.string().regex(/^[a-f0-9]{64}$/),
   canonicalRequest: z.record(z.unknown()),
-  seed: z.string().min(1),
+  seed: BoundedNameSchema,
   assetHashes: z.record(z.string().regex(/^[a-f0-9]{64}$/)),
   sourceProjectSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().default(null),
   targetAnatomy: PlanningAnatomicalProfileSchema.optional(),
@@ -578,11 +601,11 @@ export const AgentPlanningRecordSchema = z.object({
     significantTargetRegionCount: z.number().int().nonnegative(),
     requestedPatchCount: z.number().int().positive(),
     recommendedPatchCount: z.number().int().min(1).max(4),
-    flags: z.array(z.string()),
+    flags: z.array(BoundedFlagSchema).max(256),
   }).optional(),
   candidates: z.array(PlanningCandidateSummarySchema).length(3),
-  recommendedCandidateId: z.string().min(1),
-  selectedCandidateId: z.string().min(1),
+  recommendedCandidateId: BoundedNameSchema,
+  selectedCandidateId: BoundedNameSchema,
 }).superRefine((value, context) => {
   const ids = new Set(value.candidates.map((candidate) => candidate.stableId));
   if (ids.size !== value.candidates.length) {
@@ -597,12 +620,12 @@ export type AgentPlanningRecord = z.infer<typeof AgentPlanningRecordSchema>;
 const CortexLumeProjectBaseSchema = z.object({
   format: z.literal('cortexlume-project'),
   id: z.string().uuid(),
-  name: z.string().min(1),
+  name: BoundedNameSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   template: TemplateRefSchema,
-  layouts: z.array(LayoutDefinitionSchema),
-  instances: z.array(LayoutInstanceSchema),
+  layouts: z.array(LayoutDefinitionSchema).max(PROJECT_GRAPH_LIMITS.layouts),
+  instances: z.array(LayoutInstanceSchema).max(PROJECT_GRAPH_LIMITS.instances),
   deviceProfile: DeviceProfileSchema,
   bidsSettings: BidsSettingsSchema.default({
     subjectLabel: '01',
@@ -612,8 +635,8 @@ const CortexLumeProjectBaseSchema = z.object({
     runIndex: null,
   }),
   projectionSettings: ProjectionSettingsSchema,
-  verifiedResults: z.array(ProjectionResultSchema),
-  digitizerSessions: z.array(DigitizerSessionSchema).default([]),
+  verifiedResults: z.array(ProjectionResultSchema).max(PROJECT_GRAPH_LIMITS.verifiedResults),
+  digitizerSessions: z.array(DigitizerSessionSchema).max(PROJECT_GRAPH_LIMITS.digitizerSessions).default([]),
 });
 
 export const CortexLumeProjectV1Schema = CortexLumeProjectBaseSchema.extend({
@@ -626,12 +649,161 @@ export const CortexLumeProjectV2Schema = CortexLumeProjectBaseSchema.extend({
   functionalTarget: FunctionalTargetMapSchema.nullable().default(null),
   surfaceOverlay: SurfaceOverlaySchema.default('none'),
   coverageRegion: z.object({
-    atlasId: z.string().min(1),
-    labelEn: z.string().min(1),
+    atlasId: BoundedNameSchema,
+    labelEn: BoundedNameSchema,
   }).nullable().default(null),
   planning: AgentPlanningRecordSchema.nullable().default(null),
 });
 export type CortexLumeProjectV2 = z.infer<typeof CortexLumeProjectV2Schema>;
+
+/** Validates relationships that individual object schemas cannot check in isolation. */
+export function validateProjectGraph(project: CortexLumeProjectV2, context: z.RefinementCtx): void {
+  const issue = (message: string, path: (string | number)[] = []) => {
+    context.addIssue({ code: z.ZodIssueCode.custom, message, path });
+  };
+  const rejectDuplicates = (
+    values: readonly string[],
+    message: string,
+    path: (string | number)[],
+  ) => {
+    const seen = new Set<string>();
+    values.forEach((value, index) => {
+      if (seen.has(value)) issue(message, [...path, index]);
+      seen.add(value);
+    });
+  };
+
+  rejectDuplicates(project.layouts.map((layout) => layout.id), 'Layout IDs must be unique.', ['layouts']);
+  rejectDuplicates(project.instances.map((instance) => instance.id), 'Instance IDs must be unique.', ['instances']);
+  rejectDuplicates(project.digitizerSessions.map((session) => session.id), 'Digitizer session IDs must be unique.', ['digitizerSessions']);
+
+  const layouts = new Map(project.layouts.map((layout) => [layout.id, layout] as const));
+  const allPairIds = new Set<string>();
+  project.layouts.forEach((layout, layoutIndex) => {
+    rejectDuplicates(layout.optodes.map((optode) => optode.id), 'Optode IDs must be unique within a layout.', ['layouts', layoutIndex, 'optodes']);
+    rejectDuplicates(layout.pairs.map((pair) => pair.id), 'Pair IDs must be unique within a layout.', ['layouts', layoutIndex, 'pairs']);
+    const optodes = new Map(layout.optodes.map((optode) => [optode.id, optode] as const));
+    const channelNumbers = new Set<number>();
+    layout.pairs.forEach((pair, pairIndex) => {
+      const pairPath = ['layouts', layoutIndex, 'pairs', pairIndex] as (string | number)[];
+      allPairIds.add(pair.id);
+      const source = optodes.get(pair.sourceId);
+      const detector = optodes.get(pair.detectorId);
+      if (!source) issue('Pair sourceId must reference an optode in its layout.', [...pairPath, 'sourceId']);
+      else if (source.type !== 'source') issue('Pair sourceId must reference a source optode.', [...pairPath, 'sourceId']);
+      if (!detector) issue('Pair detectorId must reference an optode in its layout.', [...pairPath, 'detectorId']);
+      else if (detector.type !== 'detector') issue('Pair detectorId must reference a detector optode.', [...pairPath, 'detectorId']);
+      if (pair.sourceId === pair.detectorId) issue('Pair endpoints must be different optodes.', pairPath);
+      if (pair.channelNumber != null) {
+        if (channelNumbers.has(pair.channelNumber)) issue('Channel numbers must be unique within a layout.', [...pairPath, 'channelNumber']);
+        channelNumbers.add(pair.channelNumber);
+      }
+    });
+  });
+
+  const instances = new Map(project.instances.map((instance) => [instance.id, instance] as const));
+  const sessions = new Map(project.digitizerSessions.map((session) => [session.id, session] as const));
+  project.instances.forEach((instance, instanceIndex) => {
+    const instancePath = ['instances', instanceIndex] as (string | number)[];
+    const layout = layouts.get(instance.definitionId);
+    if (!layout) issue('Instance definitionId must reference an existing layout.', [...instancePath, 'definitionId']);
+    const optodeIds = new Set(layout?.optodes.map((optode) => optode.id) ?? []);
+    rejectDuplicates(instance.overrides.map((override) => override.optodeId), 'Instance overrides must reference each optode at most once.', [...instancePath, 'overrides']);
+    instance.overrides.forEach((override, overrideIndex) => {
+      if (!optodeIds.has(override.optodeId)) issue('Instance override references an unknown optode.', [...instancePath, 'overrides', overrideIndex, 'optodeId']);
+    });
+    rejectDuplicates(instance.digitizerPositions.map((position) => position.optodeId), 'Digitizer positions must reference each optode at most once.', [...instancePath, 'digitizerPositions']);
+    rejectDuplicates(instance.digitizerPositions.map((position) => position.digitizerPointId), 'Digitizer point IDs must be unique within an instance.', [...instancePath, 'digitizerPositions']);
+    if (instance.digitizerPositions.length > 0 && instance.digitizerSessionId == null) {
+      issue('Digitizer positions require a linked digitizer session.', [...instancePath, 'digitizerSessionId']);
+    }
+    instance.digitizerPositions.forEach((position, positionIndex) => {
+      if (!optodeIds.has(position.optodeId)) issue('Digitizer position references an unknown optode.', [...instancePath, 'digitizerPositions', positionIndex, 'optodeId']);
+      const session = instance.digitizerSessionId == null ? undefined : sessions.get(instance.digitizerSessionId);
+      if (session && !session.points.some((point) => point.id === position.digitizerPointId)) {
+        issue('Digitizer position references a point outside its session.', [...instancePath, 'digitizerPositions', positionIndex, 'digitizerPointId']);
+      }
+    });
+    if (instance.derivedFromInstanceId === instance.id) issue('An instance cannot derive from itself.', [...instancePath, 'derivedFromInstanceId']);
+    else if (instance.derivedFromInstanceId != null && !instances.has(instance.derivedFromInstanceId)) {
+      issue('derivedFromInstanceId must reference an existing instance.', [...instancePath, 'derivedFromInstanceId']);
+    }
+    if (instance.digitizerSessionId != null && !sessions.has(instance.digitizerSessionId)) {
+      issue('digitizerSessionId must reference an existing digitizer session.', [...instancePath, 'digitizerSessionId']);
+    }
+    if (instance.fitQc && instance.fitQc.maxAbsoluteErrorMm < instance.fitQc.meanAbsoluteErrorMm) {
+      issue('Fit QC maximum error cannot be smaller than its mean error.', [...instancePath, 'fitQc']);
+    }
+  });
+
+  project.instances.forEach((instance, instanceIndex) => {
+    const visited = new Set<string>([instance.id]);
+    let parentId = instance.derivedFromInstanceId;
+    while (parentId != null) {
+      if (visited.has(parentId)) {
+        issue('Instance derivation references must not contain a cycle.', ['instances', instanceIndex, 'derivedFromInstanceId']);
+        break;
+      }
+      visited.add(parentId);
+      parentId = instances.get(parentId)?.derivedFromInstanceId ?? null;
+    }
+  });
+
+  project.digitizerSessions.forEach((session, sessionIndex) => {
+    const sessionPath = ['digitizerSessions', sessionIndex] as (string | number)[];
+    rejectDuplicates(session.points.map((point) => point.id), 'Digitizer point IDs must be unique within a session.', [...sessionPath, 'points']);
+    const pointIds = new Set(session.points.map((point) => point.id));
+    rejectDuplicates(session.calibratedPoints.map((point) => point.pointId), 'Calibrated point references must be unique.', [...sessionPath, 'calibratedPoints']);
+    session.calibratedPoints.forEach((point, pointIndex) => {
+      if (!pointIds.has(point.pointId)) issue('Calibrated point references an unknown session point.', [...sessionPath, 'calibratedPoints', pointIndex, 'pointId']);
+    });
+    const mappingKeys = new Set<string>();
+    session.optodeMappings.forEach((mapping, mappingIndex) => {
+      const mappingPath = [...sessionPath, 'optodeMappings', mappingIndex];
+      const key = `${mapping.instanceId}:${mapping.optodeId}`;
+      if (mappingKeys.has(key)) issue('Digitizer mappings must be unique per instance and optode.', mappingPath);
+      mappingKeys.add(key);
+      if (!pointIds.has(mapping.pointId)) issue('Digitizer mapping references an unknown session point.', [...mappingPath, 'pointId']);
+      const instance = instances.get(mapping.instanceId);
+      if (!instance) issue('Digitizer mapping references an unknown instance.', [...mappingPath, 'instanceId']);
+      else {
+        if (instance.digitizerSessionId !== session.id) {
+          issue('Digitizer mapping instance must reference this session.', [...mappingPath, 'instanceId']);
+        }
+        const layout = layouts.get(instance.definitionId);
+        if (!layout?.optodes.some((optode) => optode.id === mapping.optodeId)) {
+          issue('Digitizer mapping references an optode outside the instance layout.', [...mappingPath, 'optodeId']);
+        }
+      }
+    });
+  });
+
+  Object.keys(project.projectionSettings.pairDepthOverridesMm).forEach((pairId) => {
+    if (!allPairIds.has(pairId)) issue('Pair depth override references an unknown pair.', ['projectionSettings', 'pairDepthOverridesMm', pairId]);
+  });
+
+  const resultKeys = new Set<string>();
+  project.verifiedResults.forEach((result, resultIndex) => {
+    const resultPath = ['verifiedResults', resultIndex] as (string | number)[];
+    const resultKey = `${result.instanceId ?? 'null'}:${result.subjectKind}:${result.subjectId}`;
+    if (resultKeys.has(resultKey)) issue('Verified result keys must be unique.', resultPath);
+    resultKeys.add(resultKey);
+    if (result.instanceId == null) {
+      issue('Verified result must reference an instance.', [...resultPath, 'instanceId']);
+      return;
+    }
+    const instance = instances.get(result.instanceId);
+    if (!instance) {
+      issue('Verified result references an unknown instance.', [...resultPath, 'instanceId']);
+      return;
+    }
+    const layout = layouts.get(instance.definitionId);
+    const exists = result.subjectKind === 'optode'
+      ? layout?.optodes.some((optode) => optode.id === result.subjectId)
+      : layout?.pairs.some((pair) => pair.id === result.subjectId);
+    if (!exists) issue(`Verified ${result.subjectKind} result references an unknown subject.`, [...resultPath, 'subjectId']);
+  });
+}
 
 export function migrateProjectV1ToV2(project: CortexLumeProjectV1): CortexLumeProjectV2 {
   return CortexLumeProjectV2Schema.parse({
@@ -651,7 +823,7 @@ export const CortexLumeProjectSchema = z.preprocess((value) => {
     return migrateProjectV1ToV2(CortexLumeProjectV1Schema.parse(value));
   }
   return value;
-}, CortexLumeProjectV2Schema);
+}, CortexLumeProjectV2Schema).superRefine(validateProjectGraph);
 export type CortexLumeProject = z.infer<typeof CortexLumeProjectSchema>;
 
 export const FitPlacementRequestSchema = z.object({
@@ -677,11 +849,14 @@ export interface DesktopApi {
     minimize(): Promise<void>;
     toggleMaximize(): Promise<boolean>;
     close(): Promise<void>;
+    onCloseRequested(callback: () => void): () => void;
+    finishClose(allow: boolean): Promise<void>;
   };
   project: {
     startup(): Promise<{ project: CortexLumeProject; path: string } | null>;
     open(): Promise<{ project: CortexLumeProject; path: string } | null>;
     save(project: CortexLumeProject, currentPath?: string): Promise<{ path: string } | null>;
+    confirmUnsavedChanges(): Promise<'save' | 'discard' | 'cancel'>;
   };
   input: {
     digitizer(): Promise<DigitizerImport | null>;

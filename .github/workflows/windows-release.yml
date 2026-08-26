@@ -63,6 +63,10 @@ jobs:
         if: github.event_name != 'pull_request'
         run: pnpm --filter @cortexlume/desktop make
 
+      - name: Package optional example dataset
+        if: github.event_name != 'pull_request'
+        run: pnpm examples:package
+
       - name: Collect release files
         if: github.event_name != 'pull_request'
         shell: pwsh

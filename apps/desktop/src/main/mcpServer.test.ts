@@ -237,6 +237,12 @@ describe('CortexLume MCP runtime', () => {
     expect(await realpath(firstSave.path as string)).toBe(await realpath(requestedOutput));
     expect(await realpath(secondSave.path as string)).not.toBe(await realpath(requestedOutput));
     expect(await readFile(firstSave.path as string)).not.toHaveLength(0);
+    const nestedOutput = path.join(root, 'new', 'nested', 'agent-plan.cortexlume');
+    const nestedSave = structured(await client.callTool({
+      name: 'save_project',
+      arguments: { planId: selectedPlan.planId, candidateId, outputPath: nestedOutput },
+    }));
+    expect(await realpath(nestedSave.path as string)).toBe(await realpath(nestedOutput));
 
     const inspection = structured(await client.callTool({ name: 'inspect_project', arguments: { path: firstSave.path } }));
     expect(inspection.formatVersion).toBe(2);

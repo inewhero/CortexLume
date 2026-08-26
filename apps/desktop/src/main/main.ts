@@ -1,9 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ScienceClient, type ScienceCommand } from '@cortexlume/science-client';
+import { PROJECT_ARCHIVE_LIMITS } from '@cortexlume/project-io';
 import {
   CortexLumeProjectSchema,
   AnatomicalCoverageAnalysisSchema,
@@ -22,8 +24,9 @@ import {
 } from '@cortexlume/contracts';
 import { createProjectArchive, readProjectArchive } from './projectArchive';
 import { buildBidsGeometryExport, buildBrainNetExport, buildCsvExport, type ExportBundle } from './projectExport';
-import { parseDigitizerFile } from './digitizerImport';
+import { DIGITIZER_MAX_FILE_BYTES, parseDigitizerFile } from './digitizerImport';
 import { mergeProjectAtlasAnnotations, type PathAtlasAnnotation, type PointAtlasAnnotation } from './projectAnnotation';
+import { fitPlacementWireRequest } from './fitPlacementWire';
 import { checkGithubUpdate } from './startupLifecycle';
 import type { UpdateCheckResult } from '../shared/startup';
 
@@ -34,6 +37,10 @@ const startupProjectPath = process.argv.find((argument, index) => (
   index > 0 && !argument.startsWith('--') && argument.toLowerCase().endsWith('.cortexlume')
 )) ?? null;
 let validatedReleaseUrl: string | null = null;
+let closeApproved = false;
+let closeRequestPending = false;
+const authorizedProjectPaths = new Set<string>();
+const destinationWrites = new Map<string, Promise<void>>();
 
 function quadraticPathThroughTarget(source: Vec3, target: Vec3, detector: Vec3, count = 33): Vec3[] {
   const control: Vec3 = [
@@ -95,6 +102,8 @@ const stopScienceSidecar = () => scienceClient.stop();
 const scienceRequest = <T,>(pathname: string, payload?: unknown) => scienceClient.request<T>(pathname, payload);
 
 async function createWindow(): Promise<void> {
+  closeApproved = false;
+  closeRequestPending = false;
   mainWindow = new BrowserWindow({
     width: 1500,
     height: 940,
@@ -125,6 +134,18 @@ async function createWindow(): Promise<void> {
   mainWindow.once('ready-to-show', () => {
     if (!headlessSmokeTest) mainWindow?.show();
   });
+  mainWindow.on('close', (event) => {
+    if (closeApproved) return;
+    event.preventDefault();
+    if (closeRequestPending) return;
+    closeRequestPending = true;
+    mainWindow?.webContents.send('window:close-requested');
+  });
+  mainWindow.once('closed', () => {
+    mainWindow = null;
+    closeApproved = false;
+    closeRequestPending = false;
+  });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     await mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -137,14 +158,45 @@ async function createWindow(): Promise<void> {
 }
 
 async function atomicWrite(destination: string, data: Uint8Array | string): Promise<void> {
-  const temporary = `${destination}.${process.pid}.tmp`;
-  await writeFile(temporary, data);
+  const resolved = path.resolve(destination);
+  const previous = destinationWrites.get(resolved) ?? Promise.resolve();
+  const write = previous.catch(() => undefined).then(async () => {
+    const temporary = `${resolved}.${process.pid}.${randomUUID()}.tmp`;
+    await writeFile(temporary, data);
+    try {
+      await rename(temporary, resolved);
+    } catch (error) {
+      await rm(temporary, { force: true });
+      throw error;
+    }
+  });
+  destinationWrites.set(resolved, write);
   try {
-    await rename(temporary, destination);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
+    await write;
+  } finally {
+    if (destinationWrites.get(resolved) === write) destinationWrites.delete(resolved);
   }
+}
+
+function assertTrustedIpcSender(event: Electron.IpcMainInvokeEvent): void {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+    throw new Error('Rejected IPC request from an untrusted renderer.');
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[], concurrency: number, task: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await task(values[index]!, index);
+    }
+  }));
+  return results;
 }
 
 async function chooseExportDirectory(title: string): Promise<string | null> {
@@ -167,6 +219,35 @@ function ensureProjectExtension(destination: string): string {
   return destination.toLowerCase().endsWith('.cortexlume')
     ? destination
     : `${destination}.cortexlume`;
+}
+
+async function readBoundedFile(filePath: string, maximumBytes: number, label: string): Promise<Buffer> {
+  const handle = await open(filePath, 'r');
+  try {
+    const before = await handle.stat();
+    if (!before.isFile()) throw new Error(`${label} must be a regular file.`);
+    if (before.size > maximumBytes) {
+      throw new Error(`${label} exceeds the ${maximumBytes} byte limit.`);
+    }
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    const after = await handle.stat();
+    if (offset !== bytes.byteLength || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
+      throw new Error(`${label} changed while it was being read.`);
+    }
+    return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+
+async function readProjectFile(projectPath: string): Promise<Uint8Array> {
+  return readBoundedFile(projectPath, PROJECT_ARCHIVE_LIMITS.compressedBytes, 'Project archive');
 }
 
 async function writeExportBundle(directory: string, bundle: ExportBundle): Promise<string[]> {
@@ -222,16 +303,37 @@ function inspectBrainNet(command: string): Promise<BrainNetLaunchStatus> {
   });
 }
 
-function launchBrainNet(command: string, scriptPath: string, status: BrainNetLaunchStatus): BrainNetLaunchStatus {
+function launchBrainNet(command: string, scriptPath: string, status: BrainNetLaunchStatus): Promise<BrainNetLaunchStatus> {
   const escapedPath = scriptPath.replaceAll("'", "''");
   const expression = `try, run('${escapedPath}'); catch error, disp(getReport(error,'extended')); end`;
-  const child = spawn(command, ['-r', expression], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: false,
+  return new Promise((resolve) => {
+    const child = spawn(command, ['-r', expression], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    });
+    let settled = false;
+    const finish = (result: BrainNetLaunchStatus) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    child.once('error', (error) => finish({
+      ...status, launched: false, detail: `MATLAB failed to start: ${error.message}`,
+    }));
+    child.once('exit', (code, signal) => finish({
+      ...status,
+      launched: false,
+      detail: `MATLAB exited before BrainNet Viewer could start (${signal ?? code ?? 'unknown'}).`,
+    }));
+    child.once('spawn', () => {
+      setTimeout(() => {
+        if (settled) return;
+        child.unref();
+        finish({ ...status, launched: true, detail: `BrainNet Viewer launched via ${status.detail}` });
+      }, 250);
+    });
   });
-  child.unref();
-  return { ...status, launched: true, detail: `BrainNet Viewer launched via ${status.detail}` };
 }
 
 function registerIpc(): void {
@@ -243,6 +345,13 @@ function registerIpc(): void {
     return mainWindow.isMaximized();
   });
   ipcMain.handle('window:close', () => mainWindow?.close());
+  ipcMain.handle('window:finish-close', (event, allow: boolean) => {
+    assertTrustedIpcSender(event);
+    closeRequestPending = false;
+    if (!allow) return;
+    closeApproved = true;
+    mainWindow?.close();
+  });
 
   ipcMain.handle('startup:check-update', async () => {
     if (!app.isPackaged) return { status: 'development', currentVersion: app.getVersion() } satisfies UpdateCheckResult;
@@ -260,7 +369,8 @@ function registerIpc(): void {
   ipcMain.handle('project:startup', async () => {
     if (!startupProjectPath) return null;
     const selectedPath = path.resolve(startupProjectPath);
-    const project = readProjectArchive(new Uint8Array(await readFile(selectedPath)));
+    const project = readProjectArchive(await readProjectFile(selectedPath));
+    authorizedProjectPaths.add(selectedPath);
     return { project, path: selectedPath };
   });
 
@@ -272,15 +382,36 @@ function registerIpc(): void {
     });
     const selectedPath = selection.filePaths[0];
     if (selection.canceled || !selectedPath) return null;
-    const project = readProjectArchive(new Uint8Array(await readFile(selectedPath)));
-    return { project, path: selectedPath };
+    const project = readProjectArchive(await readProjectFile(selectedPath));
+    const resolvedPath = path.resolve(selectedPath);
+    authorizedProjectPaths.add(resolvedPath);
+    return { project, path: resolvedPath };
+  });
+
+  ipcMain.handle('project:confirm-unsaved', async (event) => {
+    assertTrustedIpcSender(event);
+    const choice = await dialog.showMessageBox(mainWindow!, {
+      type: 'warning',
+      title: 'Unsaved changes',
+      message: 'Save changes to the current CortexLume project?',
+      detail: 'Unsaved changes will be lost if you continue without saving.',
+      buttons: ['Save', 'Discard', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+    });
+    return (['save', 'discard', 'cancel'] as const)[choice.response] ?? 'cancel';
   });
 
   ipcMain.handle(
     'project:save',
-    async (_event, rawProject: CortexLumeProject, currentPath?: string) => {
+    async (event, rawProject: CortexLumeProject, currentPath?: string) => {
+      assertTrustedIpcSender(event);
       const project = CortexLumeProjectSchema.parse(rawProject);
-      let destination = currentPath;
+      let destination = currentPath ? path.resolve(currentPath) : undefined;
+      if (destination && !authorizedProjectPaths.has(destination)) {
+        throw new Error('The renderer is not authorized to overwrite that project path. Use Save As instead.');
+      }
       if (!destination) {
         const selection = await dialog.showSaveDialog(mainWindow!, {
           title: 'Save CortexLume project',
@@ -290,7 +421,9 @@ function registerIpc(): void {
         if (selection.canceled || !selection.filePath) return null;
         destination = ensureProjectExtension(selection.filePath);
       }
+      destination = path.resolve(destination);
       await atomicWrite(destination, createProjectArchive(project, app.getVersion()));
+      authorizedProjectPaths.add(destination);
       return { path: destination };
     },
   );
@@ -305,7 +438,8 @@ function registerIpc(): void {
     });
     const selectedPath = selection.filePaths[0];
     if (selection.canceled || !selectedPath) return null;
-    return parseDigitizerFile(selectedPath, new Uint8Array(await readFile(selectedPath)));
+    const bytes = await readBoundedFile(selectedPath, DIGITIZER_MAX_FILE_BYTES, 'Digitizer file');
+    return parseDigitizerFile(selectedPath, bytes);
   });
 
   ipcMain.handle('input:target-nifti', async (_event, rawDeclaredSpace: TargetImportSpace) => {
@@ -323,10 +457,7 @@ function registerIpc(): void {
     if (!fileName.toLowerCase().endsWith('.nii') && !fileName.toLowerCase().endsWith('.nii.gz')) {
       throw new Error('Select a .nii or .nii.gz NIfTI statistical map.');
     }
-    if ((await stat(selectedPath)).size > 128 * 1024 * 1024) {
-      throw new Error('Target map exceeds the 128 MB import limit.');
-    }
-    const bytes = await readFile(selectedPath);
+    const bytes = await readBoundedFile(selectedPath, 128 * 1024 * 1024, 'Target map');
     const response = await scienceRequest<unknown>('/v1/targets/import', {
       fileName,
       declaredSpace,
@@ -368,7 +499,7 @@ function registerIpc(): void {
       (result) => result.subjectKind === 'optode' && result.corticalRasMm?.every(Number.isFinite),
     );
     if (brainNet.brainNetFound && hasCorticalCoordinates) {
-      brainNet = launchBrainNet(command, path.join(directory, 'cortexlume_open_brainnet.m'), brainNet);
+      brainNet = await launchBrainNet(command, path.join(directory, 'cortexlume_open_brainnet.m'), brainNet);
     } else if (!hasCorticalCoordinates) {
       brainNet = { ...brainNet, detail: 'Exported files, but no finite cortical optode coordinates were available to load.' };
     }
@@ -399,7 +530,7 @@ function registerIpc(): void {
 
   ipcMain.handle('science:fit-placement', async (_event, rawRequest: FitPlacementRequest) => {
     const request = FitPlacementRequestSchema.parse(rawRequest);
-    const response = await scienceRequest<unknown>('/v1/placements/fit', request);
+    const response = await scienceRequest<unknown>('/v1/placements/fit', fitPlacementWireRequest(request));
     return FitPlacementResponseSchema.parse(response);
   });
 
@@ -452,29 +583,28 @@ function registerIpc(): void {
         deepStructures: AtlasLabelSchema.array().parse(result.deepStructures ?? []),
       },
     ]));
-    const pathAnnotations = await Promise.all(project.verifiedResults.map(async (result): Promise<PathAtlasAnnotation | null> => {
+    const instancesById = new Map(project.instances.map((instance) => [instance.id, instance]));
+    const layoutsById = new Map(project.layouts.map((layout) => [layout.id, layout]));
+    const resultsBySubject = new Map(project.verifiedResults.map((result) => [
+      `${result.instanceId ?? ''}:${result.subjectKind}:${result.subjectId}`, result,
+    ]));
+    const pathAnnotations = await mapWithConcurrency(project.verifiedResults, 4, async (result): Promise<PathAtlasAnnotation | null> => {
       if (result.subjectKind !== 'pair' || !result.instanceId || !result.corticalRasMm) return null;
-      const instance = project.instances.find((candidate) => candidate.id === result.instanceId);
-      const layout = project.layouts.find((candidate) => candidate.id === instance?.definitionId);
+      const instance = instancesById.get(result.instanceId);
+      const layout = instance ? layoutsById.get(instance.definitionId) : undefined;
       const pair = layout?.pairs.find((candidate) => candidate.id === result.subjectId);
       if (!pair) return null;
-      const source = project.verifiedResults.find((candidate) =>
-        candidate.instanceId === result.instanceId
-        && candidate.subjectKind === 'optode'
-        && candidate.subjectId === pair.sourceId)?.corticalRasMm;
-      const detector = project.verifiedResults.find((candidate) =>
-        candidate.instanceId === result.instanceId
-        && candidate.subjectKind === 'optode'
-        && candidate.subjectId === pair.detectorId)?.corticalRasMm;
+      const source = resultsBySubject.get(`${result.instanceId}:optode:${pair.sourceId}`)?.corticalRasMm;
+      const detector = resultsBySubject.get(`${result.instanceId}:optode:${pair.detectorId}`)?.corticalRasMm;
       if (!source || !detector) return null;
       const pathResponse = await scienceRequest<{ regions: unknown[] }>('/v1/atlas/query-path', {
-        points: quadraticPathThroughTarget(source, result.corticalRasMm, detector),
+        points: quadraticPathThroughTarget(source, result.depthTargetRasMm ?? result.corticalRasMm, detector),
         probabilityThreshold: project.projectionSettings.atlasProbabilityThreshold,
       });
       return {
         corticalRegions: AtlasLabelSchema.array().parse(pathResponse.regions ?? []),
       };
-    }));
+    });
     return CortexLumeProjectSchema.parse(mergeProjectAtlasAnnotations(
       project, byIndex, pathAnnotations, response.atlasVerified, response.issue,
     ));
@@ -546,6 +676,6 @@ app.on('window-all-closed', () => {
   if (!mcpMode && process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+app.on('will-quit', () => {
   stopScienceSidecar();
 });

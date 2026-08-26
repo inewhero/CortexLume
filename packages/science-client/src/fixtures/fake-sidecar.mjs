@@ -13,6 +13,11 @@ const server = http.createServer((request, response) => {
     response.end(JSON.stringify({ error: 'unauthorized' }));
     return;
   }
+  if (request.url === '/oversized') {
+    response.writeHead(200, { 'content-type': 'application/json', 'content-length': String(16 * 1024 * 1024 + 1) });
+    response.end('{}');
+    return;
+  }
   const chunks = [];
   request.on('data', (chunk) => chunks.push(chunk));
   request.on('end', () => {

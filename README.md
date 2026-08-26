@@ -20,6 +20,8 @@ https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md
 
 To work manually, download and run `CortexLume-*-win-x64-Setup.exe` from the [latest release](https://github.com/inewhero/CortexLume/releases/latest), open CortexLume, and follow the desktop workflow below. Agent-generated `.cortexlume` projects open in the same interface for visual inspection and adjustment.
 
+For a guided first session, download the optional `CortexLume-*-examples.zip` asset from the same release. Its five self-contained cases cover a placed starter project, an irregular patch, interactive five-point calibration, MNE/Polhemus full-array matching, and validated NIfTI target mapping. Each case contains its input data, a ready-to-open project, and a short README; the dataset is deliberately distributed separately from the installer. The source cases are also available under [`examples/`](./examples/README.md).
+
 CortexLume is a scientifically validated, offline Windows workstation for designing fNIRS source–detector layouts, aligning reusable patches on an anatomical head model, and exporting reproducible scalp, display, and cortical coordinates in MNI space.
 
 The application combines literature-derived functional target heatmaps, strict statistical NIfTI import, a high-density 2D array editor, multi-patch 3D alignment, sphere-aware scalp and cortical projection, five-point and 10–10 references, Harvard–Oxford probability-volume lookup, anatomical coverage mosaics, project archives, focused CSV results, BIDS-NIRS geometry sidecars, and direct BrainNet Viewer export.

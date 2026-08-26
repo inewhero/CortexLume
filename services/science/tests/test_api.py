@@ -59,7 +59,7 @@ def test_quick_target_search_and_map_endpoints(monkeypatch) -> None:
         load_quick_target_pack.cache_clear()
 
 
-def test_fit_returns_geometric_coordinates_and_region_labels() -> None:
+def test_fit_marks_ellipsoid_preview_as_development_only() -> None:
     layout, instance = fixture_layout()
     payload = {
         "interactionId": "test",
@@ -82,11 +82,26 @@ def test_fit_returns_geometric_coordinates_and_region_labels() -> None:
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["templateVerified"] is True
-    assert {item["status"] for item in body["projections"]} == {"verified"}
-    assert {item["claimLevel"] for item in body["projections"]} == {"geometric"}
+    assert {item["status"] for item in body["projections"]} == {"provisional"}
+    assert {item["claimLevel"] for item in body["projections"]} == {"development_only"}
+    assert all("development_ellipsoid_approximation" in item["qcFlags"] for item in body["projections"])
     optodes = [item for item in body["projections"] if item["subjectKind"] == "optode"]
     assert all(item["underlyingCorticalRegions"][0]["labelEn"] for item in optodes)
     assert all(1 <= len(item["underlyingCorticalRegions"]) <= 3 for item in optodes)
+
+
+def test_project_validation_accepts_current_v2_and_rejects_legacy_v1() -> None:
+    current = client.post("/v1/projects/validate", headers=headers, json={
+        "project": {"format": "cortexlume-project", "formatVersion": 2},
+    })
+    assert current.status_code == 200
+    assert current.json() == {"valid": True, "issues": []}
+
+    legacy = client.post("/v1/projects/validate", headers=headers, json={
+        "project": {"format": "cortexlume-project", "formatVersion": 1},
+    })
+    assert legacy.status_code == 200
+    assert legacy.json()["issues"] == ["unsupported_project_version"]
 
 
 def test_probability_volume_matches_fsl_golden_coordinates() -> None:

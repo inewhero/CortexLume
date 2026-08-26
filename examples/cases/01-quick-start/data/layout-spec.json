@@ -1,0 +1,10 @@
+{
+  "columns": 5,
+  "rows": 3,
+  "pitchMm": 30,
+  "upperLeft": "source",
+  "numbering": {
+    "optodes": "top-to-bottom, then left-to-right",
+    "channels": "left-to-right, then top-to-bottom"
+  }
+}

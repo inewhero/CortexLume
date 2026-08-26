@@ -10,33 +10,113 @@ let scalpSphereCenterProjector: ((point: Vec3, radiusMm: number) => Vec3) | null
 let corticalSurfaceProjector: ((point: Vec3, radiusMm: number) => Vec3) | null = null;
 let scalpOffsetProjector: ((anchor: Vec3, rotationRad: number, uvMm: Vec2) => Vec3) | null = null;
 
+export interface SurfaceModelStatus {
+  state: 'loading' | 'verified' | 'failed';
+  ready: boolean;
+  verified: boolean;
+  source: string | null;
+  issue: string | null;
+}
+
+let surfaceModelStatus: SurfaceModelStatus = {
+  state: 'loading',
+  ready: false,
+  verified: false,
+  source: null,
+  issue: 'HeadModel surface projectors have not been registered.',
+};
+const surfaceModelListeners = new Set<() => void>();
+let surfaceRegistrationGeneration = 0;
+
+function publishSurfaceModelStatus(status: SurfaceModelStatus): void {
+  surfaceModelStatus = status;
+  surfaceModelListeners.forEach((listener) => listener());
+}
+
+export function subscribeSurfaceModelStatus(listener: () => void): () => void {
+  surfaceModelListeners.add(listener);
+  return () => surfaceModelListeners.delete(listener);
+}
+
 export function registerSurfaceProjectors(projectors: {
   scalp(point: Vec3): Vec3;
   scalpSphereCenter(point: Vec3, radiusMm: number): Vec3;
   cortex(point: Vec3, radiusMm: number): Vec3;
   scalpOffset?(anchor: Vec3, rotationRad: number, uvMm: Vec2): Vec3;
-}): void {
+  verified: boolean;
+  source: string;
+}): () => void {
+  const generation = ++surfaceRegistrationGeneration;
   scalpSurfaceProjector = projectors.scalp;
   scalpSphereCenterProjector = projectors.scalpSphereCenter;
   corticalSurfaceProjector = projectors.cortex;
   scalpOffsetProjector = projectors.scalpOffset ?? null;
+  publishSurfaceModelStatus({
+    state: projectors.verified ? 'verified' : 'failed',
+    ready: true,
+    verified: projectors.verified,
+    source: projectors.source,
+    issue: projectors.verified ? null : 'Registered surface projectors are not verified for scientific output.',
+  });
+  return () => {
+    if (generation !== surfaceRegistrationGeneration) return;
+    clearSurfaceProjectors();
+  };
+}
+
+export function clearSurfaceProjectors(): void {
+  surfaceRegistrationGeneration += 1;
+  scalpSurfaceProjector = null;
+  scalpSphereCenterProjector = null;
+  corticalSurfaceProjector = null;
+  scalpOffsetProjector = null;
+  publishSurfaceModelStatus({
+    state: 'loading',
+    ready: false,
+    verified: false,
+    source: null,
+    issue: 'HeadModel surface projectors have not been registered.',
+  });
+}
+
+export function failSurfaceProjectors(issue: string): void {
+  surfaceRegistrationGeneration += 1;
+  scalpSurfaceProjector = null;
+  scalpSphereCenterProjector = null;
+  corticalSurfaceProjector = null;
+  scalpOffsetProjector = null;
+  publishSurfaceModelStatus({
+    state: 'failed', ready: false, verified: false, source: null, issue,
+  });
+}
+
+export function getSurfaceModelStatus(): SurfaceModelStatus {
+  return surfaceModelStatus;
+}
+
+export function assertVerifiedSurfaceModel(): void {
+  if (!surfaceModelStatus.ready || !surfaceModelStatus.verified) {
+    throw new Error(`Scientific projection unavailable: ${surfaceModelStatus.issue ?? 'surface model is not verified'}`);
+  }
+}
+
+function requireProjector<T>(projector: T | null, name: string): T {
+  if (!projector) throw new Error(`Scientific projection unavailable: HeadModel ${name} projector is not registered.`);
+  return projector;
 }
 
 export function projectToScalpSurface(point: Vec3): Vec3 {
-  return scalpSurfaceProjector?.(point) ?? projectToEllipsoid(point);
+  return requireProjector(scalpSurfaceProjector, 'scalp surface')(point);
 }
 
 export function projectScalpSphereCenter(scalpPoint: Vec3, radiusMm = 0): Vec3 {
   const contact = projectToScalpSurface(scalpPoint);
   if (radiusMm <= 0) return contact;
-  return scalpSphereCenterProjector?.(contact, radiusMm)
-    ?? add3(contact, scale3(ellipsoidNormal(contact), radiusMm));
+  return requireProjector(scalpSphereCenterProjector, 'scalp sphere-center')(contact, radiusMm);
 }
 
 export function projectToCorticalSurface(scalpPoint: Vec3, radiusMm = 0): Vec3 {
-  if (corticalSurfaceProjector) return corticalSurfaceProjector(scalpPoint, Math.max(0, radiusMm));
-  const contact = cortexProjection(scalpPoint);
-  return radiusMm > 0 ? add3(contact, scale3(normalize3(scalpPoint), radiusMm)) : contact;
+  return requireProjector(corticalSurfaceProjector, 'cortical surface')(scalpPoint, Math.max(0, radiusMm));
 }
 
 /**
@@ -56,7 +136,7 @@ export function channelSensitivityPath(
   optodeRadiusMm = 3.6,
   transmissionDepthMm = 25,
   sampleCount = 33,
-): { points: Vec3[]; target: Vec3 } {
+): { points: Vec3[]; corticalContact: Vec3; target: Vec3 } {
   const source = projectToCorticalContact(sourceScalpPoint);
   const detector = projectToCorticalContact(detectorScalpPoint);
   const sourceCenter = projectScalpSphereCenter(sourceScalpPoint, optodeRadiusMm);
@@ -88,7 +168,7 @@ export function channelSensitivityPath(
       a * source[2] + b * control[2] + c * detector[2],
     ];
   });
-  return { points, target };
+  return { points, corticalContact: surfaceMidpoint, target };
 }
 
 export function add3(a: Vec3, b: Vec3): Vec3 {
@@ -178,8 +258,7 @@ export function fittedOptodePositions(
 }
 
 export function cortexProjection(scalpRasMm: Vec3): Vec3 {
-  const direction = normalize3(scalpRasMm);
-  return projectToEllipsoid(direction, CORTEX_RADII);
+  return projectToCorticalContact(scalpRasMm);
 }
 
 export function inwardDepthTarget(corticalRasMm: Vec3, depthMm: number): Vec3 {

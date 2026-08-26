@@ -184,13 +184,16 @@ def compute_projections(
     request: FitPlacementRequest,
     depth_mm: float | None = None,
     probability_threshold: float = 0.0,
+    pair_depth_overrides_mm: dict | None = None,
 ) -> list[ProjectionResult]:
+    """Development-only ellipsoid preview; verified geometry is produced by the mesh HeadModel."""
     positions = fitted_positions(request.layout, request.instance)
-    gate = inspect_template_gate()
-    status_value = "verified" if gate.passed else "provisional"
-    claim = "geometric"
+    status_value = "provisional"
+    claim = "development_only"
     atlas = atlas_status()
-    flags: list[str] = [] if atlas.available else [atlas.issue or "atlas_unavailable"]
+    flags: list[str] = ["development_ellipsoid_approximation"]
+    if not atlas.available:
+        flags.append(atlas.issue or "atlas_unavailable")
     results: list[ProjectionResult] = []
 
     for optode in request.layout.optodes:
@@ -232,16 +235,17 @@ def compute_projections(
             continue
         scalp_midpoint = pair_midpoint(source, detector)
         cortex = cortex_projection(scalp_midpoint)
+        pair_depth_mm = (pair_depth_overrides_mm or {}).get(pair.id, depth_mm)
         results.append(ProjectionResult(
             instance_id=request.instance.id,
             subject_kind="pair",
             subject_id=pair.id,
             scalp_ras_mm=scalp_midpoint,
             cortical_ras_mm=cortex,
-            depth_target_ras_mm=inward_depth_target(cortex, depth_mm) if depth_mm else None,
+            depth_target_ras_mm=inward_depth_target(cortex, pair_depth_mm) if pair_depth_mm else None,
             underlying_cortical_regions=query_probability_volume(cortex, "cortical", probability_threshold) if atlas.available else [],
-            deep_target_structures=query_probability_volume(inward_depth_target(cortex, depth_mm), "subcortical", probability_threshold) if depth_mm and atlas.available else [],
-            tissue_at_target="deep target estimate" if depth_mm else "cortical gray matter",
+            deep_target_structures=query_probability_volume(inward_depth_target(cortex, pair_depth_mm), "subcortical", probability_threshold) if pair_depth_mm and atlas.available else [],
+            tissue_at_target=None,
             claim_level=claim,
             status=status_value,
             qc_flags=flags,
@@ -291,8 +295,9 @@ def batch_projection(request: BatchProjectionRequest, authorization: str | None 
     return {
         "results": [item.model_dump(by_alias=True, mode="json") for item in compute_projections(
             fit_request,
-            None,
+            request.settings.default_depth_mm,
             request.settings.atlas_probability_threshold,
+            request.settings.pair_depth_overrides_mm,
         )]
     }
 
@@ -384,7 +389,7 @@ def validate_project(request: ProjectValidationRequest, authorization: str | Non
     issues = []
     if request.project.get("format") != "cortexlume-project":
         issues.append("unexpected_project_format")
-    if request.project.get("formatVersion") != 1:
+    if request.project.get("formatVersion") != 2:
         issues.append("unsupported_project_version")
     return {"valid": not issues, "issues": issues}
 

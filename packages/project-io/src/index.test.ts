@@ -2,11 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import type { CortexLumeProject } from '@cortexlume/contracts';
 import {
+  PROJECT_ARCHIVE_LIMITS,
   createProjectArchive,
+  preflightProjectArchive,
   readProjectArchive,
   readProjectArchiveDetailed,
   sha256Bytes,
 } from './index.js';
+
+function writeU32(data: Uint8Array, offset: number, value: number): void {
+  data[offset] = value & 0xff;
+  data[offset + 1] = (value >>> 8) & 0xff;
+  data[offset + 2] = (value >>> 16) & 0xff;
+  data[offset + 3] = (value >>> 24) & 0xff;
+}
+
+function centralEntryOffset(data: Uint8Array, name: string): number {
+  for (let offset = 0; offset + 46 <= data.length; offset += 1) {
+    if (data[offset] === 0x50 && data[offset + 1] === 0x4b
+      && data[offset + 2] === 0x01 && data[offset + 3] === 0x02) {
+      const nameLength = data[offset + 28]! | (data[offset + 29]! << 8);
+      if (new TextDecoder().decode(data.subarray(offset + 46, offset + 46 + nameLength)) === name) return offset;
+    }
+  }
+  throw new Error(`Missing central entry ${name}`);
+}
 
 function fixtureProject(): CortexLumeProject {
   const timestamp = '2000-01-01T00:00:00.000Z';
@@ -81,4 +101,57 @@ describe('shared project IO', () => {
     });
     expect(() => readProjectArchive(archive)).toThrow();
   });
+
+  it('rejects unexpected archive entries before inflation', () => {
+    const archive = zipSync({
+      'project.json': strToU8('{}'),
+      'payload.bin': new Uint8Array([1]),
+    });
+    expect(() => preflightProjectArchive(archive)).toThrow('unexpected entry');
+  });
+
+  it('rejects excessive entry counts before inspecting payloads', () => {
+    const archive = zipSync({
+      'project.json': strToU8('{}'),
+      'manifest.json': strToU8('{}'),
+      'extra.json': strToU8('{}'),
+    });
+    expect(() => preflightProjectArchive(archive)).toThrow('exactly 2 entries');
+  });
+
+  it('rejects an allowed-looking archive with an oversized declared entry before inflation', () => {
+    const archive = createProjectArchive(fixtureProject()).slice();
+    const centralOffset = centralEntryOffset(archive, 'project.json');
+    const localOffset = archive[centralOffset + 42]!
+      | (archive[centralOffset + 43]! << 8)
+      | (archive[centralOffset + 44]! << 16)
+      | (archive[centralOffset + 45]! << 24);
+    const declaredSize = PROJECT_ARCHIVE_LIMITS.projectBytes + 1;
+    writeU32(archive, centralOffset + 24, declaredSize);
+    writeU32(archive, localOffset + 22, declaredSize);
+    expect(() => preflightProjectArchive(archive)).toThrow('project.json exceeds its uncompressed size limit');
+  });
+
+  it('rejects highly compressed entries and oversized compressed buffers', () => {
+    const bomb = zipSync({
+      'project.json': new Uint8Array(1024 * 1024),
+      'manifest.json': strToU8('{}'),
+    }, { level: 9 });
+    expect(() => preflightProjectArchive(bomb)).toThrow('maximum compression ratio');
+    expect(() => preflightProjectArchive(
+      new Uint8Array(PROJECT_ARCHIVE_LIMITS.compressedBytes + 1),
+    )).toThrow('compressed size exceeds');
+  });
+
+  it('rejects central-directory metadata that disagrees with a local header', () => {
+    const archive = createProjectArchive(fixtureProject()).slice();
+    const centralOffset = centralEntryOffset(archive, 'project.json');
+    const localOffset = archive[centralOffset + 42]!
+      | (archive[centralOffset + 43]! << 8)
+      | (archive[centralOffset + 44]! << 16)
+      | (archive[centralOffset + 45]! << 24);
+    archive[localOffset + 8] = archive[localOffset + 8] === 0 ? 8 : 0;
+    expect(() => preflightProjectArchive(archive)).toThrow('inconsistent local metadata');
+  });
+
 });

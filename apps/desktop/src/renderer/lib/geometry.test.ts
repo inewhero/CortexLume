@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LayoutDefinition, LayoutInstance } from '@cortexlume/contracts';
 import * as THREE from 'three';
 import {
@@ -14,7 +14,11 @@ import {
   projectToEllipsoid,
   rasFromThree,
   threeFromRas,
+  clearSurfaceProjectors,
+  getSurfaceModelStatus,
+  subscribeSurfaceModelStatus,
 } from './geometry';
+import { registerVerifiedTestSurfaceProjectors } from './testSurfaceProjectors';
 import { arcSurfaceSeed } from '@cortexlume/core';
 import { FIVE_POINT_LANDMARKS, TEN_TEN_POINTS } from './anatomy';
 
@@ -49,6 +53,32 @@ function ellipsoidEquation([x, y, z]: [number, number, number]): number {
 }
 
 describe('geometric head mapping', () => {
+  beforeEach(() => registerVerifiedTestSurfaceProjectors());
+
+  it('fails scientific projection clearly until HeadModel projectors are registered', () => {
+    clearSurfaceProjectors();
+    expect(getSurfaceModelStatus()).toMatchObject({ ready: false, verified: false });
+    expect(() => projectToCorticalContact([1, 2, 3])).toThrow(/HeadModel cortical surface projector is not registered/);
+  });
+
+  it('reports a registered verified surface-model path', () => {
+    expect(getSurfaceModelStatus()).toMatchObject({
+      ready: true,
+      verified: true,
+      source: 'verified test mesh projector double',
+    });
+  });
+
+  it('publishes reactive loading and verified status transitions', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeSurfaceModelStatus(listener);
+    clearSurfaceProjectors();
+    expect(getSurfaceModelStatus().state).toBe('loading');
+    registerVerifiedTestSurfaceProjectors();
+    expect(getSurfaceModelStatus().state).toBe('verified');
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
   it('round-trips RAS+ coordinates through the Three.js axis convention', () => {
     const ras: [number, number, number] = [-42.25, 18.5, 63.75];
     expect(rasFromThree(new THREE.Vector3(...threeFromRas(ras)))).toEqual(ras);
@@ -81,9 +111,10 @@ describe('geometric head mapping', () => {
   it('builds a channel path whose midpoint is the requested transmission target', () => {
     const source = projectToEllipsoid([-20, 60, 75]);
     const detector = projectToEllipsoid([20, 60, 75]);
-    const path = channelSensitivityPath(source, detector, 3.6, 15, 33);
+    const path = channelSensitivityPath(source, detector, 3.6, 55, 33);
     expect(path.points).toHaveLength(33);
     expect(path.points[16]).toEqual(path.target);
+    expect(path.corticalContact).not.toEqual(path.target);
     expect(distance3(path.points[0]!, projectToCorticalContact(source))).toBeLessThan(1e-8);
     expect(distance3(path.points[32]!, projectToCorticalContact(detector))).toBeLessThan(1e-8);
   });

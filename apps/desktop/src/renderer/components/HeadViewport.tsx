@@ -1,10 +1,10 @@
 import { Html, Line, OrbitControls, useGLTF } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { HeadModel } from '@cortexlume/core';
-import type { AnatomicalCoverageAnalysis, DigitizerSession, LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
+import type { AnatomicalCoverageAnalysis, CortexLumeProject, DigitizerSession, LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
 import { useProjectStore } from '../store/projectStore';
 import {
   add3,
@@ -19,6 +19,9 @@ import {
   projectToScalpSurface,
   rasFromThree,
   registerSurfaceProjectors,
+  getSurfaceModelStatus,
+  subscribeSurfaceModelStatus,
+  type SurfaceModelStatus,
   scale3,
   tangentBasis,
   threeFromRas,
@@ -26,6 +29,7 @@ import {
 import { getSurfaceGraph, interpolateSurfaceLabels, interpolateSurfaceValues } from '../lib/surfaceInterpolation';
 import {
   anatomicalCoverageRegionColors,
+  anatomicalCoverageRequestKey,
   anatomicalRegionColor,
   buildAnatomicalCoverageRequest,
   requestAnatomicalCoverage,
@@ -571,13 +575,16 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
   }, [grayGeometry, scientificBrainBvh, scientificBrainGeometry, whiteGeometry]);
 
   useEffect(() => {
-    registerSurfaceProjectors({
+    const unregister = registerSurfaceProjectors({
       scalp: (rasPoint) => headModel.projectScalp(rasPoint),
       scalpSphereCenter: (rasPoint, radiusMm) => headModel.projectScalpSphereCenter(rasPoint, radiusMm),
       cortex: (rasPoint, radiusMm) => headModel.projectCortex(rasPoint, radiusMm),
       scalpOffset: (anchor, rotationRad, uvMm) => headModel.projectScalpOffset(anchor, rotationRad, uvMm),
+      verified: true,
+      source: 'Cedalion HeadModel scalp and 25k correspondence-backed cortical meshes',
     });
     onReady();
+    return unregister;
   }, [headModel]);
 
   return (
@@ -664,7 +671,8 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
 }) {
   const projectionMode = useProjectStore((state) => state.project.projectionSettings.mode);
   const optodeRadiusMm = useProjectStore((state) => state.project.projectionSettings.optodeRadiusMm ?? 3.6);
-  const transmissionDepthMm = useProjectStore((state) => state.project.projectionSettings.defaultDepthMm ?? 25);
+  const defaultDepthMm = useProjectStore((state) => state.project.projectionSettings.defaultDepthMm ?? 25);
+  const pairDepthOverridesMm = useProjectStore((state) => state.project.projectionSettings.pairDepthOverridesMm);
   const channelLabels = useProjectStore((state) => state.anatomyVisibility.channelLabels);
   const scalpPositions = useMemo(() => fittedOptodePositions(layout, instance), [layout, instance, surfaceRevision]);
   const positions = useMemo(() => projectionMode === 'scalp'
@@ -685,6 +693,7 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
         const midpoint: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
         const sourceScalp = scalpPositions.get(pair.sourceId);
         const detectorScalp = scalpPositions.get(pair.detectorId);
+        const transmissionDepthMm = pairDepthOverridesMm[pair.id] ?? defaultDepthMm;
         const sensitivity = sourceScalp && detectorScalp
           ? channelSensitivityPath(sourceScalp, detectorScalp, optodeRadiusMm, transmissionDepthMm)
           : undefined;
@@ -710,7 +719,8 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
             <div className="head-tooltip foreground-tooltip">
               <strong>CH{pair.channelNumber ?? '—'}</strong>
               <span>SCALP MNI: {formatRas(channelScalp)}</span>
-              <span>CORTEX MNI: {formatRas(sensitivity.target)}</span>
+              <span>CORTICAL CONTACT MNI: {formatRas(sensitivity.corticalContact)}</span>
+              <span>DEPTH TARGET MNI: {formatRas(sensitivity.target)}</span>
               <AtlasTopRegion path={sensitivity.points} />
             </div>
           </Html>}
@@ -818,12 +828,28 @@ function DigitizerMappingPreview() {
   </group>;
 }
 
+export function ProjectedPatches({ project, surfaceRevision, surfaceStatus }: {
+  project: CortexLumeProject;
+  surfaceRevision: number;
+  surfaceStatus: SurfaceModelStatus;
+}) {
+  if (surfaceStatus.state !== 'verified') return null;
+  return project.instances.map((instance, index) => {
+    if (instance.visible === false) return null;
+    const layout = project.layouts.find((item) => item.id === instance.definitionId);
+    return layout ? <OptodePatch key={instance.id} layout={layout} instance={instance} patchIndex={index} surfaceRevision={surfaceRevision} /> : null;
+  });
+}
+
 function HeadScene({ landmarks, surfaceRevision, onSurfacesReady }: {
   landmarks: LandmarkFile['points'];
   surfaceRevision: number;
   onSurfacesReady(): void;
 }) {
   const { project, selectedInstanceId, selectInstance, activeDigitizerSessionId } = useProjectStore();
+  const surfaceStatus = useSyncExternalStore(
+    subscribeSurfaceModelStatus, getSurfaceModelStatus, getSurfaceModelStatus,
+  );
   return (
     <>
       <color attach="background" args={['#151b1d']} />
@@ -833,13 +859,9 @@ function HeadScene({ landmarks, surfaceRevision, onSurfacesReady }: {
       <directionalLight position={[-150, 220, -180]} intensity={2.4} />
       <directionalLight position={[180, 35, 130]} intensity={1.15} color="#b8cdd2" />
       <AnatomicalHead landmarks={landmarks} onReady={onSurfacesReady} onBlank={() => selectInstance(selectedInstanceId, null)} />
-      {project.instances.map((instance, index) => {
-        if (instance.visible === false) return null;
-        const layout = project.layouts.find((item) => item.id === instance.definitionId);
-        return layout ? <OptodePatch key={instance.id} layout={layout} instance={instance} patchIndex={index} surfaceRevision={surfaceRevision} /> : null;
-      })}
+      <ProjectedPatches project={project} surfaceRevision={surfaceRevision} surfaceStatus={surfaceStatus} />
       {project.digitizerSessions.filter((session) => session.visible && session.optodeMappings.length === 0).map((session) => <DigitizerOverlay key={session.id} session={session} active={session.id === activeDigitizerSessionId} />)}
-      <DigitizerMappingPreview />
+      {surfaceStatus.state === 'verified' && <DigitizerMappingPreview />}
       <gridHelper args={[360, 18, '#3c484c', '#273135']} position={[0, -145, 0]} />
       <OrbitControls makeDefault minDistance={150} maxDistance={430} target={[0, -12, 3]} enableDamping dampingFactor={0.08} />
     </>
@@ -850,7 +872,7 @@ export function HeadViewport() {
   const [landmarks, setLandmarks] = useState<LandmarkFile['points']>([]);
   const [surfaceRevision, setSurfaceRevision] = useState(0);
   const {
-    project, projectRevision, selectedInstanceId, selectedHeadOptodeId, instanceEditMode,
+    project, selectedInstanceId, selectedHeadOptodeId, instanceEditMode,
     placeLayout, selectInstance, setInstanceEditMode, updateInstanceAnchor,
     updateInstanceOverride, rotateMapping, toggleInstanceVisibility, removeInstance,
     toast, setToast,
@@ -859,14 +881,17 @@ export function HeadViewport() {
     selectedCoverageRegionIndex, anatomicalCoverageSettings, anatomicalCoverageStatus,
     setAnatomicalCoverageResult, setAnatomicalCoverageStatus,
   } = useProjectStore();
+  const surfaceStatus = useSyncExternalStore(
+    subscribeSurfaceModelStatus, getSurfaceModelStatus, getSurfaceModelStatus,
+  );
   const functionalTargetVisible = project.surfaceOverlay === 'functional-target';
   const displayedFunctionalTarget = functionalTargetVisible ? functionalTarget : null;
   const selected = project.instances.find((instance) => instance.id === selectedInstanceId);
   const selectedLayout = project.layouts.find((layout) => layout.id === selected?.definitionId);
-  const editable = selected && selected.visible !== false;
-  const overlaps = useMemo(() => findLayoutOverlaps(
+  const editable = surfaceStatus.state === 'verified' && selected && selected.visible !== false;
+  const overlaps = useMemo(() => surfaceStatus.state === 'verified' ? findLayoutOverlaps(
     project.layouts, project.instances.filter((instance) => instance.visible !== false),
-  ), [project.layouts, project.instances, surfaceRevision]);
+  ) : [], [project.layouts, project.instances, surfaceRevision, surfaceStatus.state]);
   const targetDisplayRange = useMemo(() => {
     if (!displayedFunctionalTarget) return null;
     const values = [...displayedFunctionalTarget.values].sort((a, b) => a - b);
@@ -876,6 +901,19 @@ export function HeadViewport() {
     () => anatomicalCoverage ? anatomicalCoverageRegionColors(anatomicalCoverage) : new Map<number, string>(),
     [anatomicalCoverage],
   );
+  const coverageRequest = useMemo(() => {
+    if (!anatomicalCoverageEnabled || surfaceRevision < 1 || surfaceStatus.state !== 'verified') return null;
+    return buildAnatomicalCoverageRequest(project, anatomicalCoverageSettings);
+  }, [
+    anatomicalCoverageEnabled,
+    anatomicalCoverageSettings,
+    project.instances,
+    project.layouts,
+    project.projectionSettings,
+    surfaceRevision,
+    surfaceStatus.state,
+  ]);
+  const coverageRequestKey = coverageRequest ? anatomicalCoverageRequestKey(coverageRequest) : null;
 
   useEffect(() => {
     void fetch(anatomyUrl('landmarks.json')).then((response) => response.json()).then((data: LandmarkFile) => setLandmarks(data.points));
@@ -889,16 +927,15 @@ export function HeadViewport() {
 
   useEffect(() => {
     if (!anatomicalCoverageEnabled) return;
-    if (surfaceRevision < 1) return;
-    const request = buildAnatomicalCoverageRequest(project, anatomicalCoverageSettings);
-    if (!request) {
+    if (surfaceRevision < 1 || surfaceStatus.state !== 'verified') return;
+    if (!coverageRequest) {
       setAnatomicalCoverageResult(null);
       return;
     }
     let current = true;
     setAnatomicalCoverageStatus('loading');
     const timeout = window.setTimeout(() => {
-      void requestAnatomicalCoverage(request, (value) => window.cortexlume.science.anatomicalCoverage(value))
+      void requestAnatomicalCoverage(coverageRequest, (value) => window.cortexlume.science.anatomicalCoverage(value))
         .then((result) => {
           if (current) setAnatomicalCoverageResult(result);
         })
@@ -915,14 +952,11 @@ export function HeadViewport() {
     };
   }, [
     anatomicalCoverageEnabled,
-    anatomicalCoverageSettings,
-    project.instances,
-    project.layouts,
-    project.projectionSettings,
-    projectRevision,
+    coverageRequestKey,
     setAnatomicalCoverageResult,
     setAnatomicalCoverageStatus,
     surfaceRevision,
+    surfaceStatus.state,
   ]);
 
   const nudge = (uMm: number, vMm: number) => {
@@ -943,6 +977,11 @@ export function HeadViewport() {
       if (layoutId) placeLayout(layoutId);
     }}>
       <div className="viewport-overlay top-left">
+        {surfaceStatus.state !== 'verified' && (
+          <div className={`surface-model-status is-${surfaceStatus.state}`} title={surfaceStatus.issue ?? undefined}>
+            {surfaceStatus.state === 'loading' ? 'HEAD MODEL LOADING…' : 'HEAD MODEL UNAVAILABLE'}
+          </div>
+        )}
         <div className="patch-tabs">
           {project.instances.map((instance, index) => (
             <div className={`patch-tab ${instance.id === selectedInstanceId ? 'active' : ''} ${instance.visible === false ? 'is-hidden' : ''}`} key={instance.id}>

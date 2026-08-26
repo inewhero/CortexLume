@@ -64,6 +64,8 @@ beforeAll(async () => {
     return contact.addScaledVector(contact.clone().sub(scalpCenter).normalize(), radiusMm);
   };
   registerSurfaceProjectors({
+    verified: true,
+    source: 'test anatomical meshes',
     scalp: (point) => rasFromThree(scalpContact(point)),
     scalpSphereCenter: (point, radius) => rasFromThree(scalpSphereCenter(point, radius)),
     cortex: (point, radius) => {

@@ -2,6 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { DigitizerImport, DigitizerPoint, DigitizerPointKind } from '@cortexlume/contracts';
 
+export const DIGITIZER_MAX_FILE_BYTES = 32 * 1024 * 1024;
+const DIGITIZER_MAX_LINES = 200_000;
+const DIGITIZER_MAX_LINE_LENGTH = 64 * 1024;
+const DIGITIZER_MAX_POINTS = 100_000;
+const DIGITIZER_MAX_LABEL_LENGTH = 256;
+
 function splitDelimited(line: string, delimiter: string): string[] {
   if (delimiter === ' ') return line.trim().split(/\s+/);
   const values: string[] = [];
@@ -39,6 +45,9 @@ function parsedPoint(label: string, type: string, x: unknown, y: unknown, z: unk
   const position = [Number(x), Number(y), Number(z)] as [number, number, number];
   if (!position.every(Number.isFinite)) return null;
   const safeLabel = String(label || `P${Math.random().toString(36).slice(2, 7)}`);
+  if (safeLabel.length > DIGITIZER_MAX_LABEL_LENGTH) {
+    throw new Error(`Digitizer point labels must not exceed ${DIGITIZER_MAX_LABEL_LENGTH} characters.`);
+  }
   return { id: randomUUID(), label: safeLabel, kind: pointKind(type, safeLabel), rawPosition: position };
 }
 
@@ -55,7 +64,12 @@ function fromObjects(rows: Array<Record<string, unknown>>): DigitizerPoint[] {
 }
 
 function parseText(text: string, extension: string): DigitizerPoint[] {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith('#') && !line.startsWith('%'));
+  const rawLines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  if (rawLines.length > DIGITIZER_MAX_LINES) throw new Error('Digitizer file contains too many lines.');
+  if (rawLines.some((line) => line.length > DIGITIZER_MAX_LINE_LENGTH)) {
+    throw new Error('Digitizer file contains an excessively long line.');
+  }
+  const lines = rawLines.map((line) => line.trim()).filter((line) => line && !line.startsWith('#') && !line.startsWith('%'));
   if (!lines.length) return [];
   const delimiter = lines[0]!.includes('\t') ? '\t' : lines[0]!.includes(',') ? ',' : lines[0]!.includes(';') ? ';' : ' ';
   const first = splitDelimited(lines[0]!, delimiter);
@@ -86,11 +100,15 @@ function parseText(text: string, extension: string): DigitizerPoint[] {
 function suggestedUnit(points: DigitizerPoint[], text: string): 'mm' | 'cm' | 'm' {
   const unitMatch = text.match(/(?:units?|coordinateunits?)\s*[:=\t, ]+\s*(mm|cm|m)\b/i)?.[1]?.toLowerCase();
   if (unitMatch === 'm' || unitMatch === 'cm' || unitMatch === 'mm') return unitMatch;
-  const maximum = Math.max(...points.flatMap((point) => point.rawPosition.map(Math.abs)));
+  let maximum = 0;
+  for (const point of points) {
+    for (const coordinate of point.rawPosition) maximum = Math.max(maximum, Math.abs(coordinate));
+  }
   return maximum < 1 ? 'm' : maximum < 20 ? 'cm' : 'mm';
 }
 
 export function parseDigitizerFile(fileName: string, bytes: Uint8Array): DigitizerImport {
+  if (bytes.byteLength > DIGITIZER_MAX_FILE_BYTES) throw new Error('Digitizer file exceeds the 32 MB import limit.');
   const extension = path.extname(fileName).toLowerCase();
   const text = new TextDecoder().decode(bytes);
   let points: DigitizerPoint[] = [];
@@ -98,8 +116,10 @@ export function parseDigitizerFile(fileName: string, bytes: Uint8Array): Digitiz
     const parsed = JSON.parse(text) as unknown;
     const rows = Array.isArray(parsed) ? parsed : typeof parsed === 'object' && parsed
       ? ((parsed as { points?: unknown[]; optodes?: unknown[] }).points ?? (parsed as { optodes?: unknown[] }).optodes ?? []) : [];
+    if (rows.length > DIGITIZER_MAX_POINTS) throw new Error('Digitizer file contains too many points.');
     points = fromObjects(rows.filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === 'object'));
   } else points = parseText(text, extension);
+  if (points.length > DIGITIZER_MAX_POINTS) throw new Error('Digitizer file contains too many points.');
   if (points.length < 5) throw new Error('The selected file contains fewer than five readable 3D points.');
   return {
     fileName: path.basename(fileName), format: extension.slice(1).toUpperCase() || 'TEXT',

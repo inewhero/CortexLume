@@ -13,7 +13,10 @@ export interface ExportBundle {
 }
 
 function cell(value: unknown, delimiter: ',' | '\t'): string {
-  const text = value == null ? '' : String(value);
+  const raw = value == null ? '' : String(value);
+  const spreadsheetFormula = typeof value === 'string'
+    && (/^[\t\r\n]/.test(raw) || /^[\u0000-\u0020]*[=+\-@]/.test(raw));
+  const text = spreadsheetFormula ? `'${raw}` : raw;
   const needsQuotes = text.includes('"') || text.includes('\r') || text.includes('\n')
     || text.includes(delimiter);
   return needsQuotes ? `"${text.replaceAll('"', '""')}"` : text;
@@ -29,8 +32,12 @@ function csvTable(rows: unknown[][]): string {
 
 function resultMap(project: CortexLumeProject): Map<string, ProjectionResult> {
   return new Map(project.verifiedResults.map(
-    (result) => [`${result.instanceId ?? ''}:${result.subjectId}`, result],
+    (result) => [`${result.instanceId ?? ''}:${result.subjectKind}:${result.subjectId}`, result],
   ));
+}
+
+function resultKey(instanceId: string, subjectKind: ProjectionResult['subjectKind'], subjectId: string): string {
+  return `${instanceId}:${subjectKind}:${subjectId}`;
 }
 
 function vector(value: Vec3 | null | undefined, empty: unknown = ''): unknown[] {
@@ -69,6 +76,33 @@ function layoutForInstance(
   return project.layouts.find((layout) => layout.id === instance.definitionId);
 }
 
+function assertProjectionResultsReady(project: CortexLumeProject): void {
+  const missingOrUnverified: string[] = [];
+  const results = resultMap(project);
+  for (const instance of exportInstances(project)) {
+    const layout = layoutForInstance(project, instance);
+    if (!layout) continue;
+    for (const subject of layout.optodes) {
+      const result = results.get(resultKey(instance.id, 'optode', subject.id));
+      if (!result || result.status !== 'verified' || !result.qcFlags.includes('surface_model_verified')) {
+        missingOrUnverified.push(`${instance.id}:${subject.id}`);
+      }
+    }
+    for (const subject of layout.pairs) {
+      const result = results.get(resultKey(instance.id, 'pair', subject.id));
+      if (!result || result.status !== 'verified' || !result.qcFlags.includes('surface_model_verified')) {
+        missingOrUnverified.push(`${instance.id}:${subject.id}`);
+      }
+    }
+  }
+  if (missingOrUnverified.length > 0) {
+    throw new Error(
+      `Scientific export unavailable: ${missingOrUnverified.length} projection result(s) are missing or unverified. `
+      + 'Open the 3D head view and wait for the verified HeadModel surfaces before exporting.',
+    );
+  }
+}
+
 function qualityControl(project: CortexLumeProject) {
   const results = resultMap(project);
   const codes = instanceCodes(project);
@@ -76,9 +110,9 @@ function qualityControl(project: CortexLumeProject) {
     const layout = layoutForInstance(project, instance);
     if (!layout) return [];
     return layout.pairs.map((pair) => {
-      const result = results.get(`${instance.id}:${pair.id}`);
-      const sourceResult = results.get(`${instance.id}:${pair.sourceId}`);
-      const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
+      const result = results.get(resultKey(instance.id, 'pair', pair.id));
+      const sourceResult = results.get(resultKey(instance.id, 'optode', pair.sourceId));
+      const detectorResult = results.get(resultKey(instance.id, 'optode', pair.detectorId));
       const actual = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
       const error = actual === '' ? null : Number(Math.abs(actual - pair.nominalDistanceMm).toFixed(3));
       return {
@@ -130,7 +164,8 @@ function exportMetadata(project: CortexLumeProject, kind: string, warnings: stri
       units: project.template.units,
       scalp: 'Optode sphere centre on the scalp surface.',
       display: 'Collision-safe optode sphere centre used internally for CortexLume cortical visualization.',
-      cortex: 'First cortical-surface contact; this coordinate is used for probability-volume lookup.',
+      corticalContact: 'First gray-matter/cortical-surface contact; this coordinate is used for cortical probability-volume lookup.',
+      depthTarget: 'Configured channel-sensitivity-path target; this coordinate is used for deep-structure lookup.',
     },
     technical: {
       template: project.template,
@@ -147,6 +182,7 @@ function exportMetadata(project: CortexLumeProject, kind: string, warnings: stri
 }
 
 export function buildCsvExport(project: CortexLumeProject): ExportBundle {
+  assertProjectionResultsReady(project);
   const warnings: string[] = [];
   const results = resultMap(project);
   const codes = instanceCodes(project);
@@ -155,18 +191,19 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
     'patch', 'optode', 'type',
     'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
     'display_mni_r', 'display_mni_a', 'display_mni_s',
-    'cortex_mni_r', 'cortex_mni_a', 'cortex_mni_s',
+    'cortical_contact_mni_r', 'cortical_contact_mni_a', 'cortical_contact_mni_s',
     'cortical_region_1', 'cortical_region_1_percent',
     'cortical_region_2', 'cortical_region_2_percent',
     'cortical_region_3', 'cortical_region_3_percent',
   ]];
   const channelRows: unknown[][] = [[
     'patch', 'channel', 'source', 'detector',
-    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_display_spacing_mm', 'actual_cortex_spacing_mm',
+    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_display_spacing_mm', 'actual_cortical_contact_spacing_mm',
     'short_channel',
     'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
     'display_mni_r', 'display_mni_a', 'display_mni_s',
-    'cortex_mni_r', 'cortex_mni_a', 'cortex_mni_s',
+    'cortical_contact_mni_r', 'cortical_contact_mni_a', 'cortical_contact_mni_s',
+    'depth_target_mni_r', 'depth_target_mni_a', 'depth_target_mni_s',
     'cortical_region_1', 'cortical_region_1_percent',
     'cortical_region_2', 'cortical_region_2_percent',
     'cortical_region_3', 'cortical_region_3_percent',
@@ -178,7 +215,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
     const code = codes.get(instance.id) ?? '';
     const byId = new Map(layout.optodes.map((optode) => [optode.id, optode]));
     for (const optode of layout.optodes) {
-      const result = results.get(`${instance.id}:${optode.id}`);
+      const result = results.get(resultKey(instance.id, 'optode', optode.id));
       optodeRows.push([
         code, optode.label, optode.type,
         ...vector(result?.scalpRasMm),
@@ -188,9 +225,9 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
       ]);
     }
     for (const pair of layout.pairs) {
-      const result = results.get(`${instance.id}:${pair.id}`);
-      const sourceResult = results.get(`${instance.id}:${pair.sourceId}`);
-      const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
+      const result = results.get(resultKey(instance.id, 'pair', pair.id));
+      const sourceResult = results.get(resultKey(instance.id, 'optode', pair.sourceId));
+      const detectorResult = results.get(resultKey(instance.id, 'optode', pair.detectorId));
       const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
       const actualDisplaySpacing = distance3(sourceResult?.displayRasMm, detectorResult?.displayRasMm);
       const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
@@ -204,6 +241,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
         ...vector(result?.scalpRasMm),
         ...vector(result?.displayRasMm),
         ...vector(result?.corticalRasMm),
+        ...vector(result?.depthTargetRasMm),
         ...topRegions(result?.underlyingCorticalRegions ?? []),
       ]);
     }
@@ -296,6 +334,7 @@ function brainNetMatlabScript(): string {
 }
 
 export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
+  assertProjectionResultsReady(project);
   const csv = buildCsvExport(project);
   const warnings = [...csv.warnings];
   const results = resultMap(project);
@@ -307,7 +346,7 @@ export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
     if (!layout) continue;
     const patch = codes.get(instance.id) ?? instance.id;
     for (const optode of layout.optodes) {
-      const coordinate = results.get(`${instance.id}:${optode.id}`)?.corticalRasMm;
+      const coordinate = results.get(resultKey(instance.id, 'optode', optode.id))?.corticalRasMm;
       if (!coordinate?.every(Number.isFinite)) continue;
       nodes.push({
         label: `${patch}-${optode.label}`.replaceAll(/\s+/g, '-'),
@@ -333,8 +372,8 @@ export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
       'Run cortexlume_open_brainnet.m in MATLAB to open the validated .node file in BrainNet Viewer.',
       'Scalp MNI is the physical optode sphere centre: nearest scalp contact plus one outward optode radius.',
       'Display MNI is the collision-safe sphere centre reached by sweeping the finite optode inward against the CortexLume cortical mesh; it is mesh-specific and is not used for BrainNet nodes.',
-      'Cortex MNI is the center-ray first contact with the correspondence-backed gray-matter surface and is used for atlas lookup.',
-      'Columns 1-3 are cortical MNI x/y/z (R/A/S) in millimetres; no display-axis conversion is applied.',
+      'Cortical contact MNI is the first contact with the correspondence-backed gray-matter surface and is used for cortical atlas lookup.',
+      'Columns 1-3 are cortical-contact MNI x/y/z (R/A/S) in millimetres; no display-axis conversion is applied.',
       'Column 4 uses modular index 1 for sources and 2 for detectors. The script enforces red source and blue detector colors.',
       'Node labels are stored in column 6 but hidden by default in BrainNet Viewer.',
       'BrainNet receives the exported cortical MNI coordinates unchanged; no snapping, offset, or display-space correction is applied.',
@@ -346,6 +385,7 @@ export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
 }
 
 export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundle {
+  assertProjectionResultsReady(project);
   const warnings = [
     'Add the matching SNIRF recording to complete the BIDS NIRS dataset.',
   ];
@@ -368,7 +408,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
   const optodeRows: unknown[][] = [[
     'name', 'type', 'x', 'y', 'z',
     'display_x', 'display_y', 'display_z',
-    'cortex_x', 'cortex_y', 'cortex_z',
+    'cortical_contact_x', 'cortical_contact_y', 'cortical_contact_z',
     'cortical_region_1', 'cortical_region_1_percent',
     'cortical_region_2', 'cortical_region_2_percent',
     'cortical_region_3', 'cortical_region_3_percent',
@@ -376,7 +416,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
   const channelRows: unknown[][] = [[
     'name', 'type', 'source', 'detector', 'wavelength_nominal', 'units',
     'short_channel', 'status', 'status_description',
-    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_cortex_spacing_mm',
+    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_cortical_contact_spacing_mm',
   ]];
   const optodeNames = new Map<string, string>();
   let missingCoordinates = 0;
@@ -391,7 +431,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
     for (const optode of layout.optodes) {
       const name = `${code}_${optode.label}`;
       optodeNames.set(`${instance.id}:${optode.id}`, name);
-      const result = results.get(`${instance.id}:${optode.id}`);
+      const result = results.get(resultKey(instance.id, 'optode', optode.id));
       if (!result?.scalpRasMm) missingCoordinates += 1;
       if (optode.type === 'source') sourceCount += 1;
       else detectorCount += 1;
@@ -411,9 +451,9 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
     if (!layout) continue;
     const code = codes.get(instance.id)!;
     for (const pair of layout.pairs) {
-      const result = results.get(`${instance.id}:${pair.id}`);
-      const sourceResult = results.get(`${instance.id}:${pair.sourceId}`);
-      const detectorResult = results.get(`${instance.id}:${pair.detectorId}`);
+      const result = results.get(resultKey(instance.id, 'pair', pair.id));
+      const sourceResult = results.get(resultKey(instance.id, 'optode', pair.sourceId));
+      const detectorResult = results.get(resultKey(instance.id, 'optode', pair.detectorId));
       const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
       const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
       const spacingError = actualScalpSpacing === ''
@@ -435,7 +475,8 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
           wavelength, project.deviceProfile.units, pair.shortChannel,
           status, statusDescription,
           Number(pair.nominalDistanceMm.toFixed(3)),
-          actualScalpSpacing || 'n/a', actualCortexSpacing || 'n/a',
+          actualScalpSpacing === '' ? 'n/a' : actualScalpSpacing,
+          actualCortexSpacing === '' ? 'n/a' : actualCortexSpacing,
         ]);
       }
     }
@@ -500,7 +541,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
       short_channel: { Description: 'Whether the source-detector pair is designated as short separation' },
       nominal_distance_mm: { Description: 'Distance in the 2D optode design', Units: 'mm' },
       actual_scalp_spacing_mm: { Description: 'Projected source-detector distance on the scalp', Units: 'mm' },
-      actual_cortex_spacing_mm: { Description: 'Source-detector distance at cortical contact', Units: 'mm' },
+      actual_cortical_contact_spacing_mm: { Description: 'Source-detector distance at cortical contact', Units: 'mm' },
     }, null, 2)}\n`,
     [`${nirsDirectory}/${recordingPrefix}_nirs.json`]: `${JSON.stringify(nirsSidecar, null, 2)}\n`,
     'sourcedata/cortexlume_export.json':
@@ -510,7 +551,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
       'Add the corresponding SNIRF recording under the generated subject nirs directory.',
       'Scalp MNI (standard optodes.tsv x/y/z) is the physical optode sphere centre: nearest scalp contact plus one outward optode radius.',
       'Display MNI (display_x/y/z extension columns) is the collision-safe sphere centre reached by sweeping the finite optode inward against the CortexLume cortical mesh; it is an intermediate visualization coordinate.',
-      'Cortex MNI (cortex_x/y/z extension columns) is the center-ray first contact with the correspondence-backed gray-matter surface and is used for atlas lookup.',
+      'Cortical contact MNI (cortical_contact_x/y/z extension columns) is the first contact with the correspondence-backed gray-matter surface and is used for cortical atlas lookup.',
       ...warnings,
     ].join('\r\n')}\r\n`,
   };

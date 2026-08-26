@@ -158,6 +158,7 @@ export type AnatomicalCoverageStatus = 'idle' | 'loading' | 'ready' | 'error';
 interface ProjectStore {
   project: CortexLumeProject;
   projectPath: string | null;
+  persistedProjectSnapshot: string;
   activeLayoutId: string;
   library: LayoutDefinition[];
   editorTool: EditorTool;
@@ -203,6 +204,8 @@ interface ProjectStore {
   newProject(): void;
   loadProject(project: CortexLumeProject): void;
   setProjectPath(path: string | null): void;
+  markProjectSaved(project: CortexLumeProject, path: string): void;
+  isProjectDirty(): boolean;
   setProjectName(name: string): void;
   setDeviceProfile(profile: Partial<DeviceProfile>): void;
   setBidsSettings(settings: Partial<BidsSettings>): void;
@@ -254,6 +257,7 @@ function updatePairDistances(layout: LayoutDefinition): LayoutDefinition {
 
 export const useProjectStore = create<ProjectStore>((set, get) => {
   const initialProject = createProject();
+  const snapshot = (project: CortexLumeProject) => JSON.stringify(project);
 
   const mutateActiveLayout = (mutator: (layout: LayoutDefinition) => LayoutDefinition) => {
     set((state) => {
@@ -277,6 +281,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
   return {
     project: initialProject,
     projectPath: null,
+    persistedProjectSnapshot: snapshot(initialProject),
     activeLayoutId: initialProject.layouts[0]!.id,
     library: [structuredClone(initialProject.layouts[0]!)],
     editorTool: 'select',
@@ -509,7 +514,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       projectRevision: state.projectRevision + (derived.length ? 1 : 0),
     }; }),
     toggleDigitizerSession: (sessionId) => set((state) => ({
-      project: { ...state.project, digitizerSessions: state.project.digitizerSessions.map((session) => session.id === sessionId ? { ...session, visible: !session.visible } : session) },
+      project: {
+        ...state.project,
+        updatedAt: now(),
+        digitizerSessions: state.project.digitizerSessions.map((session) => session.id === sessionId ? { ...session, visible: !session.visible } : session),
+      },
     })),
     setActiveDigitizerSession: (activeDigitizerSessionId) => set({ activeDigitizerSessionId }),
     newProject: () => {
@@ -517,6 +526,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       set({
         project,
         projectPath: null,
+        persistedProjectSnapshot: snapshot(project),
         activeLayoutId: project.layouts[0]!.id,
         library: [structuredClone(project.layouts[0]!)],
         selectedOptodeId: null,
@@ -557,6 +567,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         .map((layout) => structuredClone(layout));
       return {
         project: hydrated,
+        persistedProjectSnapshot: snapshot(hydrated),
         activeLayoutId: library[0]?.id ?? hydrated.layouts[0]?.id ?? '',
         library,
         selectedOptodeId: null,
@@ -581,6 +592,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       };
     }),
     setProjectPath: (projectPath) => set({ projectPath }),
+    markProjectSaved: (savedProject, projectPath) => set({
+      projectPath,
+      persistedProjectSnapshot: snapshot(savedProject),
+    }),
+    isProjectDirty: () => snapshot(get().project) !== get().persistedProjectSnapshot,
     setProjectName: (name) => set((state) => ({
       project: { ...state.project, name, updatedAt: now() },
     })),
@@ -740,12 +756,29 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         return { ...value, pairs: generated.map((pair, index) => ({ ...pair, channelNumber: index + 1 })) };
       });
     },
-    updatePairChannelNumber: (pairId, channelNumber) => mutateActiveLayout((layout) => ({
-      ...layout,
-      pairs: layout.pairs.map((pair) => pair.id === pairId
-        ? { ...pair, channelNumber: Math.max(1, Math.round(channelNumber)) }
-        : pair),
-    })),
+    updatePairChannelNumber: (pairId, channelNumber) => {
+      const state = get();
+      const layout = state.project.layouts.find((candidate) => candidate.id === state.activeLayoutId);
+      const target = layout?.pairs.find((pair) => pair.id === pairId);
+      if (!layout || !target) return;
+      const rounded = Math.round(channelNumber);
+      const normalized = Number.isFinite(rounded) ? Math.max(1, rounded) : 1;
+      const conflict = layout.pairs.find((pair) =>
+        pair.id !== pairId && pair.channelNumber === normalized);
+      if (conflict) {
+        set({
+          toast: `Channel number conflict: CH${normalized} is already assigned in this layout. Existing channel numbers were preserved.`,
+        });
+        return;
+      }
+      mutateActiveLayout((current) => ({
+        ...current,
+        pairs: current.pairs.map((pair) => pair.id === pairId
+          ? { ...pair, channelNumber: normalized }
+          : pair),
+      }));
+      if (get().toast?.startsWith('Channel number conflict:')) set({ toast: null });
+    },
     undoLayout: () => set((state) => {
       const previous = state.pastLayouts.at(-1);
       const current = state.project.layouts.find((layout) => layout.id === state.activeLayoutId);
@@ -753,6 +786,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       return {
         project: {
           ...state.project,
+          updatedAt: now(),
           layouts: state.project.layouts.map((layout) => layout.id === current.id ? previous : layout),
           verifiedResults: [],
         },
@@ -768,6 +802,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       return {
         project: {
           ...state.project,
+          updatedAt: now(),
           layouts: state.project.layouts.map((layout) => layout.id === current.id ? next : layout),
           verifiedResults: [],
         },
@@ -832,22 +867,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       selectedHeadOptodeId,
       selectedHeadPairId: null,
     }),
-    selectChannel: (selectedInstanceId, selectedHeadPairId) => set((state) => ({
-      selectedInstanceId,
-      selectedHeadOptodeId: null,
-      selectedHeadPairId,
-      instanceEditMode: 'group',
-      project: {
+    selectChannel: (selectedInstanceId, selectedHeadPairId) => set((state) => {
+      const selected = state.project.instances.find((instance) => instance.id === selectedInstanceId);
+      const project = selected && !selected.locked ? {
         ...state.project,
+        updatedAt: now(),
         instances: state.project.instances.map((instance) => instance.id === selectedInstanceId
           ? { ...instance, locked: true }
           : instance),
-      },
-    })),
+      } : state.project;
+      return {
+        selectedInstanceId,
+        selectedHeadOptodeId: null,
+        selectedHeadPairId,
+        instanceEditMode: 'group',
+        project,
+      };
+    }),
     setInstanceEditMode: (instanceEditMode) => set((state) => ({
       instanceEditMode,
       project: {
         ...state.project,
+        updatedAt: now(),
         instances: state.project.instances.map((instance) => instance.id === state.selectedInstanceId
           ? { ...instance, locked: instanceEditMode === 'group' }
           : instance),
@@ -889,6 +930,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     toggleInstanceVisibility: (instanceId) => set((state) => ({
       project: {
         ...state.project,
+        updatedAt: now(),
         instances: state.project.instances.map((instance) => instance.id === instanceId
           ? { ...instance, visible: !(instance.visible ?? true) }
           : instance),
@@ -903,6 +945,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       return {
         project: {
           ...state.project,
+          updatedAt: now(),
           instances,
           layouts: removed && !definitionStillUsed
             ? state.project.layouts.filter((layout) => layout.id !== removed.definitionId)
@@ -936,6 +979,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     resetInstanceOverride: (instanceId, optodeId) => set((state) => ({
       project: {
         ...state.project,
+        updatedAt: now(),
         instances: state.project.instances.map((instance) => instance.id === instanceId
           ? { ...instance, overrides: instance.overrides.filter((override) => override.optodeId !== optodeId) }
           : instance),
@@ -945,16 +989,29 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     commitPlacement: (committed, projections) => set((state) => ({
       project: {
         ...state.project,
-        instances: state.project.instances.map((instance) => instance.id === committed.id ? committed : instance),
+        updatedAt: now(),
+        instances: state.project.instances.map((instance) => instance.id === committed.id ? {
+          ...instance,
+          definitionId: committed.definitionId,
+          anchorRasMm: committed.anchorRasMm,
+          rotationRad: committed.rotationRad,
+          mappingRotationRad: committed.mappingRotationRad,
+          visible: committed.visible,
+          locked: committed.locked,
+          overrides: committed.overrides,
+          fitQc: committed.fitQc,
+        } : instance),
         verifiedResults: [
           ...state.project.verifiedResults.filter((result) => result.instanceId !== committed.id),
           ...projections,
         ],
       },
+      projectRevision: state.projectRevision + 1,
     })),
     setProjectionMode: (mode) => set((state) => ({
       project: {
         ...state.project,
+        updatedAt: now(),
         projectionSettings: { ...state.project.projectionSettings, mode },
         verifiedResults: [],
       },
@@ -963,6 +1020,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     setOptodeRadius: (radiusMm) => set((state) => ({
       project: {
         ...state.project,
+        updatedAt: now(),
         projectionSettings: {
           ...state.project.projectionSettings,
           optodeRadiusMm: Math.max(1, Math.min(15, radiusMm)),
@@ -974,6 +1032,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     setDefaultDepth: (defaultDepthMm) => set((state) => ({
       project: {
         ...state.project,
+        updatedAt: now(),
         projectionSettings: { ...state.project.projectionSettings, defaultDepthMm },
         verifiedResults: [],
       },

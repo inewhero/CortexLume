@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   channelSensitivityPath,
   distance3,
@@ -6,8 +6,11 @@ import {
   formatRas,
   projectToCorticalContact,
   projectScalpSphereCenter,
+  getSurfaceModelStatus,
+  subscribeSurfaceModelStatus,
 } from '../lib/geometry';
 import { materializeProjectionSnapshot } from '../lib/projectionSnapshot';
+import { confirmProjectTransition } from '../lib/unsavedChanges';
 import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from '../store/projectStore';
 import type { DigitizerImport, Vec3 } from '@cortexlume/contracts';
@@ -54,13 +57,22 @@ export function Inspector() {
     selectedCoverageRegionIndex, anatomicalCoverageError,
     setAnatomicalCoverageEnabled, setAnatomicalCoverageMode, setSelectedCoverageRegion,
   } = useProjectStore();
+  const surfaceStatus = useSyncExternalStore(
+    subscribeSurfaceModelStatus, getSurfaceModelStatus, getSurfaceModelStatus,
+  );
+  const surfaceVerified = surfaceStatus.state === 'verified';
   const instance = project.instances.find((item) => item.id === selectedInstanceId);
   const layout = project.layouts.find((item) => item.id === instance?.definitionId);
   const optode = layout?.optodes.find((item) => item.id === selectedHeadOptodeId);
   const pair = layout?.pairs.find((item) => item.id === selectedHeadPairId);
-  const positions = useMemo(() => layout && instance ? fittedOptodePositions(layout, instance) : new Map(), [layout, instance]);
+  const positions = useMemo(() => surfaceVerified && layout && instance
+    ? fittedOptodePositions(layout, instance)
+    : new Map(), [layout, instance, surfaceVerified]);
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
-  const transmissionDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
+  const transmissionDepthMm = pair
+    ? project.projectionSettings.pairDepthOverridesMm[pair.id]
+      ?? project.projectionSettings.defaultDepthMm ?? 25
+    : project.projectionSettings.defaultDepthMm ?? 25;
   const pairSource = pair ? positions.get(pair.sourceId) : undefined;
   const pairDetector = pair ? positions.get(pair.detectorId) : undefined;
   const scalp = selectedHeadOptodeId
@@ -76,10 +88,12 @@ export function Inspector() {
     ? channelSensitivityPath(pairSource, pairDetector, radiusMm, transmissionDepthMm)
     : undefined;
   // Optodes retain a single-ray reference; channel labels summarize the sampled path.
-  const cortical = channelPath?.target ?? (scalp ? projectToCorticalContact(scalp) : undefined);
+  const cortical = channelPath?.corticalContact ?? (scalp ? projectToCorticalContact(scalp) : undefined);
+  const depthTarget = channelPath?.target;
   const scalpMni = scalp ? projectScalpSphereCenter(scalp, radiusMm) : undefined;
   const override = instance?.overrides.find((item) => item.optodeId === selectedHeadOptodeId);
   const mappingScopes = useMemo<MappingScope[]>(() => {
+    if (!surfaceVerified) return [];
     const visibleInstances = project.instances.filter((candidate) => candidate.visible !== false);
     const patches = visibleInstances.flatMap((candidate) => {
       const index = project.instances.findIndex((instance) => instance.id === candidate.id);
@@ -93,7 +107,7 @@ export function Inspector() {
       }];
     });
     return patches.length > 1 ? [...patches, { id: 'all', label: 'ALL LOADED PATCHES', targets: patches.flatMap((patch) => patch.targets) }] : patches;
-  }, [project.instances, project.layouts]);
+  }, [project.instances, project.layouts, surfaceVerified]);
   const visibleChannelCount = useMemo(() => project.instances
     .filter((candidate) => candidate.visible !== false)
     .reduce((sum, candidate) => sum + (project.layouts.find((item) => item.id === candidate.definitionId)?.pairs.length ?? 0), 0),
@@ -161,6 +175,7 @@ export function Inspector() {
 
   const openProject = async () => {
     try {
+      if (!await confirmProjectTransition()) return;
       const opened = await window.cortexlume.project.open();
       if (opened) {
         loadProject(opened.project);
@@ -174,12 +189,13 @@ export function Inspector() {
 
   const saveProject = async () => {
     try {
+      const projectToSave = structuredClone(project);
       const result = await window.cortexlume.project.save(
-        project,
+        projectToSave,
         projectPath ?? undefined,
       );
       if (result) {
-        setProjectPath(result.path);
+        useProjectStore.getState().markProjectSaved(projectToSave, result.path);
         setToast('Project archive saved.');
       }
     } catch (error) {
@@ -277,7 +293,12 @@ export function Inspector() {
           {projectPath ?? 'UNSAVED PROJECT'}
         </code>
         <div className="workflow-row"><span>PROJECT</span><div className="project-actions">
-          <button onClick={() => { newProject(); setToast('New project created.'); }}>NEW</button>
+          <button onClick={() => void confirmProjectTransition().then((confirmed) => {
+            if (!confirmed) return;
+            newProject(); setToast('New project created.');
+          }).catch((error) => {
+            setToast(`New project error: ${error instanceof Error ? error.message : String(error)}`);
+          })}>NEW</button>
           <button onClick={openProject}>OPEN</button>
           <button className="primary" onClick={saveProject}>SAVE</button>
         </div></div>
@@ -287,10 +308,17 @@ export function Inspector() {
           <button onClick={() => setTargetMapDialog(true)}>NIFTI MAP</button>
         </div></div>
         <div className="workflow-row"><span>EXPORT</span><div className="project-actions">
-          <button onClick={exportBrainNet}>BRAINNET</button>
-          <button onClick={exportCsv}>CSV</button>
-          <button onClick={exportBids}>BIDS</button>
+          <button disabled={!surfaceVerified} title={surfaceVerified ? 'Export BrainNet geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBrainNet}>BRAINNET</button>
+          <button disabled={!surfaceVerified} title={surfaceVerified ? 'Export CSV geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportCsv}>CSV</button>
+          <button disabled={!surfaceVerified} title={surfaceVerified ? 'Export BIDS geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBids}>BIDS</button>
         </div></div>
+        {surfaceStatus.state !== 'verified' && (
+          <div className={`surface-export-status is-${surfaceStatus.state}`} title={surfaceStatus.issue ?? undefined}>
+            {surfaceStatus.state === 'loading'
+              ? 'SCIENTIFIC EXPORTS DISABLED · HEAD MODEL LOADING'
+              : `SCIENTIFIC EXPORTS DISABLED · ${surfaceStatus.issue ?? 'HEAD MODEL FAILED'}`}
+          </div>
+        )}
       </section>
 
       {digitizerDialog && fivePointTargets && <DigitizerDialog
@@ -471,7 +499,7 @@ export function Inspector() {
             </div>
             <dl>
               <dt>SCALP MNI</dt><dd>{formatRas(scalpMni)}</dd>
-              <dt>CORTEX MNI</dt><dd>{formatRas(cortical)}</dd>
+              <dt>CORTICAL CONTACT MNI</dt><dd>{formatRas(cortical)}</dd>
               <dt>REFERENCE REGION</dt><dd><ProbabilityList values={corticalRegions} /></dd>
             </dl>
             {override && <button className="wide" onClick={() => resetInstanceOverride(instance.id, optode.id)}>RESET LOCAL OFFSET</button>}
@@ -485,7 +513,8 @@ export function Inspector() {
             </div>
             <dl>
               <dt>SCALP MNI</dt><dd>{formatRas(scalpMni)}</dd>
-              <dt>CORTEX MNI</dt><dd>{formatRas(cortical)}</dd>
+              <dt>CORTICAL CONTACT MNI</dt><dd>{formatRas(cortical)}</dd>
+              <dt>DEPTH TARGET MNI</dt><dd>{formatRas(depthTarget)}</dd>
               <dt>PATH REGIONS</dt><dd><ProbabilityList values={corticalRegions} /></dd>
             </dl>
           </>

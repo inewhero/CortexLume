@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useProjectStore } from '../renderer/store/projectStore';
 import { materializeProjectionSnapshot } from '../renderer/lib/projectionSnapshot';
 import { buildBidsGeometryExport, buildBrainNetExport, buildCsvExport } from './projectExport';
+import { clearSurfaceProjectors } from '../renderer/lib/geometry';
+import { registerVerifiedTestSurfaceProjectors } from '../renderer/lib/testSurfaceProjectors';
 
 function dataRow(table: string, delimiter: ',' | '\t'): Record<string, string> {
   const [header = '', row = ''] = table.trim().split(/\r?\n/);
@@ -24,6 +26,96 @@ function brainNetNodeRows(text: string): Array<{
 }
 
 describe('project data exports', () => {
+  beforeEach(() => registerVerifiedTestSurfaceProjectors());
+
+  it('fails before producing scientific coordinates when surface projectors are unregistered', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    clearSurfaceProjectors();
+    expect(() => materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project)))
+      .toThrow(/Scientific projection unavailable/);
+  });
+
+  it('rejects export when results are provisional or lack verified surface provenance', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+    project.verifiedResults[0] = { ...project.verifiedResults[0]!, status: 'provisional' };
+    expect(() => buildCsvExport(project)).toThrow(/missing or unverified/);
+    project.verifiedResults[0] = {
+      ...project.verifiedResults[0]!,
+      status: 'verified',
+      qcFlags: project.verifiedResults[0]!.qcFlags.filter((flag) => flag !== 'surface_model_verified'),
+    };
+    expect(() => buildCsvExport(project)).toThrow(/missing or unverified/);
+  });
+
+  it('cannot create duplicate BIDS channel names through normal channel renumbering', () => {
+    useProjectStore.getState().newProject();
+    const state = useProjectStore.getState();
+    const layout = state.project.layouts.find((candidate) => candidate.id === state.activeLayoutId)!;
+    const first = layout.pairs[0]!;
+    const second = layout.pairs[1]!;
+    state.updatePairChannelNumber(first.id, second.channelNumber!);
+    useProjectStore.getState().placeLayout(layout.id);
+    const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+
+    const bids = buildBidsGeometryExport(project);
+    const tableText = bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']!;
+    const names = tableText.trim().split(/\r?\n/).slice(1).map((row) => row.split('\t')[0]!);
+    expect(new Set(names).size).toBe(names.length);
+    expect(useProjectStore.getState().toast).toMatch(/Channel number conflict/);
+  });
+
+  it('keeps cortical contact separate from the depth target and honors pair depth overrides', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const raw = structuredClone(useProjectStore.getState().project);
+    const instance = raw.instances[0]!;
+    const layout = raw.layouts.find((candidate) => candidate.id === instance.definitionId)!;
+    const pair = layout.pairs[0]!;
+    const baseline = materializeProjectionSnapshot(raw);
+    raw.projectionSettings.pairDepthOverridesMm[pair.id] = 55;
+    const overridden = materializeProjectionSnapshot(raw);
+    const baseResult = baseline.verifiedResults.find((result) => result.subjectId === pair.id)!;
+    const overrideResult = overridden.verifiedResults.find((result) => result.subjectId === pair.id)!;
+    expect(overrideResult.corticalRasMm).toEqual(baseResult.corticalRasMm);
+    expect(overrideResult.depthTargetRasMm).not.toEqual(baseResult.depthTargetRasMm);
+    expect(overrideResult.corticalRasMm).not.toEqual(overrideResult.depthTargetRasMm);
+    expect(overrideResult.tissueAtTarget).toBeNull();
+  });
+
+  it('keeps optode and channel projection results distinct when their UUIDs coincide', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const raw = structuredClone(useProjectStore.getState().project);
+    const instance = raw.instances[0]!;
+    const layout = raw.layouts.find((candidate) => candidate.id === instance.definitionId)!;
+    const optode = layout.optodes[0]!;
+    layout.pairs[0]!.id = optode.id;
+    const project = materializeProjectionSnapshot(raw);
+    const expected = project.verifiedResults.find((result) => (
+      result.instanceId === instance.id && result.subjectKind === 'optode' && result.subjectId === optode.id
+    ))!;
+    const optodeRow = dataRow(buildCsvExport(project).files['cortexlume_optodes.csv']!, ',');
+    expect(Number(optodeRow.scalp_mni_r)).toBeCloseTo(expected.scalpRasMm![0], 6);
+    expect(Number(optodeRow.scalp_mni_a)).toBeCloseTo(expected.scalpRasMm![1], 6);
+    expect(Number(optodeRow.scalp_mni_s)).toBeCloseTo(expected.scalpRasMm![2], 6);
+  });
+
+  it('neutralizes spreadsheet formulas even after leading whitespace or control characters', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = structuredClone(useProjectStore.getState().project);
+    const instance = project.instances[0]!;
+    const layout = project.layouts.find((candidate) => candidate.id === instance.definitionId)!;
+    layout.optodes[0]!.label = '  =HYPERLINK("https://example.invalid","click")';
+    layout.optodes[1]!.label = '\t@SUM(1,1)';
+    const csv = buildCsvExport(materializeProjectionSnapshot(project)).files['cortexlume_optodes.csv']!;
+    expect(csv).toContain("'  =HYPERLINK");
+    expect(csv).toContain("'\t@SUM");
+  });
+
   it('keeps multiple placed patches distinct in CSV and BIDS geometry', () => {
     useProjectStore.getState().newProject();
     const layoutId = useProjectStore.getState().activeLayoutId;
@@ -44,7 +136,7 @@ describe('project data exports', () => {
     expect(csv.files['cortexlume_channels.csv']?.startsWith('\uFEFF')).toBe(true);
     expect(csv.files['cortexlume_optodes.csv']?.startsWith('\uFEFF')).toBe(true);
 
-    const bids = buildBidsGeometryExport(project);
+    const bids = buildBidsGeometryExport(materializeProjectionSnapshot(project));
     expect(bids.files['sub-01/nirs/sub-01_optodes.tsv']).toContain('P01_S1');
     expect(bids.files['sub-01/nirs/sub-01_optodes.tsv']).toContain('P02_S1');
     expect(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']).toContain('P01_CH1_760');
@@ -73,16 +165,17 @@ describe('project data exports', () => {
     const csv = buildCsvExport(project);
     const channel = dataRow(csv.files['cortexlume_channels.csv']!, ',');
     expect(Number(channel.actual_scalp_spacing_mm)).toBeGreaterThan(0);
-    expect(Number(channel.actual_cortex_spacing_mm)).toBeGreaterThan(0);
+    expect(Number(channel.actual_cortical_contact_spacing_mm)).toBeGreaterThan(0);
     expect(channel.scalp_mni_r).not.toBe('');
     expect(channel.display_mni_r).not.toBe('');
-    expect(channel.cortex_mni_r).not.toBe('');
+    expect(channel.cortical_contact_mni_r).not.toBe('');
+    expect(channel.depth_target_mni_r).not.toBe('');
     expect(channel.cortical_region_1).not.toBe('');
     expect(Number(channel.cortical_region_1_percent)).toBeGreaterThan(0);
     expect(channel.spacing_qc).toBeUndefined();
     expect(csv.files['cortexlume_channels.csv']).not.toContain('spacing_error');
     expect(csv.files['cortexlume_channels.csv']).not.toContain('spacing_qc');
-    expect(csv.files['cortexlume_channels.csv']).not.toContain('depth_target');
+    expect(csv.files['cortexlume_channels.csv']).toContain('depth_target_mni_r');
     expect(csv.files['cortexlume_channels.csv']).not.toContain('project_id');
     const metadata = JSON.parse(csv.files['cortexlume_export.json']!);
     expect(metadata.formatVersion).toBe(4);
@@ -108,7 +201,6 @@ describe('project data exports', () => {
     expect(bidsChannel.status).toMatch(/good|bad/);
     const bidsTechnical = JSON.parse(bids.files['sourcedata/cortexlume_export.json']!);
     expect(bidsTechnical.technical.instances[0].fitQc.flags).not.toContain('template_unverified');
-    expect(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']).not.toContain('depth_target');
   });
 
   it('uses cortical MNI for BrainNet and assigns explicit S/D node classes', () => {
@@ -219,5 +311,26 @@ describe('project data exports', () => {
     expect(bids.files[
       `${prefix}/sub-007_ses-baseline_task-motor_acq-labnirs_run-02_nirs.json`
     ]).toBeDefined();
+  });
+
+  it('neutralizes spreadsheet formulas and preserves a real zero BIDS spacing', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+    const instance = project.instances[0]!;
+    const layout = project.layouts.find((candidate) => candidate.id === instance.definitionId)!;
+    layout.optodes[0]!.label = '=HYPERLINK("https://invalid")';
+    const pair = layout.pairs[0]!;
+    const source = project.verifiedResults.find((item) => item.instanceId === instance.id && item.subjectId === pair.sourceId)!;
+    const detector = project.verifiedResults.find((item) => item.instanceId === instance.id && item.subjectId === pair.detectorId)!;
+    detector.scalpRasMm = source.scalpRasMm;
+    detector.corticalRasMm = source.corticalRasMm;
+
+    const csv = buildCsvExport(project);
+    expect(csv.files['cortexlume_optodes.csv']).toContain("'=HYPERLINK");
+    const bids = buildBidsGeometryExport(project);
+    const channel = dataRow(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']!, '\t');
+    expect(channel.actual_scalp_spacing_mm).toBe('0');
+    expect(channel.actual_cortical_contact_spacing_mm).toBe('0');
   });
 });

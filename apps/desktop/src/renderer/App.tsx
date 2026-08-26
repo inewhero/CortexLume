@@ -8,6 +8,7 @@ import { QuickTargetController } from './components/QuickTarget';
 import { TopBar } from './components/TopBar';
 import type { UpdateCheckResult } from '../shared/startup';
 import { useProjectStore } from './store/projectStore';
+import { confirmProjectTransition } from './lib/unsavedChanges';
 
 function PanelFrame({ title, side, collapsed = false, children }: {
   title: string;
@@ -78,11 +79,25 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => window.cortexlume.window.onCloseRequested(() => {
+    void confirmProjectTransition()
+      .then((allow) => window.cortexlume.window.finishClose(allow))
+      .catch((error) => {
+        setToast(`Close error: ${error instanceof Error ? error.message : String(error)}`);
+        return window.cortexlume.window.finishClose(false);
+      });
+  }), [setToast]);
+
   return (
     <div className="app-shell">
       <TopBar
         update={availableUpdate}
-        onOpenUpdate={() => void window.cortexlume?.startup.openRelease()}
+        onOpenUpdate={() => void confirmProjectTransition().then((confirmed) => {
+          if (confirmed) return window.cortexlume?.startup.openRelease();
+          return undefined;
+        }).catch((error) => {
+          setToast(`Update error: ${error instanceof Error ? error.message : String(error)}`);
+        })}
       />
       <main className="workspace" style={{ gridTemplateColumns: columns }}>
         <PanelFrame title="Optode Design" side="left" collapsed={!leftVisible}>

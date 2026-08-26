@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { materializeProjectionSnapshot } from '../renderer/lib/projectionSnapshot';
 import { useProjectStore } from '../renderer/store/projectStore';
 import { mergeProjectAtlasAnnotations, type PathAtlasAnnotation, type PointAtlasAnnotation } from './projectAnnotation';
+import { registerVerifiedTestSurfaceProjectors } from '../renderer/lib/testSurfaceProjectors';
 
 describe('science project annotation merge', () => {
+  beforeEach(() => registerVerifiedTestSurfaceProjectors());
   it('uses full channel-path regions while retaining point annotations for optodes', () => {
     useProjectStore.getState().newProject();
     useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);

@@ -11,6 +11,8 @@ import {
   projectScalpSphereCenter,
   projectToCorticalContact,
   projectToCorticalSurface,
+  assertVerifiedSurfaceModel,
+  getSurfaceModelStatus,
 } from './geometry';
 
 function midpoint(a: Vec3, b: Vec3): Vec3 {
@@ -26,18 +28,23 @@ function fitQc(
   realizedScalpDistances: number[],
   nominalDistances: number[],
 ): LayoutInstance['fitQc'] {
-  const errors = realizedScalpDistances.map((value, index) =>
-    Math.abs(value - (nominalDistances[index] ?? value)));
+  const errors = realizedScalpDistances.flatMap((value, index) => {
+    const nominal = nominalDistances[index];
+    return Number.isFinite(value) && nominal != null && Number.isFinite(nominal)
+      ? [Math.abs(value - nominal)]
+      : [];
+  });
   const mean = errors.length > 0
     ? errors.reduce((total, value) => total + value, 0) / errors.length
     : 0;
   const maximum = errors.length > 0 ? Math.max(...errors) : 0;
   const flags = baseQcFlags(project);
+  if (errors.length === 0) flags.push('no_valid_distance_samples');
   if (mean > 2) flags.push('mean_distance_distortion_gt_2mm');
   if (maximum > 5) flags.push('max_distance_distortion_gt_5mm');
   return {
-    converged: true,
-    iterations: 1,
+    converged: errors.length > 0,
+    iterations: errors.length > 0 ? 1 : 0,
     meanAbsoluteErrorMm: mean,
     maxAbsoluteErrorMm: maximum,
     flags,
@@ -45,12 +52,16 @@ function fitQc(
 }
 
 export function materializeProjectionSnapshot(project: CortexLumeProject): CortexLumeProject {
+  assertVerifiedSurfaceModel();
+  const surfaceStatus = getSurfaceModelStatus();
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
-  const transmissionDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
+  const defaultDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
   const projections: ProjectionResult[] = [];
   const superseded = new Set(project.instances.flatMap((instance) =>
     instance.derivedFromInstanceId ? [instance.derivedFromInstanceId] : []));
-  const projectionStatus: ProjectionResult['status'] = project.template.verified ? 'verified' : 'provisional';
+  const projectionStatus: ProjectionResult['status'] = project.template.verified && surfaceStatus.verified
+    ? 'verified'
+    : 'provisional';
   const instances = project.instances.map((instance) => {
     if (superseded.has(instance.id)) return instance;
     const layout = project.layouts.find((candidate) => candidate.id === instance.definitionId);
@@ -60,7 +71,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
     const scalpCenters = new Map<string, Vec3>();
     const displayCenters = new Map<string, Vec3>();
     const cortexCenters = new Map<string, Vec3>();
-    const commonFlags = baseQcFlags(project);
+    const commonFlags = [...baseQcFlags(project), 'surface_model_verified'];
 
     for (const optode of layout.optodes) {
       const contact = contacts.get(optode.id);
@@ -81,7 +92,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         depthTargetRasMm: null,
         underlyingCorticalRegions: [],
         deepTargetStructures: [],
-        tissueAtTarget: 'cortical gray matter',
+        tissueAtTarget: null,
         claimLevel: 'geometric',
         status: projectionStatus,
         qcFlags: [...commonFlags, 'atlas_lookup_pending'],
@@ -127,12 +138,14 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
 
       const scalp = midpoint(sourceScalp, detectorScalp);
       const display = midpoint(sourceDisplay, detectorDisplay);
-      const cortex = channelSensitivityPath(
+      const transmissionDepthMm = project.projectionSettings.pairDepthOverridesMm[pair.id]
+        ?? defaultDepthMm;
+      const sensitivity = channelSensitivityPath(
         sourceContact,
         detectorContact,
         radiusMm,
         transmissionDepthMm,
-      ).target;
+      );
       realizedScalpDistances.push(realizedScalp);
       nominalDistances.push(pair.nominalDistanceMm);
       projections.push({
@@ -141,11 +154,11 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
         subjectId: pair.id,
         scalpRasMm: scalp,
         displayRasMm: display,
-        corticalRasMm: cortex,
-        depthTargetRasMm: null,
+        corticalRasMm: sensitivity.corticalContact,
+        depthTargetRasMm: sensitivity.target,
         underlyingCorticalRegions: [],
         deepTargetStructures: [],
-        tissueAtTarget: 'cortical gray matter',
+        tissueAtTarget: null,
         claimLevel: 'geometric',
         status: projectionStatus,
         qcFlags: [...flags, 'atlas_lookup_pending'],

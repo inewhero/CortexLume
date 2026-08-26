@@ -73,6 +73,7 @@ def effective_uv(layout: LayoutDefinition, instance: LayoutInstance, optode_id) 
 
 
 def fitted_positions(layout: LayoutDefinition, instance: LayoutInstance) -> dict:
+    """Development preview only; never a verified anatomical projection."""
     anchor = project_to_ellipsoid(instance.anchor_ras_mm)
     u_axis, v_axis, _ = tangent_basis(anchor, instance.rotation_rad + instance.mapping_rotation_rad)
     result = {}
@@ -84,6 +85,7 @@ def fitted_positions(layout: LayoutDefinition, instance: LayoutInstance) -> dict
 
 
 def cortex_projection(scalp_point: Vec3) -> Vec3:
+    """Development preview only; verified projection requires the mesh HeadModel."""
     return project_to_ellipsoid(normalize(scalp_point), CORTEX_RADII)
 
 

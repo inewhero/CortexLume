@@ -15,6 +15,12 @@ const api: CortexLumeDesktopApi = {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
     close: () => ipcRenderer.invoke('window:close'),
+    onCloseRequested: (callback) => {
+      const listener = () => callback();
+      ipcRenderer.on('window:close-requested', listener);
+      return () => ipcRenderer.removeListener('window:close-requested', listener);
+    },
+    finishClose: (allow) => ipcRenderer.invoke('window:finish-close', allow),
   },
   startup: {
     checkUpdate: () => ipcRenderer.invoke('startup:check-update'),
@@ -25,6 +31,7 @@ const api: CortexLumeDesktopApi = {
     open: () => ipcRenderer.invoke('project:open'),
     save: (project: CortexLumeProject, currentPath?: string) =>
       ipcRenderer.invoke('project:save', project, currentPath),
+    confirmUnsavedChanges: () => ipcRenderer.invoke('project:confirm-unsaved'),
   },
   input: {
     digitizer: () => ipcRenderer.invoke('input:digitizer'),

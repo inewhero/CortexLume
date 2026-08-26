@@ -25,7 +25,7 @@ export function LayoutEditor() {
   const [channelIndexExpanded, setChannelIndexExpanded] = useState(false);
   const [layoutNameDraft, setLayoutNameDraft] = useState('');
   const {
-    project, activeLayoutId, editorTool, selectedOptodeId, pastLayouts, futureLayouts,
+    project, activeLayoutId, editorTool, selectedOptodeId, pastLayouts, futureLayouts, toast,
     setEditorTool, selectOptode, addOptode, moveOptode, deleteSelectedOptode,
     generateGrid, reverseOptodeTypes, generatePairs, updatePairChannelNumber,
     undoLayout, redoLayout, setOptodeRadius, renameActiveLayout,
@@ -316,6 +316,9 @@ export function LayoutEditor() {
           <code>{layout.pairs.length} · {channelIndexExpanded ? '−' : '+'}</code>
         </button>
         <div className="collapsible-control-body">
+          {toast?.startsWith('Channel number conflict:') && (
+            <p className="channel-number-conflict" role="alert">{toast}</p>
+          )}
           <div className="channel-table">
             {layout.pairs
               .slice()

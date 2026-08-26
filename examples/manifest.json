@@ -1,0 +1,108 @@
+{
+  "format": "cortexlume-example-dataset",
+  "version": "1.3.3",
+  "generatedAt": "2026-08-26T00:00:00.000Z",
+  "cases": 5,
+  "files": [
+    {
+      "path": "cases/01-quick-start/data/layout-spec.json",
+      "bytes": 200,
+      "sha256": "9880a380ee78a26852f9188b5d30cf1dfca6241563aa9992569fb7578ecc382d"
+    },
+    {
+      "path": "cases/01-quick-start/quick-start.cortexlume",
+      "bytes": 3275,
+      "sha256": "a3f4586c1adf88abe73c6804d0b28b03d94756bd83f983e5af5cd8f2675db6e9"
+    },
+    {
+      "path": "cases/01-quick-start/README.md",
+      "bytes": 466,
+      "sha256": "25729a64398445bb3a03b39c278c68485145b85b8ac87eeee3a7732866cf3b9e"
+    },
+    {
+      "path": "cases/02-irregular-patch/data/active-cell-mask.json",
+      "bytes": 822,
+      "sha256": "59650662046eadb0ba9e3a47daeb26cf13f6ccd81050e5d84660657c3ee3f81a"
+    },
+    {
+      "path": "cases/02-irregular-patch/irregular-patch.cortexlume",
+      "bytes": 4155,
+      "sha256": "4488c53cb6698048b184d6b3fd809008e5855df3fa5be67f99e0073a5a0b9389"
+    },
+    {
+      "path": "cases/02-irregular-patch/README.md",
+      "bytes": 468,
+      "sha256": "ae833dd0f3f64d4022f8d7e8b32a23ad789d685d8b715275a773220a7249b195"
+    },
+    {
+      "path": "cases/03-digitizer-five-point/data/five_points.tsv",
+      "bytes": 181,
+      "sha256": "39c1a494dd6f3cc06bf3bdad03a6c8363a86d9bd1f5bb0faa5292f928827eb24"
+    },
+    {
+      "path": "cases/03-digitizer-five-point/five-point-calibrated.cortexlume",
+      "bytes": 4104,
+      "sha256": "d91328b0fb12b0e1f3959631dc8476eb0fc8f76dcff7a5d0aa6d5478d2f3f27c"
+    },
+    {
+      "path": "cases/03-digitizer-five-point/five-point-input.cortexlume",
+      "bytes": 3264,
+      "sha256": "7155c7d0657bba4cd98abd9bc4139da876d255b0ad165db9b18cc6255e58fe2b"
+    },
+    {
+      "path": "cases/03-digitizer-five-point/README.md",
+      "bytes": 523,
+      "sha256": "94f15a1d4166a86ee54f3279874b3096f87e20a52d32128893ac6f98d1c2686b"
+    },
+    {
+      "path": "cases/04-digitizer-polhemus/data/polhemus_full_array.eeg",
+      "bytes": 575,
+      "sha256": "05013838551e81cbd41bbcb6bf8848781839227bc45dfe07a4f3b1abd0b5bb52"
+    },
+    {
+      "path": "cases/04-digitizer-polhemus/polhemus-calibrated.cortexlume",
+      "bytes": 5535,
+      "sha256": "a2fe104b8da195a9b6466222c7d2261f8815e19d750ba8401487729a51e41805"
+    },
+    {
+      "path": "cases/04-digitizer-polhemus/polhemus-input.cortexlume",
+      "bytes": 3267,
+      "sha256": "16946bd7299d80bd0fd62b3b7ba5cbd7a210a2b9ee9e9f1ddc212a6c32deb649"
+    },
+    {
+      "path": "cases/04-digitizer-polhemus/README.md",
+      "bytes": 666,
+      "sha256": "629ab84ade872d6b68dba5af2139cc27dbfff64ad91d8e536b4fc627f69314f7"
+    },
+    {
+      "path": "cases/05-nifti-functional-target/data/bilateral_visual_target_z.nii.gz",
+      "bytes": 68878,
+      "sha256": "1ff28217c4b99a8a8c7356bb939e146b2de1fe1117bfd2353f87ab14801a6881"
+    },
+    {
+      "path": "cases/05-nifti-functional-target/data/target-metadata.json",
+      "bytes": 496,
+      "sha256": "336c343882eb78a95fd62a830c77392b560309ce7ce399ac7db8e50201839e0c"
+    },
+    {
+      "path": "cases/05-nifti-functional-target/nifti-import-input.cortexlume",
+      "bytes": 3267,
+      "sha256": "e27550eb78a5e66eee5998f7e30de113bacf7029fc4dc040b8fd587f09376102"
+    },
+    {
+      "path": "cases/05-nifti-functional-target/nifti-visual-target.cortexlume",
+      "bytes": 37504,
+      "sha256": "7548115d321b617ebcd86a1c9415f5f31cc8341b555dc25dc26e93ac5a903cdc"
+    },
+    {
+      "path": "cases/05-nifti-functional-target/README.md",
+      "bytes": 707,
+      "sha256": "6b513fcc862ff8483af6749ef442996f3c8bfa215c5ec313c48376117ef0e05c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 788,
+      "sha256": "f2f941b2e12cc4daff9f3068f83bf8b63e83ea2fc12470a18f6f806dd8343a98"
+    }
+  ]
+}

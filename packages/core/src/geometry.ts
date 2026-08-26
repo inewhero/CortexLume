@@ -95,7 +95,7 @@ export function channelSensitivityPath(
   optodeRadiusMm = 3.6,
   transmissionDepthMm = 25,
   sampleCount = 33,
-): { points: Vec3[]; target: Vec3 } {
+): { points: Vec3[]; corticalContact: Vec3; target: Vec3 } {
   const source = head.projectCorticalContact(sourceScalpPoint);
   const detector = head.projectCorticalContact(detectorScalpPoint);
   const sourceCenter = head.projectScalpSphereCenter(sourceScalpPoint, optodeRadiusMm);
@@ -125,5 +125,5 @@ export function channelSensitivityPath(
       a * source[2] + b * control[2] + c * detector[2],
     ];
   });
-  return { points, target };
+  return { points, corticalContact: surfaceMidpoint, target };
 }
