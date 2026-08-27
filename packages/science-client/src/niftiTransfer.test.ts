@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -17,7 +17,7 @@ describe('NIfTI staging', () => {
     const result = await withStagedNiftiFile(sourcePath, async (pathName, fileName) => {
       stagedPath = pathName;
       stagedName = fileName;
-      expect(path.dirname(pathName)).toBe(path.resolve(NIFTI_TEMP_DIRECTORY));
+      expect(path.dirname(pathName)).toBe(await realpath(NIFTI_TEMP_DIRECTORY));
       expect(await readFile(pathName)).toEqual(sourceBytes);
       return 'mapped';
     });
