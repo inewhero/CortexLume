@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { copyFile, mkdir, realpath, rm, stat } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, realpath, rm, stat } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,10 +39,11 @@ export async function withStagedNiftiFile<T>(
 ): Promise<T> {
   const configuredRoot = path.resolve(NIFTI_TEMP_DIRECTORY);
   await mkdir(configuredRoot, { recursive: true, mode: 0o700 });
-  const root = await realpath(configuredRoot);
-  if (!samePath(root, configuredRoot)) {
-    throw new Error('NIfTI staging directory must not be a symbolic link');
+  const configuredRootStats = await lstat(configuredRoot);
+  if (!configuredRootStats.isDirectory() || configuredRootStats.isSymbolicLink()) {
+    throw new Error('NIfTI staging directory must be a real directory');
   }
+  const root = await realpath(configuredRoot);
 
   const source = await realpath(sourcePath);
   const sourceFileName = path.basename(source);
