@@ -111,7 +111,7 @@ try {
   }
   process.stderr.write('packaged smoke: capabilities\n');
   const capabilities = structured(await client.callTool({ name: 'get_capabilities', arguments: {} }));
-  if (capabilities.projectFormatVersion !== 2 || !capabilities.assets?.ready) {
+  if (capabilities.projectFormatVersion !== 3 || !capabilities.assets?.ready) {
     throw new Error(`Packaged capabilities are not ready: ${JSON.stringify(capabilities)}`);
   }
   process.stderr.write('packaged smoke: search target\n');
@@ -144,7 +144,7 @@ try {
   if (releasedAfterSave.released !== false) throw new Error('Successful save did not consume its one-shot plan.');
   process.stderr.write('packaged smoke: inspect project\n');
   const inspection = structured(await client.callTool({ name: 'inspect_project', arguments: { path: saved.path } }));
-  if (inspection.formatVersion !== 2 || inspection.functionalTarget?.target?.id !== target.id) {
+  if (inspection.formatVersion !== 3 || inspection.functionalTarget?.target?.id !== target.id) {
     throw new Error('Packaged project inspection did not preserve the v2 target.');
   }
   process.stderr.write('packaged smoke: launch project\n');

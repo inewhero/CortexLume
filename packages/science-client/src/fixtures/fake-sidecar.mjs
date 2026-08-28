@@ -40,6 +40,10 @@ const server = http.createServer((request, response) => {
     else sendResponse();
   });
 });
+const keepAliveTimeoutArgument = process.argv.indexOf('--keep-alive-timeout-ms');
+if (keepAliveTimeoutArgument >= 0) {
+  server.keepAliveTimeout = Number(process.argv[keepAliveTimeoutArgument + 1]);
+}
 
 const announceReady = () => server.listen(0, '127.0.0.1', () => {
   const address = server.address();

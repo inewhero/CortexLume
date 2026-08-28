@@ -87,11 +87,74 @@ function stableTargetSamples(target: FunctionalTargetMap, areas: Float32Array, m
   return result;
 }
 
-function pointSegmentDistanceSquared(point: Vec3, start: Vec3, end: Vec3): number {
-  const dx = end[0] - start[0]; const dy = end[1] - start[1]; const dz = end[2] - start[2];
-  const length = dx * dx + dy * dy + dz * dz;
-  const t = length <= 1e-12 ? 0 : Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy + (point[2] - start[2]) * dz) / length));
-  return (point[0] - start[0] - t * dx) ** 2 + (point[1] - start[1] - t * dy) ** 2 + (point[2] - start[2] - t * dz) ** 2;
+interface CoverageSegment {
+  start: Vec3;
+  dx: number;
+  dy: number;
+  dz: number;
+  lengthSquared: number;
+  minimum: Vec3;
+  maximum: Vec3;
+}
+
+interface CoveragePath {
+  segments: CoverageSegment[];
+}
+
+type TargetSampleCache = Map<number, Array<{ vertex: number; mass: number }>>;
+
+function cachedTargetSamples(
+  head: HeadModel,
+  target: FunctionalTargetMap,
+  maximum: number,
+  cache: TargetSampleCache,
+): Array<{ vertex: number; mass: number }> {
+  const cached = cache.get(maximum);
+  if (cached) return cached;
+  const samples = stableTargetSamples(target, head.vertexAreasMm2, maximum);
+  cache.set(maximum, samples);
+  return samples;
+}
+
+function prepareCoveragePath(points: Vec3[]): CoveragePath {
+  const segments: CoverageSegment[] = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index]!;
+    const end = points[index + 1]!;
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const dz = end[2] - start[2];
+    segments.push({
+      start,
+      dx,
+      dy,
+      dz,
+      lengthSquared: dx * dx + dy * dy + dz * dz,
+      minimum: [Math.min(start[0], end[0]), Math.min(start[1], end[1]), Math.min(start[2], end[2])],
+      maximum: [Math.max(start[0], end[0]), Math.max(start[1], end[1]), Math.max(start[2], end[2])],
+    });
+  }
+  return { segments };
+}
+
+function pointSegmentDistanceSquared(point: Vec3, segment: CoverageSegment): number {
+  const px = point[0] - segment.start[0];
+  const py = point[1] - segment.start[1];
+  const pz = point[2] - segment.start[2];
+  const t = segment.lengthSquared <= 1e-12 ? 0 : Math.max(0, Math.min(1, (
+    px * segment.dx + py * segment.dy + pz * segment.dz
+  ) / segment.lengthSquared));
+  return (px - t * segment.dx) ** 2 + (py - t * segment.dy) ** 2 + (pz - t * segment.dz) ** 2;
+}
+
+function pointBoundsDistanceSquared(point: Vec3, segment: CoverageSegment): number {
+  const dx = point[0] < segment.minimum[0] ? segment.minimum[0] - point[0]
+    : point[0] > segment.maximum[0] ? point[0] - segment.maximum[0] : 0;
+  const dy = point[1] < segment.minimum[1] ? segment.minimum[1] - point[1]
+    : point[1] > segment.maximum[1] ? point[1] - segment.maximum[1] : 0;
+  const dz = point[2] < segment.minimum[2] ? segment.minimum[2] - point[2]
+    : point[2] > segment.maximum[2] ? point[2] - segment.maximum[2] : 0;
+  return dx * dx + dy * dy + dz * dz;
 }
 
 function candidatePaths(
@@ -101,26 +164,43 @@ function candidatePaths(
   radius: number,
   depth: number,
   sampleCount = 33,
-): Vec3[][] {
+  positionGroups?: Map<string, Vec3>[],
+): CoveragePath[] {
   return instances.flatMap((instance, index) => {
     const layout = layouts[index]!;
-    const positions = head.fittedOptodePositions(layout, instance);
+    const positions = positionGroups?.[index] ?? head.fittedOptodePositions(layout, instance);
+    // Pair endpoints share fitted Vec3 objects. Cache their mesh projections
+    // within this instance while leaving each pair midpoint fail-closed.
+    const projectionCache = new Map<Vec3, { corticalContact: Vec3; sphereCenter: Vec3 }>();
     return layout.pairs.flatMap((pair) => {
       const source = positions.get(pair.sourceId); const detector = positions.get(pair.detectorId);
-      return source && detector ? [channelSensitivityPath(head, source, detector, radius, depth, sampleCount).points] : [];
+      return source && detector ? [prepareCoveragePath(channelSensitivityPath(
+        head, source, detector, radius, depth, sampleCount, projectionCache,
+      ).points)] : [];
     });
   });
 }
 
-function targetMassCoverage(head: HeadModel, target: FunctionalTargetMap, paths: Vec3[][], sigma: number, support: number, maximumVertices = Number.POSITIVE_INFINITY): number {
-  const samples = stableTargetSamples(target, head.vertexAreasMm2, maximumVertices);
+function targetMassCoverage(
+  head: HeadModel,
+  target: FunctionalTargetMap,
+  paths: CoveragePath[],
+  sigma: number,
+  support: number,
+  maximumVertices: number,
+  targetSamples: TargetSampleCache,
+): number {
+  const samples = cachedTargetSamples(head, target, maximumVertices, targetSamples);
   let total = 0; let covered = 0;
   const supportSquared = support ** 2;
   for (const sample of samples) {
     const point = head.surfaceVerticesRasMm[sample.vertex]!;
     let minimum = Number.POSITIVE_INFINITY;
-    for (const path of paths) for (let index = 0; index < path.length - 1; index += 1) {
-      minimum = Math.min(minimum, pointSegmentDistanceSquared(point, path[index]!, path[index + 1]!));
+    for (const path of paths) for (const segment of path.segments) {
+      // The segment lies inside its endpoint AABB, so this conservative bound
+      // can only reject distances that cannot affect the supported minimum.
+      if (pointBoundsDistanceSquared(point, segment) > Math.min(minimum, supportSquared) + 1e-9) continue;
+      minimum = Math.min(minimum, pointSegmentDistanceSquared(point, segment));
       if (minimum <= 1e-8) break;
     }
     const weight = minimum <= supportSquared ? Math.exp(-0.5 * minimum / sigma ** 2) : 0;
@@ -129,14 +209,15 @@ function targetMassCoverage(head: HeadModel, target: FunctionalTargetMap, paths:
   return total > 0 ? covered / total : 0;
 }
 
-function surfaceCoverageWeights(head: HeadModel, paths: Vec3[][], sigma: number, support: number): Float32Array {
+function surfaceCoverageWeights(head: HeadModel, paths: CoveragePath[], sigma: number, support: number): Float32Array {
   const result = new Float32Array(head.surfaceVerticesRasMm.length);
   const supportSquared = support ** 2;
   for (let vertex = 0; vertex < head.surfaceVerticesRasMm.length; vertex += 1) {
     const point = head.surfaceVerticesRasMm[vertex]!;
     let minimum = Number.POSITIVE_INFINITY;
-    for (const path of paths) for (let index = 0; index < path.length - 1; index += 1) {
-      minimum = Math.min(minimum, pointSegmentDistanceSquared(point, path[index]!, path[index + 1]!));
+    for (const path of paths) for (const segment of path.segments) {
+      if (pointBoundsDistanceSquared(point, segment) > Math.min(minimum, supportSquared) + 1e-9) continue;
+      minimum = Math.min(minimum, pointSegmentDistanceSquared(point, segment));
       if (minimum <= 1e-8) break;
     }
     result[vertex] = minimum <= supportSquared ? Math.exp(-0.5 * minimum / sigma ** 2) : 0;
@@ -268,14 +349,27 @@ function makeInstance(namespace: string, layout: LayoutDefinition, anchorRasMm: 
   };
 }
 
-function bestRotation(head: HeadModel, target: FunctionalTargetMap, layout: LayoutDefinition, anchor: Vec3, namespace: string, radius: number, depth: number, sigma: number, support: number, range: [number, number]): number {
+function bestRotation(head: HeadModel, target: FunctionalTargetMap, layout: LayoutDefinition, anchor: Vec3, namespace: string, radius: number, depth: number, sigma: number, support: number, range: [number, number], targetSamples: TargetSampleCache): number {
+  const geometryCache = new Map<number, {
+    valid: boolean;
+    paths: CoveragePath[];
+  }>();
   const score = (degrees: number, maximumVertices: number) => {
-    const instance = makeInstance(namespace, layout, anchor, degrees * Math.PI / 180);
+    let geometry = geometryCache.get(degrees);
+    if (!geometry) {
+      const instance = makeInstance(namespace, layout, anchor, degrees * Math.PI / 180);
+      const positions = head.fittedOptodePositions(layout, instance);
+      geometry = {
+        valid: positionsDistancesValid(layout, positions, range)
+          && positionsCranialMetrics(head, positions).fraction === 1,
+        paths: candidatePaths(head, [layout], [instance], radius, depth, 11, [positions]),
+      };
+      geometryCache.set(degrees, geometry);
+    }
     return {
       degrees,
-      valid: instanceDistancesValid(head, layout, instance, range)
-        && instanceCranialMetrics(head, layout, instance).fraction === 1,
-      score: targetMassCoverage(head, target, candidatePaths(head, [layout], [instance], radius, depth, 11), sigma, support, maximumVertices),
+      valid: geometry.valid,
+      score: targetMassCoverage(head, target, geometry.paths, sigma, support, maximumVertices, targetSamples),
     };
   };
   const ranked = (values: Array<{ degrees: number; valid: boolean; score: number }>) => values
@@ -288,29 +382,24 @@ function bestRotation(head: HeadModel, target: FunctionalTargetMap, layout: Layo
 }
 
 function crossPatchClearance(
-  head: HeadModel,
-  layouts: LayoutDefinition[],
-  instances: LayoutInstance[],
-  nextLayout: LayoutDefinition,
-  nextInstance: LayoutInstance,
+  positionGroups: Map<string, Vec3>[],
+  nextPositions: Map<string, Vec3>,
 ): number {
-  const nextPositions = [...head.fittedOptodePositions(nextLayout, nextInstance).values()];
+  const nextPoints = [...nextPositions.values()];
   let minimum = Number.POSITIVE_INFINITY;
-  instances.forEach((instance, index) => {
-    for (const existing of head.fittedOptodePositions(layouts[index]!, instance).values()) {
-      for (const next of nextPositions) minimum = Math.min(minimum, distance3(existing, next));
+  for (const positions of positionGroups) {
+    for (const existing of positions.values()) {
+      for (const next of nextPoints) minimum = Math.min(minimum, distance3(existing, next));
     }
-  });
+  }
   return minimum;
 }
 
-function instanceDistancesValid(
-  head: HeadModel,
+function positionsDistancesValid(
   layout: LayoutDefinition,
-  instance: LayoutInstance,
+  positions: Map<string, Vec3>,
   range: [number, number],
 ): boolean {
-  const positions = head.fittedOptodePositions(layout, instance);
   return layout.pairs.every((pair) => {
     if (pair.shortChannel) return true;
     const source = positions.get(pair.sourceId);
@@ -322,13 +411,11 @@ function instanceDistancesValid(
   });
 }
 
-function instanceCranialMetrics(
+function positionsCranialMetrics(
   head: HeadModel,
-  layout: LayoutDefinition,
-  instance: LayoutInstance,
+  positions: Map<string, Vec3>,
 ): { maximumGapMm: number; fraction: number } {
-  const positions = [...head.fittedOptodePositions(layout, instance).values()];
-  const gaps = positions.map((position) => head.scalpCortexDistanceMm(position));
+  const gaps = [...positions.values()].map((position) => head.scalpCortexDistanceMm(position));
   return {
     maximumGapMm: Math.max(...gaps),
     fraction: gaps.filter((gap) => gap <= MAX_SCALP_CORTEX_GAP_MM).length / Math.max(1, gaps.length),
@@ -337,6 +424,8 @@ function instanceCranialMetrics(
 
 interface PlacementBeamState {
   instances: LayoutInstance[];
+  positionGroups: Map<string, Vec3>[];
+  paths: CoveragePath[];
   usedAnchorIndices: number[];
   placementKeys: string[];
   distanceValid: boolean;
@@ -358,38 +447,69 @@ function layoutGeometrySignature(layout: LayoutDefinition): string {
   return `${optodes}/${pairs}`;
 }
 
+function layoutPlanningSignature(layout: LayoutDefinition): string {
+  const uvById = new Map(layout.optodes.map((optode) => [
+    optode.id,
+    `${optode.uvMm[0]},${optode.uvMm[1]}`,
+  ]));
+  const optodes = layout.optodes.map((optode) => uvById.get(optode.id)!).sort().join(';');
+  const pairs = layout.pairs.map((pair) => (
+    `${uvById.get(pair.sourceId)}>${uvById.get(pair.detectorId)}:${pair.nominalDistanceMm}:${Number(pair.shortChannel)}`
+  )).join(';');
+  return `${optodes}/${pairs}`;
+}
+
 function placementBeam(
   head: HeadModel,
   request: Required<Omit<PlannerRequest, 'patches'>> & { patches: PlannerPatchSpec[] },
   layouts: LayoutDefinition[],
   anchors: Vec3[],
   namespace: string,
+  targetSamples: TargetSampleCache,
 ): PlacementBeamState[] {
   let beam: PlacementBeamState[] = [{
-    instances: [], usedAnchorIndices: [], placementKeys: [], approximateCoverage: 0,
+    instances: [], positionGroups: [], paths: [], usedAnchorIndices: [], placementKeys: [], approximateCoverage: 0,
     distanceValid: true, minimumClearanceMm: Number.POSITIVE_INFINITY, signature: '', canonicalSignature: '',
   }];
   const beamWidth = Math.max(12, request.patches.length * 6);
+  // Layout ids are namespaced per patch, but identical UV/pair topology has
+  // exactly the same rotation search. Keep this cache local to one plan.
+  const rotationCache = new Map<string, number>();
   for (let patchIndex = 0; patchIndex < layouts.length; patchIndex += 1) {
     const layout = layouts[patchIndex]!;
     const geometrySignature = layoutGeometrySignature(layout);
+    const planningSignature = layoutPlanningSignature(layout);
     const choices = anchors.map((anchor, anchorIndex) => {
-      const instance = makeInstance(
-        `${namespace}:choice:${patchIndex}:${anchorIndex}`,
-        layout,
-        anchor,
-        bestRotation(
+      const rotationKey = `${planningSignature}@${anchorIndex}`;
+      let rotationRad = rotationCache.get(rotationKey);
+      if (rotationRad == null) {
+        rotationRad = bestRotation(
           head, request.target, layout, anchor,
           `${namespace}:rotation:${patchIndex}:${anchorIndex}`,
           request.optodeRadiusMm, request.transmissionDepthMm,
           request.kernelSigmaMm, request.supportRadiusMm, request.longChannelRangeMm,
-        ),
+          targetSamples,
+        );
+        rotationCache.set(rotationKey, rotationRad);
+      }
+      const instance = makeInstance(
+        `${namespace}:choice:${patchIndex}:${anchorIndex}`,
+        layout,
+        anchor,
+        rotationRad,
       );
+      const positions = head.fittedOptodePositions(layout, instance);
+      const distanceValid = positionsDistancesValid(layout, positions, request.longChannelRangeMm);
+      const cranialValid = positionsCranialMetrics(head, positions).fraction === 1;
       return {
         anchorIndex,
         instance,
-        distanceValid: instanceDistancesValid(head, layout, instance, request.longChannelRangeMm),
-        cranialValid: instanceCranialMetrics(head, layout, instance).fraction === 1,
+        positions,
+        paths: distanceValid && cranialValid ? candidatePaths(
+          head, [layout], [instance], request.optodeRadiusMm, request.transmissionDepthMm, 11, [positions],
+        ) : [],
+        distanceValid,
+        cranialValid,
       };
     }).filter((choice) => choice.distanceValid && choice.cranialValid);
     if (choices.length === 0) throw new Error(`Patch ${patchIndex + 1} has no placement fully supported by the cranial scalp.`);
@@ -398,20 +518,23 @@ function placementBeam(
       if (state.usedAnchorIndices.includes(choice.anchorIndex)) continue;
       const clearance = state.instances.length === 0
         ? Number.POSITIVE_INFINITY
-        : crossPatchClearance(head, layouts, state.instances, layout, choice.instance);
+        : crossPatchClearance(state.positionGroups, choice.positions);
       if (clearance < 12) continue;
       const instances = [...state.instances, choice.instance];
+      const positionGroups = [...state.positionGroups, choice.positions];
+      const paths = [...state.paths, ...choice.paths];
       const signature = `${state.signature}/${choice.anchorIndex}:${choice.instance.rotationRad.toFixed(9)}`;
       const placementKeys = [...state.placementKeys, `${geometrySignature}@${choice.anchorIndex}:${choice.instance.rotationRad.toFixed(9)}`];
       expanded.push({
         instances,
+        positionGroups,
+        paths,
         usedAnchorIndices: [...state.usedAnchorIndices, choice.anchorIndex],
         placementKeys,
         distanceValid: state.distanceValid && choice.distanceValid,
         approximateCoverage: targetMassCoverage(
-          head, request.target,
-          candidatePaths(head, layouts.slice(0, instances.length), instances, request.optodeRadiusMm, request.transmissionDepthMm, 11),
-          request.kernelSigmaMm, request.supportRadiusMm, 400,
+          head, request.target, paths,
+          request.kernelSigmaMm, request.supportRadiusMm, 400, targetSamples,
         ),
         minimumClearanceMm: Math.min(state.minimumClearanceMm, clearance),
         signature,
@@ -446,7 +569,7 @@ function diverseBeamStates(states: readonly PlacementBeamState[], count: number)
   return selected;
 }
 
-function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerRequest, 'patches'>> & { patches: PlannerPatchSpec[] }, layouts: LayoutDefinition[], instances: LayoutInstance[]): { metrics: PlanningCandidateMetrics; rejectionReasons: string[] } {
+function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerRequest, 'patches'>> & { patches: PlannerPatchSpec[] }, layouts: LayoutDefinition[], instances: LayoutInstance[], targetSamples: TargetSampleCache): { metrics: PlanningCandidateMetrics; rejectionReasons: string[] } {
   const rejectionReasons: string[] = [];
   const positions = instances.map((instance, index) => head.fittedOptodePositions(layouts[index]!, instance));
   const spacingDistortions: number[] = [];
@@ -474,10 +597,33 @@ function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerReques
   for (let a = 0; a < positions.length; a += 1) for (let b = a + 1; b < positions.length; b += 1) {
     for (const pointA of positions[a]!.values()) for (const pointB of positions[b]!.values()) if (distance3(pointA, pointB) < 12) rejectionReasons.push('cross_patch_optode_overlap');
   }
-  const paths = candidatePaths(head, layouts, instances, request.optodeRadiusMm, request.transmissionDepthMm);
-  const nominal = targetMassCoverage(head, request.target, paths, request.kernelSigmaMm, request.supportRadiusMm);
+  const pathsByPatch = instances.map((instance, index) => candidatePaths(
+    head,
+    [layouts[index]!],
+    [instance],
+    request.optodeRadiusMm,
+    request.transmissionDepthMm,
+    33,
+    [positions[index]!],
+  ));
+  const paths = pathsByPatch.flat();
+  const nominal = targetMassCoverage(
+    head, request.target, paths, request.kernelSigmaMm, request.supportRadiusMm,
+    Number.POSITIVE_INFINITY, targetSamples,
+  );
   const coverageWeights = surfaceCoverageWeights(head, paths, request.kernelSigmaMm, request.supportRadiusMm);
   const specificity = targetSupportSpecificity(head, request.target, coverageWeights);
+  // Only the selected patch changes in each robustness trial. The other
+  // sample-17 paths are immutable and retain their original patch ordering.
+  const robustPathsByPatch = instances.length > 1 ? instances.map((instance, index) => candidatePaths(
+    head,
+    [layouts[index]!],
+    [instance],
+    request.optodeRadiusMm,
+    request.transmissionDepthMm,
+    17,
+    [positions[index]!],
+  )) : [];
   const robust: number[] = [];
   let cranialRobustPasses = 0;
   let cranialRobustTrials = 0;
@@ -489,19 +635,33 @@ function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerReques
         anchorRasMm: head.projectScalpOffset(instance.anchorRasMm, instance.rotationRad, [u, v]),
         rotationRad: instance.rotationRad + degrees * Math.PI / 180,
       });
+      const perturbedPositions = head.fittedOptodePositions(layouts[patchIndex]!, perturbed[patchIndex]!);
       cranialRobustTrials += 1;
-      if (instanceCranialMetrics(head, layouts[patchIndex]!, perturbed[patchIndex]!).fraction < 1) {
+      if (positionsCranialMetrics(head, perturbedPositions).fraction < 1) {
         robust.push(0);
         continue;
       }
       cranialRobustPasses += 1;
+      const perturbedPatchPaths = candidatePaths(
+        head,
+        [layouts[patchIndex]!],
+        [perturbed[patchIndex]!],
+        request.optodeRadiusMm,
+        request.transmissionDepthMm,
+        17,
+        [perturbedPositions],
+      );
+      const perturbedPaths = instances.length === 1 ? perturbedPatchPaths : robustPathsByPatch.flatMap(
+        (patchPaths, index) => index === patchIndex ? perturbedPatchPaths : patchPaths,
+      );
       robust.push(targetMassCoverage(
         head,
         request.target,
-        candidatePaths(head, layouts, perturbed, request.optodeRadiusMm, request.transmissionDepthMm, 17),
+        perturbedPaths,
         request.kernelSigmaMm,
         request.supportRadiusMm,
         1500,
+        targetSamples,
       ));
     }
   }
@@ -537,14 +697,15 @@ export function planLayouts(head: HeadModel, input: PlannerRequest): PlannerResu
   const layouts = buildPlannerLayouts(request.patches, namespace);
   const anchorCount = Math.max(20, Math.min(32, request.patches.length * 8 + 12));
   const peaks = targetPeakAnchors(head, request.target, anchorCount);
-  const beam = placementBeam(head, request, layouts, peaks, namespace);
+  const targetSamples: TargetSampleCache = new Map();
+  const beam = placementBeam(head, request, layouts, peaks, namespace, targetSamples);
   const candidates: PlannerCandidate[] = [];
   for (const [candidateIndex, state] of diverseBeamStates(beam, 3).entries()) {
     const instances = state.instances.map((instance, patchIndex) => ({
       ...instance,
       id: deterministicUuid(`${namespace}:candidate:${candidateIndex}`, `instance:${patchIndex}:${state.canonicalSignature}`),
     }));
-    const evaluation = evaluateCandidate(head, request, layouts, instances);
+    const evaluation = evaluateCandidate(head, request, layouts, instances, targetSamples);
     const stableId = createHash('sha256').update(`${namespace}\0${state.canonicalSignature}`).digest('hex').slice(0, 20);
     candidates.push({
       layouts, instances,

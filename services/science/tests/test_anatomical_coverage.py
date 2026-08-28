@@ -120,6 +120,23 @@ def test_coverage_kernel_accumulation_is_streaming(monkeypatch) -> None:
     assert len(result.channels) == 2
 
 
+def test_support_aabb_kernel_is_bitwise_equal_to_full_distance_scan() -> None:
+    vertices = fixture_surface().vertices_ras_mm
+    points = np.asarray([[0.0, 0.0, 0.0], [4.0, 1.0, 0.0], [8.0, 0.0, 0.0]])
+    minimum = np.full(vertices.shape[0], np.inf, dtype=np.float64)
+    for start, end in zip(points[:-1], points[1:], strict=True):
+        segment = end - start
+        squared_length = float(np.dot(segment, segment))
+        offset = vertices - start
+        position = np.clip((offset @ segment) / squared_length, 0.0, 1.0)
+        delta = vertices - (start + position[:, None] * segment)
+        np.minimum(minimum, np.einsum("ij,ij->i", delta, delta), out=minimum)
+    reference = np.exp(-0.5 * minimum / (2.0 * 2.0))
+    reference[minimum > 3.0 * 3.0] = 0.0
+
+    assert np.array_equal(_channel_kernel(vertices, points, 2.0, 3.0), reference)
+
+
 def test_streaming_kernel_matches_legacy_stacked_result_on_small_fixture() -> None:
     """The bounded accumulator keeps the old max/dominant/region semantics."""
 

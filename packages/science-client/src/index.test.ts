@@ -42,6 +42,29 @@ describe('ScienceClient', () => {
     }
   }, 20_000);
 
+  it('does not reuse a server-closed socket after synchronous planning blocks the event loop', async () => {
+    const client = new ScienceClient(() => ({
+      command: process.execPath,
+      args: [
+        path.resolve(process.cwd(), 'src/fixtures/fake-sidecar.mjs'),
+        '--keep-alive-timeout-ms', '25',
+      ],
+      cwd: process.cwd(),
+      assetRoot: process.cwd(),
+    }));
+    try {
+      await expect(client.request('/health')).resolves.toMatchObject({ ok: true });
+      const blockedUntil = performance.now() + 100;
+      while (performance.now() < blockedUntil) {
+        // Model planLayouts: the synchronous mesh search blocks socket events.
+      }
+      await expect(client.request('/echo', { value: 8 }))
+        .resolves.toMatchObject({ payload: { value: 8 } });
+    } finally {
+      client.stop();
+    }
+  }, 20_000);
+
   it('fails promptly when the sidecar exits or reports an invalid ready event', async () => {
     const fixture = path.resolve(process.cwd(), 'src/fixtures/fake-sidecar.mjs');
     const makeClient = (argument: string) => new ScienceClient(() => ({

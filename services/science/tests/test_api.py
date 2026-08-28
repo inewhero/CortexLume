@@ -270,9 +270,11 @@ def test_anatomical_coverage_endpoint_returns_single_sparse_mosaic() -> None:
     compact = summary.json()
     assert compact["atlasId"] == body["provenance"]["atlasId"]
     assert compact["atlasSupportFraction"] == body["qc"]["atlasSupportFraction"]
-    assert [region["labelEn"] for region in compact["regions"]] == [
-        region["labelEn"] for region in body["regions"]
-    ]
+    assert compact["regions"] == [{
+        "atlasId": region["atlasId"],
+        "labelEn": region["labelEn"],
+        "massFraction": region["coveredAtlasMassFraction"],
+    } for region in body["regions"]]
     assert "mosaic" not in compact
 
 

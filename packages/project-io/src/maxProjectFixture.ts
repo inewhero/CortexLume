@@ -53,6 +53,7 @@ export function maximumVerifiedProject(): CortexLumeProject {
     visible: true,
     locked: true,
     overrides: [],
+    pairDepthOverridesMm: {},
     digitizerPositions: [],
     derivedFromInstanceId: null,
     digitizerSessionId: null,
@@ -89,7 +90,7 @@ export function maximumVerifiedProject(): CortexLumeProject {
   )));
   return CortexLumeProjectSchema.parse({
     format: 'cortexlume-project',
-    formatVersion: 2,
+    formatVersion: 3,
     id: randomUUID(),
     name: 'Maximum verified project fixture',
     createdAt: timestamp,
@@ -113,7 +114,7 @@ export function maximumVerifiedProject(): CortexLumeProject {
       samplingFrequencyHz: null,
     },
     bidsSettings: { subjectLabel: '01', sessionLabel: '', taskLabel: 'layout', acquisitionLabel: '', runIndex: null },
-    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, pairDepthOverridesMm: {}, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
+    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
     verifiedResults,
     digitizerSessions: [],
     functionalTarget: null,

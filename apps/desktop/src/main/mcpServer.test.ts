@@ -221,13 +221,9 @@ describe('CortexLume MCP runtime', () => {
     let activeRequests = 0;
     let targetProfileRequests = 0;
     let targetProfileFinished = false;
-    const stopActiveCounts: number[] = [];
     const delay = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
     const science = {
-      stop: vi.fn(() => {
-        stopActiveCounts.push(activeRequests);
-        if (activeRequests !== 0) throw new Error(`stop raced ${activeRequests} active science requests`);
-      }),
+      stop: vi.fn(),
       request: vi.fn(async (pathname: string) => {
         activeRequests += 1;
         try {
@@ -287,7 +283,7 @@ describe('CortexLume MCP runtime', () => {
     expect(secondResult.isError).not.toBe(true);
     expect((await capabilities).isError).not.toBe(true);
     expect(targetProfileRequests).toBe(1);
-    expect(stopActiveCounts).toEqual([0, 0]);
+    expect(science.stop).not.toHaveBeenCalled();
     expect(activeRequests).toBe(0);
   }, 180_000);
 
@@ -434,7 +430,7 @@ describe('CortexLume MCP runtime', () => {
     expect((listed.tools.find((tool) => tool.name === 'save_project')?.inputSchema.properties as Record<string, { default?: unknown }>).consumePlan?.default).toBe(true);
 
     const capabilities = structured(await client.callTool({ name: 'get_capabilities', arguments: {} }));
-    expect(capabilities.projectFormatVersion).toBe(2);
+    expect(capabilities.projectFormatVersion).toBe(3);
     expect((capabilities.assets as { ready: boolean }).ready).toBe(true);
     expect(capabilities.cache).toEqual({
       plans: {
@@ -550,7 +546,7 @@ describe('CortexLume MCP runtime', () => {
     expect(await realpath(nestedSave.path as string)).toBe(await realpath(nestedOutput));
 
     const inspection = structured(await client.callTool({ name: 'inspect_project', arguments: { path: firstSave.path } }));
-    expect(inspection.formatVersion).toBe(2);
+    expect(inspection.formatVersion).toBe(3);
     expect((inspection.functionalTarget as FunctionalTargetMap).provenance.sourceKind).toBe('mni-point');
     expect((inspection.planning as { selectedCandidateId: string }).selectedCandidateId).toBe(candidateId);
 

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, open, readFile, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -35,6 +34,12 @@ import {
 } from '@cortexlume/project-io';
 import { withStagedNiftiFile, type ScienceClient } from '@cortexlume/science-client';
 import { MCP_ROOT_CONFIGURATION_ERROR } from './mcpBootstrapConfig';
+import {
+  durableAtomicCreateExclusive,
+  isAlreadyExistsError,
+  stableReadRegularFile,
+  resolveAuthorizedPath,
+} from './durableFile';
 
 interface PlanCacheEntry {
   planId: string;
@@ -456,7 +461,7 @@ export class CortexLumeMcpRuntime {
         assetState = { ready: false, error: error instanceof Error ? error.message : String(error) };
       }
       return toolResult({
-        projectFormatVersion: 2,
+        projectFormatVersion: 3,
         template: { id: 'MNI152NLin6Asym', surface: 'Cedalion-ICBM152-25k', coordinateConvention: 'RAS+', units: 'mm' },
         targetSources: ['quick-target', 'harvard-oxford-region', 'mni-point', 'nifti'],
         defaultPatch: { columns: 5, rows: 3, pitchMm: 30, topLeft: 'source', pattern: 'checkerboard', optodes: 15, channels: 22 },
@@ -570,13 +575,12 @@ export class CortexLumeMcpRuntime {
           throw new Error(`Target anatomical profile failed: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
-      // Resolve the target's atlas profile before the CPU- and memory-heavy
-      // placement search. This keeps the small science process out of the
-      // peak-memory window and makes repeated planning reuse the hash cache.
-      // MCP owns a dedicated sidecar, so release its loaded NumPy assets while
-      // the mesh search runs; the first candidate summary restarts it cleanly.
+      // The exclusive gate prevents a science request from racing the
+      // synchronous mesh search. Keep this MCP-owned sidecar alive: its locked
+      // atlas state is immutable, and retaining it avoids a full process and
+      // atlas restart before the first candidate summary. Measured together,
+      // the idle sidecar and loaded HeadModel retain about 239 MiB working set.
       const result = await this.scienceLifecycle.withExclusive(() => {
-        this.options.science.stop();
         return planLayouts(assets.headModel, {
           target, patches: request.patches as PlannerPatchSpec[], longChannelRangeMm: request.longChannelRangeMm,
           optodeRadiusMm: request.optodeRadiusMm, transmissionDepthMm: request.transmissionDepthMm, seed: `${request.seed}:${requestHash}`,
@@ -645,7 +649,7 @@ export class CortexLumeMcpRuntime {
 
     server.registerTool('save_project', {
       title: 'Save a planned CortexLume project',
-      description: 'Write the selected candidate as a validated v2 archive under an authorized root; path collisions receive a unique suffix and existing files are never overwritten. A successful save consumes the one-shot plan unless consumePlan is explicitly false.',
+      description: 'Write the selected candidate as a validated v3 archive under an authorized root; path collisions receive a unique suffix and existing files are never overwritten. A successful save consumes the one-shot plan unless consumePlan is explicitly false.',
       inputSchema: {
         planId: z.string().min(1), candidateId: z.string().min(1), outputPath: z.string().min(1),
         projectName: z.string().min(1).max(120).optional(),
@@ -661,17 +665,17 @@ export class CortexLumeMcpRuntime {
       if (!candidate.summary.accepted) throw new Error(`Rejected candidate cannot be saved: ${candidate.summary.rejectionReasons.join(', ')}`);
       await this.head();
       const project = await this.buildProject(entry, candidate, projectName);
-      const destination = await this.writeUniqueAuthorizedOutput(
-        outputPath,
-        createProjectArchive(project, this.options.applicationVersion),
-      );
-      const archiveSha256 = sha256Bytes(await readFile(destination));
+      const archive = createProjectArchive(project, this.options.applicationVersion);
+      const destination = await this.writeUniqueAuthorizedOutput(outputPath, archive);
+      // Hash the exact validated bytes passed to the durable writer. Reopening
+      // the published pathname here would reintroduce a needless path race.
+      const archiveSha256 = sha256Bytes(archive);
       // Plans are one-shot by default. A caller that deliberately needs more
       // than one derived archive may opt out; idle plans remain TTL/LRU/byte
       // bounded and can also be released explicitly.
       if (consumePlan) this.plans.delete(planId);
       return toolResult({
-        path: destination, projectId: project.id, formatVersion: 2, selectedCandidateId: candidateId,
+        path: destination, projectId: project.id, formatVersion: 3, selectedCandidateId: candidateId,
         expiresAt: consumePlan ? null : entry.expiresAt,
         sha256: archiveSha256,
       });
@@ -695,7 +699,8 @@ export class CortexLumeMcpRuntime {
       const detailed = await this.readAuthorizedProject(projectPath);
       const project = detailed.project;
       return toolResult({
-        path: await this.authorizedPath(projectPath, true), formatVersion: project.formatVersion, migratedFromV1: detailed.migrated,
+        path: await this.authorizedPath(projectPath, true), formatVersion: project.formatVersion,
+        sourceFormatVersion: detailed.sourceFormatVersion, migratedFromLegacy: detailed.migrated,
         project: { id: project.id, name: project.name, template: project.template, deviceProfile: project.deviceProfile, projectionSettings: project.projectionSettings },
         functionalTarget: project.functionalTarget,
         surfaceOverlay: project.surfaceOverlay,
@@ -777,12 +782,12 @@ export class CortexLumeMcpRuntime {
     const radius = entry.optodeRadiusMm;
     const depth = entry.transmissionDepthMm;
     const projectionSettings = {
-      ...(source?.projectionSettings ?? { mode: 'scalp' as const, defaultDepthMm: 25, pairDepthOverridesMm: {}, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 }),
+      ...(source?.projectionSettings ?? { mode: 'scalp' as const, defaultDepthMm: 25, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 }),
       defaultDepthMm: depth,
       optodeRadiusMm: radius,
     };
     return CortexLumeProjectSchema.parse({
-      format: 'cortexlume-project', formatVersion: 2,
+      format: 'cortexlume-project', formatVersion: 3,
       id: deterministicUuid(entry.requestHash, `project:${selectedId}`),
       name: (() => {
         const baseName = projectName?.trim() || source?.name;
@@ -804,63 +809,19 @@ export class CortexLumeMcpRuntime {
 
   private async readAuthorizedProject(projectPath: string) {
     const resolved = await this.authorizedPath(projectPath, true);
-    const handle = await open(resolved, 'r');
-    try {
-      const before = await handle.stat();
-      if (before.size > PROJECT_ARCHIVE_LIMITS.compressedBytes) {
-        throw new Error(`Project archive exceeds the ${PROJECT_ARCHIVE_LIMITS.compressedBytes} byte limit.`);
-      }
-      const bytes = Buffer.alloc(before.size);
-      let offset = 0;
-      while (offset < bytes.byteLength) {
-        const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
-        if (bytesRead === 0) break;
-        offset += bytesRead;
-      }
-      const after = await handle.stat();
-      if (offset !== bytes.byteLength || after.size !== before.size) {
-        throw new Error('Project archive changed while it was being read.');
-      }
-      return readProjectArchiveDetailed(bytes);
-    } finally {
-      await handle.close();
-    }
+    const bytes = await stableReadRegularFile(
+      resolved,
+      PROJECT_ARCHIVE_LIMITS.compressedBytes,
+      { label: 'Project archive' },
+    );
+    return readProjectArchiveDetailed(bytes);
   }
 
   private async authorizedPath(candidate: string, mustExist: boolean): Promise<string> {
-    const resolved = path.resolve(candidate);
-    const normalize = (value: string) => process.platform === 'win32' ? value.toLowerCase() : value;
-    const within = (value: string, root: string) => {
-      const normalized = normalize(value);
-      const normalizedRoot = normalize(root);
-      return normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}${path.sep}`);
-    };
-    const canonicalRoots = await Promise.all(this.roots.map(async (root) => {
-      const realRoot = existsSync(root) ? await realpath(root) : path.resolve(root);
-      return realRoot;
-    }));
-    let canonicalCandidate: string;
-    if (existsSync(resolved)) {
-      canonicalCandidate = await realpath(resolved);
-    } else {
-      let existingAncestor = path.dirname(resolved);
-      const missingSegments = [path.basename(resolved)];
-      while (!existsSync(existingAncestor)) {
-        const parent = path.dirname(existingAncestor);
-        if (parent === existingAncestor) throw new Error(`Could not resolve path parent: ${candidate}`);
-        missingSegments.unshift(path.basename(existingAncestor));
-        existingAncestor = parent;
-      }
-      canonicalCandidate = path.join(await realpath(existingAncestor), ...missingSegments);
-    }
-    if (!canonicalRoots.some((root) => within(canonicalCandidate, root))) {
-      throw new Error(`Path is outside MCP authorized roots: ${candidate}`);
-    }
-    const checked = mustExist ? await realpath(resolved) : canonicalCandidate;
-    if (!canonicalRoots.some((root) => within(checked, root))) {
-      throw new Error(`Path is outside MCP authorized roots: ${candidate}`);
-    }
-    return checked;
+    return resolveAuthorizedPath(candidate, this.roots, {
+      mustExist,
+      label: 'MCP authorized roots',
+    });
   }
 
   private async writeUniqueAuthorizedOutput(requested: string, data: Uint8Array): Promise<string> {
@@ -872,11 +833,22 @@ export class CortexLumeMcpRuntime {
     const extension = path.extname(resolved); const base = resolved.slice(0, -extension.length);
     for (let suffix = 0; suffix < 10_000; suffix += 1) {
       const candidate = suffix === 0 ? resolved : `${base} (${suffix + 1})${extension}`;
+      // Revalidate the canonical parent immediately before each publication.
+      // This closes ordinary path changes while documenting the unavoidable
+      // narrow string-path race that needs openat/CreateFile for elimination.
+      await this.authorizedPath(candidate, false);
       try {
-        await writeFile(candidate, data, { flag: 'wx' });
-        return candidate;
+        let verifiedPath: string | undefined;
+        await durableAtomicCreateExclusive(candidate, data, {
+          ensureParent: false,
+          // If canonical revalidation fails after link(), durableFile removes
+          // the just-created inode only after proving its dev/ino identity.
+          afterPublish: async () => { verifiedPath = await this.authorizedPath(candidate, true); },
+        });
+        if (!verifiedPath) throw new Error('Published project path could not be verified.');
+        return verifiedPath;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        if (!isAlreadyExistsError(error)) throw error;
       }
     }
     throw new Error('Could not allocate a unique project filename.');

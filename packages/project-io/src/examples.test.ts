@@ -19,7 +19,7 @@ function walk(directory: string): string[] {
 }
 
 describe('optional example dataset', () => {
-  it('ships five self-contained cases with valid v2 projects', () => {
+  it('ships five self-contained legacy v2 cases that migrate to v3', () => {
     const caseDirectories = readdirSync(cases, { withFileTypes: true }).filter((entry) => entry.isDirectory());
     expect(caseDirectories.map((entry) => entry.name)).toEqual([
       '01-quick-start',
@@ -37,7 +37,8 @@ describe('optional example dataset', () => {
       for (const projectFile of projectFiles) {
         const archive = readProjectArchiveDetailed(readFileSync(projectFile));
         expect(archive.sourceFormatVersion).toBe(2);
-        expect(archive.migrated).toBe(false);
+        expect(archive.migrated).toBe(true);
+        expect(archive.project.formatVersion).toBe(3);
         expect(archive.project.template.verified).toBe(true);
       }
     }

@@ -11,6 +11,7 @@ import {
 } from '../lib/geometry';
 import { materializeProjectionSnapshot } from '../lib/projectionSnapshot';
 import { confirmProjectTransition } from '../lib/unsavedChanges';
+import { updateTransmissionDepth } from '../lib/transmissionDepth';
 import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from '../store/projectStore';
 import type { DigitizerImport, ProjectOperationProgress, ProjectOperationOptions, Vec3 } from '@cortexlume/contracts';
@@ -51,7 +52,7 @@ export function Inspector() {
     selectedInstanceId, selectedHeadOptodeId, selectedHeadPairId,
     newProject, loadProject, setProjectPath, setProjectName, setToast,
     setProjectionMode, resetInstanceOverride, setAnatomyLayer, setAnatomyAppearance,
-    setBidsSettingsExpanded, setDefaultDepth,
+    setBidsSettingsExpanded, setDefaultDepth, setPairDepthOverride,
     confirmDigitizerMapping, confirmFivePointCalibration, setDigitizerPreview,
     functionalTarget, setFunctionalTarget, setFunctionalTargetVisible,
     anatomicalCoverage, anatomicalCoverageEnabled, anatomicalCoverageMode,
@@ -71,7 +72,7 @@ export function Inspector() {
     : new Map(), [layout, instance, surfaceVerified]);
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
   const transmissionDepthMm = pair
-    ? project.projectionSettings.pairDepthOverridesMm[pair.id]
+    ? instance?.pairDepthOverridesMm?.[pair.id]
       ?? project.projectionSettings.defaultDepthMm ?? 25
     : project.projectionSettings.defaultDepthMm ?? 25;
   const pairSource = pair ? positions.get(pair.sourceId) : undefined;
@@ -459,7 +460,13 @@ export function Inspector() {
               max="40"
               step="1"
               value={transmissionDepthMm}
-              onInput={(event) => setDefaultDepth(Number(event.currentTarget.value))}
+              onInput={(event) => {
+                const depthMm = Number(event.currentTarget.value);
+                updateTransmissionDepth(instance?.id ?? null, pair?.id ?? null, depthMm, {
+                  setDefaultDepth,
+                  setPairDepthOverride,
+                });
+              }}
             />
             <code>{transmissionDepthMm} mm</code>
           </div>

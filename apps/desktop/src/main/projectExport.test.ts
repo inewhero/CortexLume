@@ -83,7 +83,7 @@ describe('project data exports', () => {
     const layout = raw.layouts.find((candidate) => candidate.id === instance.definitionId)!;
     const pair = layout.pairs[0]!;
     const baseline = materializeProjectionSnapshot(raw);
-    raw.projectionSettings.pairDepthOverridesMm[pair.id] = 55;
+    instance.pairDepthOverridesMm = { [pair.id]: 55 };
     const overridden = materializeProjectionSnapshot(raw);
     const baseResult = baseline.verifiedResults.find((result) => result.subjectId === pair.id)!;
     const overrideResult = overridden.verifiedResults.find((result) => result.subjectId === pair.id)!;
@@ -91,6 +91,30 @@ describe('project data exports', () => {
     expect(overrideResult.depthTargetRasMm).not.toEqual(baseResult.depthTargetRasMm);
     expect(overrideResult.corticalRasMm).not.toEqual(overrideResult.depthTargetRasMm);
     expect(overrideResult.tissueAtTarget).toBeNull();
+  });
+
+  it('applies a copied pair depth override only to its owning instance', () => {
+    useProjectStore.getState().newProject();
+    const layoutId = useProjectStore.getState().activeLayoutId;
+    useProjectStore.getState().placeLayout(layoutId);
+    useProjectStore.getState().placeLayout(layoutId);
+    const raw = structuredClone(useProjectStore.getState().project);
+    const [first, second] = raw.instances;
+    if (!first || !second) throw new Error('fixture must create two instances');
+    const firstLayout = raw.layouts.find((candidate) => candidate.id === first.definitionId)!;
+    const secondLayout = raw.layouts.find((candidate) => candidate.id === second.definitionId)!;
+    const pairId = firstLayout.pairs[0]!.id;
+    expect(secondLayout.pairs[0]!.id).toBe(pairId);
+    first.pairDepthOverridesMm = { [pairId]: 55 };
+
+    const materialized = materializeProjectionSnapshot(raw);
+    const firstResult = materialized.verifiedResults.find((result) => (
+      result.instanceId === first.id && result.subjectKind === 'pair' && result.subjectId === pairId
+    ))!;
+    const secondResult = materialized.verifiedResults.find((result) => (
+      result.instanceId === second.id && result.subjectKind === 'pair' && result.subjectId === pairId
+    ))!;
+    expect(firstResult.depthTargetRasMm).not.toEqual(secondResult.depthTargetRasMm);
   });
 
   it('keeps optode and channel projection results distinct when their UUIDs coincide', () => {

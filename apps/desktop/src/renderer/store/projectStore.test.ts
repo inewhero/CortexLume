@@ -90,6 +90,25 @@ describe('default optode matrix', () => {
     expect(after.selectedHeadPairId).toBe(layout.pairs[0]!.id);
   });
 
+  it('keeps pair depth overrides independent across copied layout instances', () => {
+    useProjectStore.getState().newProject();
+    const layoutId = useProjectStore.getState().activeLayoutId;
+    const firstId = useProjectStore.getState().placeLayout(layoutId)!;
+    const secondId = useProjectStore.getState().placeLayout(layoutId)!;
+    const state = useProjectStore.getState();
+    const first = state.project.instances.find((instance) => instance.id === firstId)!;
+    const second = state.project.instances.find((instance) => instance.id === secondId)!;
+    const firstLayout = state.project.layouts.find((layout) => layout.id === first.definitionId)!;
+    const secondLayout = state.project.layouts.find((layout) => layout.id === second.definitionId)!;
+    expect(secondLayout.pairs[0]!.id).toBe(firstLayout.pairs[0]!.id);
+
+    state.setPairDepthOverride(first.id, firstLayout.pairs[0]!.id, 37);
+    const updated = useProjectStore.getState().project.instances;
+    expect(updated.find((instance) => instance.id === first.id)?.pairDepthOverridesMm)
+      .toEqual({ [firstLayout.pairs[0]!.id]: 37 });
+    expect(updated.find((instance) => instance.id === second.id)?.pairDepthOverridesMm).toEqual({});
+  });
+
   it('renames the default layout and keeps its reusable library entry in sync', () => {
     useProjectStore.getState().newProject();
     const original = useProjectStore.getState().project.layouts[0]!;

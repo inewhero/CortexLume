@@ -31,7 +31,7 @@ function centralEntryOffset(data: Uint8Array, name: string): number {
 function fixtureProject(): CortexLumeProject {
   const timestamp = '2000-01-01T00:00:00.000Z';
   return {
-    format: 'cortexlume-project', formatVersion: 2,
+    format: 'cortexlume-project', formatVersion: 3,
     id: '00000000-0000-4000-8000-000000000001', name: 'Archive fixture',
     createdAt: timestamp, updatedAt: timestamp,
     template: {
@@ -44,7 +44,7 @@ function fixtureProject(): CortexLumeProject {
       units: 'V', sourceType: 'LASER', detectorType: 'PMT', samplingFrequencyHz: null,
     },
     bidsSettings: { subjectLabel: '01', sessionLabel: '', taskLabel: 'layout', acquisitionLabel: '', runIndex: null },
-    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, pairDepthOverridesMm: {}, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
+    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
     verifiedResults: [], digitizerSessions: [],
     functionalTarget: {
       target: { id: 'fixture', label: 'Fixture target', aliases: [], peakRegions: [] },
@@ -59,9 +59,12 @@ function fixtureProject(): CortexLumeProject {
 }
 
 describe('shared project IO', () => {
-  it('round-trips v2 sparse targets exactly', () => {
+  it('round-trips v3 sparse targets exactly without migration', () => {
     const project = fixtureProject();
-    expect(readProjectArchive(createProjectArchive(project))).toEqual(project);
+    const restored = readProjectArchiveDetailed(createProjectArchive(project));
+    expect(restored.project).toEqual(project);
+    expect(restored.sourceFormatVersion).toBe(3);
+    expect(restored.migrated).toBe(false);
   });
 
   it('rejects a schema-valid project that exceeds the project entry limit before zipping', () => {
@@ -99,7 +102,7 @@ describe('shared project IO', () => {
     });
     const result = readProjectArchiveDetailed(archive);
     expect(result.migrated).toBe(true);
-    expect(result.project.formatVersion).toBe(2);
+    expect(result.project.formatVersion).toBe(3);
     expect(result.project.functionalTarget).toBeNull();
   });
 
@@ -110,13 +113,42 @@ describe('shared project IO', () => {
     expect(() => readProjectArchive(zipSync(archive))).toThrow('integrity check failed');
   });
 
+  it('rejects a manifest project name that disagrees with project.json', () => {
+    const archive = unzipSync(createProjectArchive(fixtureProject()));
+    const manifest = JSON.parse(new TextDecoder().decode(archive['manifest.json'])) as Record<string, unknown>;
+    archive['manifest.json'] = strToU8(JSON.stringify({ ...manifest, projectName: 'Different project' }));
+    expect(() => readProjectArchive(zipSync(archive))).toThrow('manifest name does not match project.json');
+  });
+
+  it('rejects a manifest template that disagrees with project.json', () => {
+    const archive = unzipSync(createProjectArchive(fixtureProject()));
+    const manifest = JSON.parse(new TextDecoder().decode(archive['manifest.json'])) as Record<string, unknown>;
+    archive['manifest.json'] = strToU8(JSON.stringify({
+      ...manifest,
+      template: { ...(manifest.template as Record<string, unknown>), assetVersion: 'different-template' },
+    }));
+    expect(() => readProjectArchive(zipSync(archive))).toThrow('manifest template does not match project.json');
+  });
+
+  it('accepts a manifest template whose keys use a different order', () => {
+    const project = fixtureProject();
+    const archive = unzipSync(createProjectArchive(project));
+    const manifest = JSON.parse(new TextDecoder().decode(archive['manifest.json'])) as Record<string, unknown>;
+    const template = manifest.template as Record<string, unknown>;
+    archive['manifest.json'] = strToU8(JSON.stringify({
+      ...manifest,
+      template: Object.fromEntries(Object.entries(template).reverse()),
+    }));
+    expect(readProjectArchive(zipSync(archive))).toEqual(project);
+  });
+
   it('refuses unsupported future versions before parsing', () => {
-    const project = { ...fixtureProject(), formatVersion: 3 };
+    const project = { ...fixtureProject(), formatVersion: 4 };
     const projectBytes = strToU8(JSON.stringify(project));
     const archive = zipSync({
       'project.json': projectBytes,
       'manifest.json': strToU8(JSON.stringify({
-        format: 'cortexlume-project', formatVersion: 3, projectId: project.id,
+        format: 'cortexlume-project', formatVersion: 4, projectId: project.id,
         projectSha256: sha256Bytes(projectBytes), template: project.template,
       })),
     });

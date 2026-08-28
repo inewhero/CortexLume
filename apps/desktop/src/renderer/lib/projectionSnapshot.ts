@@ -138,7 +138,7 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
 
       const scalp = midpoint(sourceScalp, detectorScalp);
       const display = midpoint(sourceDisplay, detectorDisplay);
-      const transmissionDepthMm = project.projectionSettings.pairDepthOverridesMm[pair.id]
+      const transmissionDepthMm = instance.pairDepthOverridesMm?.[pair.id]
         ?? defaultDepthMm;
       const sensitivity = channelSensitivityPath(
         sourceContact,

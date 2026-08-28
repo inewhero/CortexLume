@@ -116,14 +116,14 @@ function makeLayout(
 function makeInstance(seed: string, layout: LayoutDefinition, anchor: Vec3, rotationRad = 0): LayoutInstance {
   return {
     id: uuid(`${seed}:instance`), definitionId: layout.id, anchorRasMm: anchor,
-    rotationRad, mappingRotationRad: 0, visible: true, locked: true, overrides: [],
+    rotationRad, mappingRotationRad: 0, visible: true, locked: true, overrides: [], pairDepthOverridesMm: {},
     digitizerPositions: [], derivedFromInstanceId: null, digitizerSessionId: null,
   };
 }
 
 function baseProject(seed: string, name: string, layouts: LayoutDefinition[], instances: LayoutInstance[]): CortexLumeProject {
   return {
-    format: 'cortexlume-project', formatVersion: 2, id: uuid(`${seed}:project`), name,
+    format: 'cortexlume-project', formatVersion: 3, id: uuid(`${seed}:project`), name,
     createdAt: FIXED_TIME, updatedAt: FIXED_TIME, template: TEMPLATE, layouts, instances,
     deviceProfile: {
       manufacturer: 'Shimadzu', model: 'LABNIRS', wavelengthsNm: [780, 805, 830],
@@ -131,7 +131,7 @@ function baseProject(seed: string, name: string, layouts: LayoutDefinition[], in
       samplingFrequencyHz: null,
     },
     bidsSettings: { subjectLabel: '01', sessionLabel: '', taskLabel: 'layout', acquisitionLabel: '', runIndex: null },
-    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, pairDepthOverridesMm: {}, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
+    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
     verifiedResults: [], digitizerSessions: [], functionalTarget: null,
     surfaceOverlay: 'none', coverageRegion: null, planning: null,
   } as CortexLumeProject;
@@ -148,7 +148,7 @@ function writeProject(caseName: string, fileName: string, project: CortexLumePro
   const projectBytes = canonicalProjectBytes(validated);
   const manifest = strToU8(JSON.stringify({
     format: validated.format,
-    formatVersion: 2,
+    formatVersion: 3,
     projectId: validated.id,
     projectName: validated.name,
     savedAt: FIXED_TIME,
@@ -162,7 +162,7 @@ function writeProject(caseName: string, fileName: string, project: CortexLumePro
     'project.json': [projectBytes, { mtime: timestamp }],
   }, { level: 6 });
   const restored = readProjectArchiveDetailed(archive);
-  if (restored.project.id !== validated.id || restored.sourceFormatVersion !== 2) {
+  if (restored.project.id !== validated.id || restored.sourceFormatVersion !== 3) {
     throw new Error(`Project archive round-trip failed for ${fileName}`);
   }
   const destination = path.join(CASES, caseName, fileName);

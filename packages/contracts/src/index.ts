@@ -119,6 +119,9 @@ export const OptodeOverrideSchema = z.object({
 });
 export type OptodeOverride = z.infer<typeof OptodeOverrideSchema>;
 
+const PairDepthOverrideValueSchema = z.number().min(1).max(100);
+const PairDepthOverridesSchema = z.record(z.string().uuid(), PairDepthOverrideValueSchema);
+
 export const LayoutInstanceSchema = z.object({
   id: z.string().uuid(),
   definitionId: z.string().uuid(),
@@ -128,6 +131,8 @@ export const LayoutInstanceSchema = z.object({
   visible: z.boolean().default(true),
   locked: z.boolean().default(true),
   overrides: z.array(OptodeOverrideSchema).max(PROJECT_GRAPH_LIMITS.overridesPerInstance),
+  /** Transmission depth overrides are scoped to this placed layout instance. */
+  pairDepthOverridesMm: PairDepthOverridesSchema.optional(),
   digitizerPositions: z.array(z.object({
     optodeId: z.string().uuid(),
     digitizerPointId: z.string().uuid(),
@@ -183,11 +188,15 @@ export type ProjectionMode = z.infer<typeof ProjectionModeSchema>;
 export const ProjectionSettingsSchema = z.object({
   mode: ProjectionModeSchema.default('scalp'),
   defaultDepthMm: z.number().min(1).max(100).nullable().default(25),
-  pairDepthOverridesMm: z.record(z.string().uuid(), z.number().min(1).max(100)).default({}),
   atlasProbabilityThreshold: z.number().min(0).max(1).default(0),
   optodeRadiusMm: z.number().min(1).max(15).default(3.6),
 });
 export type ProjectionSettings = z.infer<typeof ProjectionSettingsSchema>;
+
+/** V1 accepted a project-wide pair-depth map; retain it only at this legacy boundary. */
+const LegacyProjectionSettingsSchema = ProjectionSettingsSchema.extend({
+  pairDepthOverridesMm: PairDepthOverridesSchema.optional(),
+});
 
 export const AtlasLabelSchema = z.object({
   atlasId: BoundedNameSchema,
@@ -763,11 +772,13 @@ const CortexLumeProjectBaseSchema = z.object({
 
 export const CortexLumeProjectV1Schema = CortexLumeProjectBaseSchema.extend({
   formatVersion: z.literal(1),
+  projectionSettings: LegacyProjectionSettingsSchema,
 });
 export type CortexLumeProjectV1 = z.infer<typeof CortexLumeProjectV1Schema>;
 
 export const CortexLumeProjectV2Schema = CortexLumeProjectBaseSchema.extend({
   formatVersion: z.literal(2),
+  projectionSettings: LegacyProjectionSettingsSchema,
   functionalTarget: FunctionalTargetMapSchema.nullable().default(null),
   surfaceOverlay: SurfaceOverlaySchema.default('none'),
   coverageRegion: z.object({
@@ -778,8 +789,20 @@ export const CortexLumeProjectV2Schema = CortexLumeProjectBaseSchema.extend({
 });
 export type CortexLumeProjectV2 = z.infer<typeof CortexLumeProjectV2Schema>;
 
+export const CortexLumeProjectV3Schema = CortexLumeProjectBaseSchema.extend({
+  formatVersion: z.literal(3),
+  functionalTarget: FunctionalTargetMapSchema.nullable().default(null),
+  surfaceOverlay: SurfaceOverlaySchema.default('none'),
+  coverageRegion: z.object({
+    atlasId: BoundedNameSchema,
+    labelEn: BoundedNameSchema,
+  }).nullable().default(null),
+  planning: AgentPlanningRecordSchema.nullable().default(null),
+});
+export type CortexLumeProjectV3 = z.infer<typeof CortexLumeProjectV3Schema>;
+
 /** Validates relationships that individual object schemas cannot check in isolation. */
-export function validateProjectGraph(project: CortexLumeProjectV2, context: z.RefinementCtx): void {
+export function validateProjectGraph(project: CortexLumeProjectV3, context: z.RefinementCtx): void {
   const issue = (message: string, path: (string | number)[] = []) => {
     context.addIssue({ code: z.ZodIssueCode.custom, message, path });
   };
@@ -800,7 +823,6 @@ export function validateProjectGraph(project: CortexLumeProjectV2, context: z.Re
   rejectDuplicates(project.digitizerSessions.map((session) => session.id), 'Digitizer session IDs must be unique.', ['digitizerSessions']);
 
   const layouts = new Map(project.layouts.map((layout) => [layout.id, layout] as const));
-  const allPairIds = new Set<string>();
   project.layouts.forEach((layout, layoutIndex) => {
     rejectDuplicates(layout.optodes.map((optode) => optode.id), 'Optode IDs must be unique within a layout.', ['layouts', layoutIndex, 'optodes']);
     rejectDuplicates(layout.pairs.map((pair) => pair.id), 'Pair IDs must be unique within a layout.', ['layouts', layoutIndex, 'pairs']);
@@ -808,7 +830,6 @@ export function validateProjectGraph(project: CortexLumeProjectV2, context: z.Re
     const channelNumbers = new Set<number>();
     layout.pairs.forEach((pair, pairIndex) => {
       const pairPath = ['layouts', layoutIndex, 'pairs', pairIndex] as (string | number)[];
-      allPairIds.add(pair.id);
       const source = optodes.get(pair.sourceId);
       const detector = optodes.get(pair.detectorId);
       if (!source) issue('Pair sourceId must reference an optode in its layout.', [...pairPath, 'sourceId']);
@@ -833,6 +854,11 @@ export function validateProjectGraph(project: CortexLumeProjectV2, context: z.Re
     rejectDuplicates(instance.overrides.map((override) => override.optodeId), 'Instance overrides must reference each optode at most once.', [...instancePath, 'overrides']);
     instance.overrides.forEach((override, overrideIndex) => {
       if (!optodeIds.has(override.optodeId)) issue('Instance override references an unknown optode.', [...instancePath, 'overrides', overrideIndex, 'optodeId']);
+    });
+    Object.keys(instance.pairDepthOverridesMm ?? {}).forEach((pairId) => {
+      if (!layout?.pairs.some((pair) => pair.id === pairId)) {
+        issue('Instance pair depth override references an unknown pair.', [...instancePath, 'pairDepthOverridesMm', pairId]);
+      }
     });
     rejectDuplicates(instance.digitizerPositions.map((position) => position.optodeId), 'Digitizer positions must reference each optode at most once.', [...instancePath, 'digitizerPositions']);
     rejectDuplicates(instance.digitizerPositions.map((position) => position.digitizerPointId), 'Digitizer point IDs must be unique within an instance.', [...instancePath, 'digitizerPositions']);
@@ -900,10 +926,6 @@ export function validateProjectGraph(project: CortexLumeProjectV2, context: z.Re
     });
   });
 
-  Object.keys(project.projectionSettings.pairDepthOverridesMm).forEach((pairId) => {
-    if (!allPairIds.has(pairId)) issue('Pair depth override references an unknown pair.', ['projectionSettings', 'pairDepthOverridesMm', pairId]);
-  });
-
   const resultKeys = new Set<string>();
   project.verifiedResults.forEach((result, resultIndex) => {
     const resultPath = ['verifiedResults', resultIndex] as (string | number)[];
@@ -928,8 +950,9 @@ export function validateProjectGraph(project: CortexLumeProjectV2, context: z.Re
 }
 
 export function migrateProjectV1ToV2(project: CortexLumeProjectV1): CortexLumeProjectV2 {
+  const migrated = migrateLegacyPairDepthOverrides(project);
   return CortexLumeProjectV2Schema.parse({
-    ...project,
+    ...(migrated as Record<string, unknown>),
     formatVersion: 2,
     functionalTarget: null,
     surfaceOverlay: 'none',
@@ -938,14 +961,114 @@ export function migrateProjectV1ToV2(project: CortexLumeProjectV1): CortexLumePr
   });
 }
 
-/** Parses current projects and explicitly migrates legacy v1 data in memory. */
+/**
+ * Move the legacy project-wide pairId map onto every instance it previously
+ * affected. Pair IDs were not globally unique, so applying a value to every
+ * matching instance is the only lossless representation of the old behavior.
+ */
+function migrateLegacyPairDepthOverrides(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const project = value as {
+    projectionSettings?: Record<string, unknown>;
+    layouts?: unknown;
+    instances?: unknown;
+  };
+  const projectionSettings = project.projectionSettings;
+  if (!projectionSettings || typeof projectionSettings !== 'object' || Array.isArray(projectionSettings)) return value;
+  if (!Object.prototype.hasOwnProperty.call(projectionSettings, 'pairDepthOverridesMm')) return value;
+
+  const legacy = projectionSettings.pairDepthOverridesMm;
+  const legacyEntries = legacy && typeof legacy === 'object' && !Array.isArray(legacy)
+    ? Object.entries(legacy)
+    : null;
+  const failMigration = () => ({
+    ...project,
+    // Keep the failure inside the regular Zod result instead of silently
+    // dropping malformed legacy data in an unknown field.
+    projectionSettings: { ...projectionSettings, defaultDepthMm: Number.NaN },
+  });
+  if (!legacyEntries) return failMigration();
+
+  const rawLayouts = Array.isArray(project.layouts) ? project.layouts : [];
+  const layouts = new Map<string, { pairs?: unknown }>();
+  const allPairIds = new Set<string>();
+  rawLayouts.forEach((candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return;
+    const layout = candidate as { id?: unknown; pairs?: unknown };
+    if (typeof layout.id !== 'string') return;
+    layouts.set(layout.id, { pairs: layout.pairs });
+    if (!Array.isArray(layout.pairs)) return;
+    layout.pairs.forEach((candidatePair) => {
+      if (!candidatePair || typeof candidatePair !== 'object' || Array.isArray(candidatePair)) return;
+      const pairId = (candidatePair as { id?: unknown }).id;
+      if (typeof pairId === 'string') allPairIds.add(pairId);
+    });
+  });
+
+  // Preserve every malformed or unknown legacy entry on one instance so the
+  // normal instance schema/graph validation reports it. If the project has no
+  // instance to carry it, a guaranteed-invalid value keeps safeParse fail-closed.
+  const invalidLegacyEntries = legacyEntries.filter(([pairId, depth]) => (
+    !z.string().uuid().safeParse(pairId).success
+    || !allPairIds.has(pairId)
+    || !PairDepthOverrideValueSchema.safeParse(depth).success
+  ));
+  const rawInstances = Array.isArray(project.instances) ? project.instances : null;
+  const errorInstanceIndex = rawInstances?.findIndex((candidate) => (
+    candidate && typeof candidate === 'object' && !Array.isArray(candidate)
+  )) ?? -1;
+  if (invalidLegacyEntries.length > 0 && errorInstanceIndex < 0) return failMigration();
+
+  const instances = rawInstances?.map((candidate, instanceIndex) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return candidate;
+    const instance = candidate as Record<string, unknown> & { definitionId?: unknown };
+    const layout = typeof instance.definitionId === 'string' ? layouts.get(instance.definitionId) : undefined;
+    const pairIds = new Set(
+      Array.isArray(layout?.pairs)
+        ? layout.pairs.flatMap((candidatePair) => (
+          candidatePair && typeof candidatePair === 'object' && !Array.isArray(candidatePair)
+            && typeof (candidatePair as { id?: unknown }).id === 'string'
+            ? [(candidatePair as { id: string }).id]
+            : []
+        ))
+        : [],
+    );
+    const inherited = Object.fromEntries(legacyEntries.filter(([pairId]) => pairIds.has(pairId)));
+    const existing = instance.pairDepthOverridesMm;
+    const existingOverrides = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+    const preservedInvalid = instanceIndex === errorInstanceIndex
+      ? Object.fromEntries(invalidLegacyEntries)
+      : {};
+    return {
+      ...instance,
+      pairDepthOverridesMm: {
+        ...inherited,
+        ...existingOverrides,
+        ...preservedInvalid,
+      },
+    };
+  });
+  const { pairDepthOverridesMm: _legacy, ...settings } = projectionSettings;
+  return {
+    ...project,
+    ...(instances ? { instances } : {}),
+    projectionSettings: settings,
+  };
+}
+
+/** Parses current projects and explicitly migrates legacy v1/v2 data in memory. */
 export const CortexLumeProjectSchema = z.preprocess((value) => {
-  if (value && typeof value === 'object' && 'formatVersion' in value
-    && (value as { formatVersion?: unknown }).formatVersion === 1) {
-    return migrateProjectV1ToV2(CortexLumeProjectV1Schema.parse(value));
+  const migratedDepths = migrateLegacyPairDepthOverrides(value);
+  if (migratedDepths && typeof migratedDepths === 'object' && 'formatVersion' in migratedDepths
+    && (migratedDepths as { formatVersion?: unknown }).formatVersion === 1) {
+    return { ...migrateProjectV1ToV2(CortexLumeProjectV1Schema.parse(migratedDepths)), formatVersion: 3 };
   }
-  return value;
-}, CortexLumeProjectV2Schema).superRefine(validateProjectGraph);
+  if (migratedDepths && typeof migratedDepths === 'object' && 'formatVersion' in migratedDepths
+    && (migratedDepths as { formatVersion?: unknown }).formatVersion === 2) {
+    return { ...migratedDepths, formatVersion: 3 };
+  }
+  return migratedDepths;
+}, CortexLumeProjectV3Schema).superRefine(validateProjectGraph);
 export type CortexLumeProject = z.infer<typeof CortexLumeProjectSchema>;
 
 export const FitPlacementRequestSchema = z.object({

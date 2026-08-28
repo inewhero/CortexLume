@@ -25,7 +25,7 @@ describe('CortexLume project archive', () => {
     expect(() => readProjectArchive(tampered)).toThrow('integrity check failed');
   });
 
-  it('migrates a valid v1 archive to v2 without changing scientific data', () => {
+  it('migrates a valid v1 archive to v3 without changing scientific data', () => {
     useProjectStore.getState().newProject();
     const project = structuredClone(useProjectStore.getState().project);
     const { functionalTarget: _functionalTarget, surfaceOverlay: _surfaceOverlay, coverageRegion: _coverageRegion, planning: _planning, ...legacyProject } = project;

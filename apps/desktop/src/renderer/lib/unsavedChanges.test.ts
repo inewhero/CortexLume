@@ -31,15 +31,42 @@ describe('unsaved project transitions', () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it('keeps edits made during save dirty', async () => {
+  it('keeps edits made during save dirty and blocks the pending transition', async () => {
     useProjectStore.getState().setProjectName('saved name');
     confirmUnsavedChanges.mockResolvedValue('save');
     save.mockImplementation(async () => {
       useProjectStore.getState().setProjectName('edited during save');
       return { path: 'C:\\saved.cortexlume' };
     });
-    await expect(confirmProjectTransition()).resolves.toBe(true);
+    await expect(confirmProjectTransition()).resolves.toBe(false);
     expect(useProjectStore.getState().isProjectDirty()).toBe(true);
     expect(useProjectStore.getState().projectPath).toBe('C:\\saved.cortexlume');
+  });
+
+  it('allows only one concurrent transition to prompt and save', async () => {
+    useProjectStore.getState().setProjectName('dirty');
+    let resolveChoice!: (choice: 'save') => void;
+    confirmUnsavedChanges.mockImplementation(() => new Promise((resolve) => { resolveChoice = resolve; }));
+    save.mockResolvedValue({ path: 'C:\\saved.cortexlume' });
+
+    const first = confirmProjectTransition();
+    await Promise.resolve();
+    const second = confirmProjectTransition();
+    await expect(second).resolves.toBe(false);
+    resolveChoice('save');
+    await expect(first).resolves.toBe(true);
+    expect(confirmUnsavedChanges).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the transition gate after a failed save', async () => {
+    useProjectStore.getState().setProjectName('dirty');
+    confirmUnsavedChanges.mockResolvedValue('save');
+    save.mockRejectedValueOnce(new Error('disk failure'));
+    await expect(confirmProjectTransition()).rejects.toThrow('disk failure');
+
+    save.mockResolvedValueOnce({ path: 'C:\\saved.cortexlume' });
+    await expect(confirmProjectTransition()).resolves.toBe(true);
+    expect(confirmUnsavedChanges).toHaveBeenCalledTimes(2);
   });
 });

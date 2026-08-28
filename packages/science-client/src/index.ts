@@ -314,6 +314,10 @@ export class ScienceClient {
         const request = httpRequest({
           hostname: '127.0.0.1', port: this.port!, path: pathname,
           method: body === undefined ? 'GET' : 'POST',
+          // Planning is deliberately synchronous and can block the MCP event
+          // loop past uvicorn's keep-alive timeout. Do not let Node reuse a
+          // server-closed idle socket for the next science request.
+          agent: false,
           headers: {
             Authorization: `Bearer ${this.token}`,
             ...(body === undefined ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }),

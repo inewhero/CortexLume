@@ -672,7 +672,6 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
   const projectionMode = useProjectStore((state) => state.project.projectionSettings.mode);
   const optodeRadiusMm = useProjectStore((state) => state.project.projectionSettings.optodeRadiusMm ?? 3.6);
   const defaultDepthMm = useProjectStore((state) => state.project.projectionSettings.defaultDepthMm ?? 25);
-  const pairDepthOverridesMm = useProjectStore((state) => state.project.projectionSettings.pairDepthOverridesMm);
   const channelLabels = useProjectStore((state) => state.anatomyVisibility.channelLabels);
   const scalpPositions = useMemo(() => fittedOptodePositions(layout, instance), [layout, instance, surfaceRevision]);
   const positions = useMemo(() => projectionMode === 'scalp'
@@ -693,7 +692,7 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
         const midpoint: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
         const sourceScalp = scalpPositions.get(pair.sourceId);
         const detectorScalp = scalpPositions.get(pair.detectorId);
-        const transmissionDepthMm = pairDepthOverridesMm[pair.id] ?? defaultDepthMm;
+        const transmissionDepthMm = instance.pairDepthOverridesMm?.[pair.id] ?? defaultDepthMm;
         const sensitivity = sourceScalp && detectorScalp
           ? channelSensitivityPath(sourceScalp, detectorScalp, optodeRadiusMm, transmissionDepthMm)
           : undefined;

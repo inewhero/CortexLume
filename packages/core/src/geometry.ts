@@ -95,11 +95,24 @@ export function channelSensitivityPath(
   optodeRadiusMm = 3.6,
   transmissionDepthMm = 25,
   sampleCount = 33,
+  projectionCache?: Map<Vec3, { corticalContact: Vec3; sphereCenter: Vec3 }>,
 ): { points: Vec3[]; corticalContact: Vec3; target: Vec3 } {
-  const source = head.projectCorticalContact(sourceScalpPoint);
-  const detector = head.projectCorticalContact(detectorScalpPoint);
-  const sourceCenter = head.projectScalpSphereCenter(sourceScalpPoint, optodeRadiusMm);
-  const detectorCenter = head.projectScalpSphereCenter(detectorScalpPoint, optodeRadiusMm);
+  const project = (point: Vec3) => {
+    const cached = projectionCache?.get(point);
+    if (cached) return cached;
+    const projected = {
+      corticalContact: head.projectCorticalContact(point),
+      sphereCenter: head.projectScalpSphereCenter(point, optodeRadiusMm),
+    };
+    projectionCache?.set(point, projected);
+    return projected;
+  };
+  const sourceProjection = project(sourceScalpPoint);
+  const detectorProjection = project(detectorScalpPoint);
+  const source = sourceProjection.corticalContact;
+  const detector = detectorProjection.corticalContact;
+  const sourceCenter = sourceProjection.sphereCenter;
+  const detectorCenter = detectorProjection.sphereCenter;
   const scalpMidpoint: Vec3 = [
     (sourceCenter[0] + detectorCenter[0]) / 2,
     (sourceCenter[1] + detectorCenter[1]) / 2,

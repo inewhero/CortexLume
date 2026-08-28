@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CortexLumeProjectSchema, CortexLumeProjectV1Schema } from './index.js';
+import { CortexLumeProjectSchema, CortexLumeProjectV1Schema, CortexLumeProjectV2Schema } from './index.js';
 
 function legacyFixture() {
   return CortexLumeProjectV1Schema.parse({
@@ -16,23 +16,95 @@ function legacyFixture() {
       units: 'V', sourceType: 'LASER', detectorType: 'PMT', samplingFrequencyHz: null,
     },
     bidsSettings: { subjectLabel: '01', sessionLabel: '', taskLabel: 'layout', acquisitionLabel: '', runIndex: null },
-    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, pairDepthOverridesMm: {}, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
+    projectionSettings: { mode: 'scalp', defaultDepthMm: 25, atlasProbabilityThreshold: 0, optodeRadiusMm: 3.6 },
     verifiedResults: [], digitizerSessions: [],
   });
 }
 
-describe('project format v2', () => {
+describe('project format v3', () => {
   it('migrates v1 without changing its scientific fields', () => {
     const legacy = legacyFixture();
     const migrated = CortexLumeProjectSchema.parse(legacy);
-    expect(migrated).toMatchObject({ ...legacy, formatVersion: 2 });
+    expect(migrated).toMatchObject({ ...legacy, formatVersion: 3 });
     expect(migrated.functionalTarget).toBeNull();
     expect(migrated.surfaceOverlay).toBe('none');
     expect(migrated.planning).toBeNull();
   });
 
+  it('migrates legacy project-wide pair depths onto every affected instance', () => {
+    const project = CortexLumeProjectSchema.parse(legacyFixture());
+    const sourceId = '00000000-0000-4000-8000-000000000010';
+    const detectorId = '00000000-0000-4000-8000-000000000011';
+    const pairId = '00000000-0000-4000-8000-000000000030';
+    const layoutId = '00000000-0000-4000-8000-000000000020';
+    const layout = {
+      id: layoutId, version: 1, name: 'Legacy depths', createdAt: project.createdAt,
+      updatedAt: project.updatedAt, gridSpacingMm: 30,
+      optodes: [
+        { id: sourceId, label: 'S1', type: 'source' as const, uvMm: [0, 0] },
+        { id: detectorId, label: 'D1', type: 'detector' as const, uvMm: [30, 0] },
+      ],
+      pairs: [{ id: pairId, sourceId, detectorId, nominalDistanceMm: 30, shortChannel: false }],
+    };
+    const instance = (id: string) => ({
+      id, definitionId: layoutId, anchorRasMm: [0, 0, 0], rotationRad: 0,
+      mappingRotationRad: 0, visible: true, locked: true, overrides: [], digitizerPositions: [],
+      derivedFromInstanceId: null, digitizerSessionId: null,
+    });
+    for (const formatVersion of [1, 2] as const) {
+      const migrated = CortexLumeProjectSchema.parse({
+        ...project,
+        formatVersion,
+        layouts: [layout],
+        instances: [
+          instance('00000000-0000-4000-8000-000000000040'),
+          instance('00000000-0000-4000-8000-000000000041'),
+        ],
+        projectionSettings: { ...project.projectionSettings, pairDepthOverridesMm: { [pairId]: 42 } },
+      });
+
+      expect(migrated.instances.map((item) => item.pairDepthOverridesMm)).toEqual([
+        { [pairId]: 42 },
+        { [pairId]: 42 },
+      ]);
+      expect(migrated.projectionSettings).not.toHaveProperty('pairDepthOverridesMm');
+    }
+  });
+
+  it('rejects malformed or unknown legacy project-wide pair depths', () => {
+    const project = CortexLumeProjectSchema.parse(legacyFixture());
+    const unknownPair = crypto.randomUUID();
+    expect(CortexLumeProjectSchema.safeParse({
+      ...project,
+      projectionSettings: {
+        ...project.projectionSettings,
+        pairDepthOverridesMm: { [unknownPair]: 42 },
+      },
+    }).success).toBe(false);
+    expect(CortexLumeProjectSchema.safeParse({
+      ...project,
+      projectionSettings: {
+        ...project.projectionSettings,
+        pairDepthOverridesMm: { [unknownPair]: 0 },
+      },
+    }).success).toBe(false);
+    expect(CortexLumeProjectSchema.safeParse({
+      ...project,
+      projectionSettings: {
+        ...project.projectionSettings,
+        pairDepthOverridesMm: null,
+      },
+    }).success).toBe(false);
+  });
+
   it('rejects unknown future versions instead of dropping their fields', () => {
-    expect(() => CortexLumeProjectSchema.parse({ ...legacyFixture(), formatVersion: 3 })).toThrow();
+    expect(() => CortexLumeProjectSchema.parse({ ...legacyFixture(), formatVersion: 4 })).toThrow();
+  });
+
+  it('makes v2 readers reject instance-scoped depth projects by version', () => {
+    const current = CortexLumeProjectSchema.parse(legacyFixture());
+    expect(current.formatVersion).toBe(3);
+    expect(CortexLumeProjectV2Schema.safeParse(current).success).toBe(false);
   });
 
   it('rejects invalid pair references, endpoint types, and duplicate channel numbers', () => {
@@ -117,6 +189,11 @@ describe('project format v2', () => {
     }).success).toBe(false);
     expect(CortexLumeProjectSchema.safeParse({
       ...project, layouts: [layout], instances: [instance], verifiedResults: [result, result],
+    }).success).toBe(false);
+    expect(CortexLumeProjectSchema.safeParse({
+      ...project,
+      layouts: [layout],
+      instances: [{ ...instance, pairDepthOverridesMm: { [crypto.randomUUID()]: 25 } }],
     }).success).toBe(false);
   });
 

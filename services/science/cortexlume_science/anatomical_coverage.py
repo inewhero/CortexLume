@@ -274,25 +274,43 @@ def _path_length_mm(points: np.ndarray) -> float:
     return float(np.linalg.norm(np.diff(points, axis=0), axis=1).sum())
 
 
-def _squared_distance_to_polyline(vertices: np.ndarray, points: np.ndarray) -> np.ndarray:
-    minimum = np.full(vertices.shape[0], np.inf, dtype=np.float64)
+def _squared_distance_to_polyline(
+    vertices: np.ndarray,
+    points: np.ndarray,
+    support_radius_mm: float,
+) -> np.ndarray:
+    """Return exact supported distances with conservative segment pruning.
+
+    A point within ``support_radius_mm`` of a polyline must lie inside the
+    polyline's AABB expanded by the same radius. Values outside the
+    support are intentionally left infinite because the caller maps all of
+    them to zero. ``nextafter`` keeps the bounds conservative at floating-point
+    edges; selected point-to-segment arithmetic is unchanged.
+    """
+    lower = np.nextafter(points.min(axis=0) - support_radius_mm, -np.inf)
+    upper = np.nextafter(points.max(axis=0) + support_radius_mm, np.inf)
+    selected_indices = np.flatnonzero(np.all((vertices >= lower) & (vertices <= upper), axis=1))
+    selected_vertices = vertices[selected_indices]
+    selected_minimum = np.full(selected_indices.size, np.inf, dtype=np.float64)
     for start, end in zip(points[:-1], points[1:], strict=True):
         segment = end - start
         squared_length = float(np.dot(segment, segment))
         if squared_length <= 1e-12:
-            squared = np.einsum("ij,ij->i", vertices - start, vertices - start)
+            delta = selected_vertices - start
         else:
-            offset = vertices - start
+            offset = selected_vertices - start
             position = np.clip((offset @ segment) / squared_length, 0.0, 1.0)
             nearest = start + position[:, None] * segment
-            delta = vertices - nearest
-            squared = np.einsum("ij,ij->i", delta, delta)
-        np.minimum(minimum, squared, out=minimum)
+            delta = selected_vertices - nearest
+        squared = np.einsum("ij,ij->i", delta, delta)
+        np.minimum(selected_minimum, squared, out=selected_minimum)
+    minimum = np.full(vertices.shape[0], np.inf, dtype=np.float64)
+    minimum[selected_indices] = selected_minimum
     return minimum
 
 
 def _channel_kernel(vertices: np.ndarray, points: np.ndarray, sigma_mm: float, radius_mm: float) -> np.ndarray:
-    squared_distance = _squared_distance_to_polyline(vertices, points)
+    squared_distance = _squared_distance_to_polyline(vertices, points, radius_mm)
     weights = np.exp(-0.5 * squared_distance / (sigma_mm * sigma_mm))
     weights[squared_distance > radius_mm * radius_mm] = 0.0
     if not np.all(np.isfinite(weights)):
@@ -579,3 +597,96 @@ def load_anatomical_coverage_engine() -> AnatomicalCoverageEngine:
 
 def compute_anatomical_coverage(request: AnatomicalCoverageRequest) -> AnatomicalCoverageAnalysis:
     return load_anatomical_coverage_engine().compute(request)
+
+
+def compute_anatomical_coverage_summary(request: AnatomicalCoverageRequest) -> dict:
+    """Compute the compact planning profile without materializing the mosaic.
+
+    The combined per-vertex kernel, atlas thresholding, accumulation order, and
+    region ordering intentionally match ``AnatomicalCoverageEngine.compute``.
+    Planning does not consume per-channel shares, colors, hashes, or the sparse
+    25k mosaic, so constructing and validating those objects is pure overhead.
+    """
+    _validate_coverage_resource_limits(request)
+    engine = load_anatomical_coverage_engine()
+    ordered_channels = sorted(request.channels, key=_stable_id)
+    stable_ids = [_stable_id(channel) for channel in ordered_channels]
+    if len(set(stable_ids)) != len(stable_ids):
+        raise AnatomicalCoverageError("coverage_channel_id_duplicate")
+
+    settings = request.settings
+    surface_atlas = engine.surface_atlas
+    memberships = surface_atlas.atlas_memberships
+    label_indices = surface_atlas.atlas_label_indices
+    valid_slots = (
+        (label_indices != 255)
+        & (memberships > 0)
+        & (memberships >= settings.minimum_atlas_membership)
+    )
+    combined_weights = np.zeros(VERTEX_COUNT, dtype=np.float64)
+    for channel, stable_id in zip(ordered_channels, stable_ids, strict=True):
+        path = np.asarray(channel.points_ras_mm, dtype=np.float64)
+        if (
+            path.shape != (len(channel.points_ras_mm), 3)
+            or len(path) > ANATOMICAL_COVERAGE_LIMITS["maximumPathPointsPerChannel"]
+            or not np.all(np.isfinite(path))
+        ):
+            raise AnatomicalCoverageError(f"coverage_channel_path_invalid:{stable_id}")
+        if _path_length_mm(path) <= 1e-6:
+            raise AnatomicalCoverageError(f"coverage_channel_path_degenerate:{stable_id}")
+        np.maximum(
+            combined_weights,
+            _channel_kernel(
+                surface_atlas.vertices_ras_mm,
+                path,
+                settings.kernel_sigma_mm,
+                settings.support_radius_mm,
+            ),
+            out=combined_weights,
+        )
+
+    geometric_mask = combined_weights > 0
+    region_masses: dict[int, float] = {}
+    for slot in range(3):
+        selected = geometric_mask & valid_slots[:, slot]
+        if not np.any(selected):
+            continue
+        labels = label_indices[selected, slot].astype(np.int64, copy=False)
+        contributions = combined_weights[selected] * memberships[selected, slot]
+        combined_region_masses = np.bincount(
+            labels,
+            weights=contributions,
+            minlength=len(surface_atlas.atlas_labels),
+        )
+        for label in np.flatnonzero(combined_region_masses > 0):
+            region_masses[int(label)] = region_masses.get(int(label), 0.0) + float(
+                combined_region_masses[label]
+            )
+
+    total_region_mass = float(sum(region_masses.values()))
+    ordered_labels = sorted(
+        region_masses,
+        key=lambda label: (-region_masses[label], surface_atlas.atlas_labels[label].casefold(), label),
+    )
+    geometric_mass = float(combined_weights[geometric_mask].sum())
+    per_vertex_atlas_support = np.clip(
+        np.where(valid_slots, memberships, 0.0).sum(axis=1),
+        0.0,
+        1.0,
+    )
+    support_fraction = (
+        float(np.dot(
+            combined_weights[geometric_mask],
+            per_vertex_atlas_support[geometric_mask],
+        ) / geometric_mass)
+        if geometric_mass > 0 else 0.0
+    )
+    return {
+        "atlasId": CORTICAL_ATLAS_ID,
+        "atlasSupportFraction": support_fraction,
+        "regions": [{
+            "atlasId": CORTICAL_ATLAS_ID,
+            "labelEn": surface_atlas.atlas_labels[label],
+            "massFraction": region_masses[label] / total_region_mass,
+        } for label in ordered_labels] if total_region_mass > 0 else [],
+    }

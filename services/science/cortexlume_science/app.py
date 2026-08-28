@@ -24,6 +24,7 @@ from . import (
 from .anatomical_coverage import (
     AnatomicalCoverageError,
     compute_anatomical_coverage,
+    compute_anatomical_coverage_summary,
     cortical_region_target,
     list_cortical_regions,
     target_anatomical_profile,
@@ -602,7 +603,7 @@ def anatomical_coverage_summary(
     """Return only the compact atlas distribution needed by Agent planning."""
     authorize(authorization)
     try:
-        analysis = compute_anatomical_coverage(request)
+        return compute_anatomical_coverage_summary(request)
     except AnatomicalCoverageError as error:
         detail = str(error)
         if detail.startswith("coverage_request_limit_exceeded"):
@@ -610,15 +611,6 @@ def anatomical_coverage_summary(
         if detail.startswith(("coverage_channel_", "coverage_kernel_")):
             raise HTTPException(status_code=422, detail=detail) from error
         raise HTTPException(status_code=503, detail=detail) from error
-    return {
-        "atlasId": analysis.provenance.atlas_id,
-        "atlasSupportFraction": analysis.qc.atlas_support_fraction,
-        "regions": [{
-            "atlasId": region.atlas_id,
-            "labelEn": region.label_en,
-            "massFraction": region.covered_atlas_mass_fraction,
-        } for region in analysis.regions],
-    }
 
 
 @app.post("/v1/projects/validate")

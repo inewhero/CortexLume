@@ -38,7 +38,7 @@ export function buildAnatomicalCoverageRequest(
         const source = positions.get(pair.sourceId);
         const detector = positions.get(pair.detectorId);
         if (!source || !detector) return [];
-        const transmissionDepthMm = project.projectionSettings.pairDepthOverridesMm[pair.id]
+        const transmissionDepthMm = instance.pairDepthOverridesMm?.[pair.id]
           ?? defaultDepthMm;
         return [{
           instanceId: instance.id,

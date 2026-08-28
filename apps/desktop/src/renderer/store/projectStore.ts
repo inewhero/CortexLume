@@ -83,7 +83,7 @@ function createProject(): CortexLumeProject {
   const timestamp = now();
   return {
     format: 'cortexlume-project',
-    formatVersion: 2,
+    formatVersion: 3,
     id: id(),
     name: 'Untitled layout study',
     createdAt: timestamp,
@@ -121,7 +121,6 @@ function createProject(): CortexLumeProject {
     projectionSettings: {
       mode: 'scalp',
       defaultDepthMm: 25,
-      pairDepthOverridesMm: {},
       atlasProbabilityThreshold: 0,
       optodeRadiusMm: 3.6,
     },
@@ -237,6 +236,7 @@ interface ProjectStore {
   setProjectionMode(mode: 'scalp' | 'cortex'): void;
   setOptodeRadius(radiusMm: number): void;
   setDefaultDepth(depth: number | null): void;
+  setPairDepthOverride(instanceId: string, pairId: string, depth: number | null): void;
   setAnatomyLayer(layer: keyof AnatomyVisibility, visible: boolean): void;
   setAnatomyAppearance(layer: keyof AnatomyAppearance, appearance: Partial<AnatomyAppearance[keyof AnatomyAppearance]>): void;
 }
@@ -866,6 +866,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         visible: true,
         locked: true,
         overrides: [],
+        pairDepthOverridesMm: {},
         digitizerPositions: [],
         derivedFromInstanceId: null,
         digitizerSessionId: null,
@@ -1069,6 +1070,21 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         updatedAt: now(),
         projectionSettings: { ...state.project.projectionSettings, defaultDepthMm },
         verifiedResults: [],
+      },
+      projectRevision: state.projectRevision + 1,
+    })),
+    setPairDepthOverride: (instanceId, pairId, depthMm) => set((state) => ({
+      project: {
+        ...state.project,
+        updatedAt: now(),
+        instances: state.project.instances.map((instance) => {
+          if (instance.id !== instanceId) return instance;
+          const pairDepthOverridesMm = { ...(instance.pairDepthOverridesMm ?? {}) };
+          if (depthMm == null) delete pairDepthOverridesMm[pairId];
+          else pairDepthOverridesMm[pairId] = Math.max(1, Math.min(100, depthMm));
+          return { ...instance, pairDepthOverridesMm };
+        }),
+        verifiedResults: state.project.verifiedResults.filter((result) => result.instanceId !== instanceId),
       },
       projectRevision: state.projectRevision + 1,
     })),

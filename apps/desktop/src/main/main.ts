@@ -1,9 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import squirrelStartupHandled from 'electron-squirrel-startup';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { existsSync, rmSync } from 'node:fs';
-import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 // The shared contracts package intentionally stays on Zod 3 for broad
 // consumer compatibility; use the compatibility entry point here so tuple
@@ -53,6 +52,7 @@ import { fitPlacementWireRequest } from './fitPlacementWire';
 import { createTrustedIpcHandler } from './ipcSecurity';
 import { ProjectOperationManager, type ProjectOperation } from './projectOperation';
 import { checkGithubUpdate } from './startupLifecycle';
+import { durableAtomicReplace, stableReadRegularFile } from './durableFile';
 import type { UpdateCheckResult } from '../shared/startup';
 
 let mainWindow: BrowserWindow | null = null;
@@ -249,15 +249,10 @@ async function atomicWrite(
   const previous = destinationWrites.get(resolved) ?? Promise.resolve();
   const write = previous.catch(() => undefined).then(async () => {
     checkWriteGuard(options);
-    const temporary = `${resolved}.${process.pid}.${randomUUID()}.tmp`;
-    await writeFile(temporary, data);
-    try {
-      checkWriteGuard(options);
-      await rename(temporary, resolved);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      throw error;
-    }
+    await durableAtomicReplace(resolved, data, {
+      ensureParent: true,
+      beforePublish: () => checkWriteGuard(options),
+    });
   });
   destinationWrites.set(resolved, write);
   try {
@@ -349,28 +344,7 @@ function ensureProjectExtension(destination: string): string {
 }
 
 async function readBoundedFile(filePath: string, maximumBytes: number, label: string): Promise<Buffer> {
-  const handle = await open(filePath, 'r');
-  try {
-    const before = await handle.stat();
-    if (!before.isFile()) throw new Error(`${label} must be a regular file.`);
-    if (before.size > maximumBytes) {
-      throw new Error(`${label} exceeds the ${maximumBytes} byte limit.`);
-    }
-    const bytes = Buffer.alloc(before.size);
-    let offset = 0;
-    while (offset < bytes.byteLength) {
-      const { bytesRead } = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
-      if (bytesRead === 0) break;
-      offset += bytesRead;
-    }
-    const after = await handle.stat();
-    if (offset !== bytes.byteLength || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
-      throw new Error(`${label} changed while it was being read.`);
-    }
-    return bytes;
-  } finally {
-    await handle.close();
-  }
+  return stableReadRegularFile(filePath, maximumBytes, { label });
 }
 
 async function readProjectFile(projectPath: string): Promise<Uint8Array> {

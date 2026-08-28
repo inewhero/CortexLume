@@ -5,9 +5,7 @@ import { z } from 'zod';
 import {
   CROSS_PROCESS_LIMITS,
   CortexLumeProjectSchema,
-  CortexLumeProjectV1Schema,
-  CortexLumeProjectV2Schema,
-  migrateProjectV1ToV2,
+  TemplateRefSchema,
   type CortexLumeProject,
 } from '@cortexlume/contracts';
 
@@ -193,18 +191,35 @@ export function preflightProjectArchive(data: Uint8Array): void {
 
 export const ProjectArchiveManifestSchema = z.object({
   format: z.literal('cortexlume-project'),
-  formatVersion: z.union([z.literal(1), z.literal(2)]),
+  formatVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   projectId: z.string().uuid(),
   projectName: z.string().max(256).optional(),
   savedAt: z.string().datetime().optional(),
   applicationVersion: z.string().max(128).optional(),
   projectSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  template: z.unknown(),
+  template: TemplateRefSchema,
 });
 export type ProjectArchiveManifest = z.infer<typeof ProjectArchiveManifestSchema>;
 
 export function sha256Bytes(data: Uint8Array): string {
   return createHash('sha256').update(data).digest('hex');
+}
+
+/**
+ * Compare manifest objects by structure rather than source key order. Zod
+ * currently emits schema-shaped objects in a stable order, but the archive
+ * boundary should not make that implementation detail part of its contract.
+ */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+      .join(',')}}`;
+  }
+  if (value === undefined) return 'undefined';
+  return JSON.stringify(value) ?? 'undefined';
 }
 
 export function canonicalProjectBytes(project: CortexLumeProject): Uint8Array {
@@ -216,7 +231,7 @@ export function createProjectArchive(project: CortexLumeProject, applicationVers
   const projectBytes = canonicalProjectBytes(validated);
   const manifest = ProjectArchiveManifestSchema.parse({
     format: validated.format,
-    formatVersion: 2,
+    formatVersion: validated.formatVersion,
     projectId: validated.id,
     projectName: validated.name,
     savedAt: new Date().toISOString(),
@@ -242,7 +257,7 @@ export function createProjectArchive(project: CortexLumeProject, applicationVers
 export interface ReadProjectArchiveResult {
   project: CortexLumeProject;
   manifest: ProjectArchiveManifest;
-  sourceFormatVersion: 1 | 2;
+  sourceFormatVersion: 1 | 2 | 3;
   migrated: boolean;
   archiveProjectSha256: string;
 }
@@ -260,19 +275,23 @@ export function readProjectArchiveDetailed(data: Uint8Array): ReadProjectArchive
   const rawVersion = raw && typeof raw === 'object' && 'formatVersion' in raw
     ? (raw as { formatVersion?: unknown }).formatVersion
     : null;
-  if (rawVersion !== 1 && rawVersion !== 2) throw new Error('Unsupported CortexLume project format version');
+  if (rawVersion !== 1 && rawVersion !== 2 && rawVersion !== 3) throw new Error('Unsupported CortexLume project format version');
   if (manifest.formatVersion !== rawVersion) throw new Error('Project archive manifest version does not match project.json');
   if (manifest.projectSha256 !== sha256Bytes(projectBytes)) throw new Error('Project archive integrity check failed');
 
-  const project = CortexLumeProjectSchema.parse(rawVersion === 1
-    ? migrateProjectV1ToV2(CortexLumeProjectV1Schema.parse(raw))
-    : CortexLumeProjectV2Schema.parse(raw));
+  const project = CortexLumeProjectSchema.parse(raw);
   if (manifest.projectId !== project.id) throw new Error('Project archive manifest belongs to a different project');
+  if (manifest.projectName != null && manifest.projectName !== project.name) {
+    throw new Error('Project archive manifest name does not match project.json');
+  }
+  if (canonicalJson(manifest.template) !== canonicalJson(project.template)) {
+    throw new Error('Project archive manifest template does not match project.json');
+  }
   return {
     project,
     manifest,
     sourceFormatVersion: rawVersion,
-    migrated: rawVersion === 1,
+    migrated: rawVersion < 3,
     archiveProjectSha256: sha256Bytes(projectBytes),
   };
 }
