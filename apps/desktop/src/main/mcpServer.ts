@@ -58,6 +58,212 @@ interface PlanCacheEntry {
     recommendedPatchCount: number;
     flags: string[];
   };
+  /** Absolute expiry retained in the response so clients can refresh plans before use. */
+  expiresAt: string;
+}
+
+export const MCP_PLAN_CACHE_MAX_ENTRIES = 32;
+export const MCP_PLAN_CACHE_TTL_MS = 45 * 60 * 1000;
+/** Estimated retained object-graph budget, independent of the entry cap. */
+export const MCP_PLAN_CACHE_MAX_ESTIMATED_BYTES = 96 * 1024 * 1024;
+export const MCP_TARGET_ANATOMY_CACHE_MAX_ENTRIES = 96;
+export const MCP_TARGET_ANATOMY_CACHE_TTL_MS = 45 * 60 * 1000;
+export const MCP_TARGET_ANATOMY_CACHE_MAX_ESTIMATED_BYTES = 4 * 1024 * 1024;
+
+export interface BoundedCacheStats {
+  size: number;
+  maxEntries: number;
+  ttlMs: number;
+  estimatedBytes: number;
+  maxEstimatedBytes: number | null;
+  evictionCount: number;
+  /** Alias kept concise for telemetry consumers. */
+  evictions: number;
+}
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAtMs: number;
+  estimatedBytes: number;
+}
+
+/**
+ * Small insertion-ordered LRU cache with an absolute TTL.  Map iteration order
+ * is used deliberately: deleting and re-inserting a hit makes it the newest
+ * entry while the first entry remains the least recently used one.  This is
+ * shared by plans and target profiles so neither unbounded object graph can
+ * accumulate in a long-running stdio MCP process.
+ */
+export class BoundedTtlCache<K, V> {
+  private readonly entries = new Map<K, CacheEntry<V>>();
+  private evictions = 0;
+  private retainedEstimatedBytes = 0;
+
+  constructor(
+    private readonly maxEntries: number,
+    private readonly ttlMs: number,
+    private readonly now: () => number = Date.now,
+    private readonly maxEstimatedBytes: number = Number.POSITIVE_INFINITY,
+    private readonly estimateBytes: (value: V) => number = () => 1,
+  ) {
+    if (!Number.isInteger(maxEntries) || maxEntries < 1) throw new Error('Cache maxEntries must be a positive integer');
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) throw new Error('Cache ttlMs must be positive');
+    if (!(maxEstimatedBytes > 0)) throw new Error('Cache maxEstimatedBytes must be positive');
+  }
+
+  get(key: K): V | undefined {
+    const entry = this.getEntry(key);
+    return entry?.value;
+  }
+
+  getEntry(key: K): { value: V; expiresAtMs: number } | undefined {
+    const entry = this.entries.get(key);
+    if (!entry) return undefined;
+    const now = this.now();
+    if (entry.expiresAtMs <= now) {
+      this.remove(key, entry);
+      this.evictions += 1;
+      return undefined;
+    }
+    // A hit is both an LRU refresh and a TTL refresh.  Refreshing both is
+    // important for repeated planning sessions that remain active for hours.
+    this.entries.delete(key);
+    const refreshed = { ...entry, expiresAtMs: now + this.ttlMs };
+    this.entries.set(key, refreshed);
+    return refreshed;
+  }
+
+  set(key: K, value: V): { value: V; expiresAtMs: number } {
+    this.purgeExpired();
+    const estimatedBytes = Math.max(0, Math.ceil(this.estimateBytes(value)));
+    if (!Number.isFinite(estimatedBytes)) throw new Error('Cache entry byte estimate must be finite');
+    if (estimatedBytes > this.maxEstimatedBytes) {
+      throw new Error(`Cache entry exceeds its ${this.maxEstimatedBytes}-byte estimated-memory budget`);
+    }
+    const previous = this.entries.get(key);
+    if (previous) this.remove(key, previous);
+    const entry = { value, expiresAtMs: this.now() + this.ttlMs, estimatedBytes };
+    this.entries.set(key, entry);
+    this.retainedEstimatedBytes += estimatedBytes;
+    while (this.entries.size > this.maxEntries || this.retainedEstimatedBytes > this.maxEstimatedBytes) {
+      const oldest = this.entries.keys().next().value as K | undefined;
+      if (oldest === undefined) break;
+      const oldestEntry = this.entries.get(oldest);
+      if (oldestEntry) this.remove(oldest, oldestEntry);
+      this.evictions += 1;
+    }
+    return entry;
+  }
+
+  delete(key: K): boolean {
+    const entry = this.entries.get(key);
+    if (!entry) return false;
+    this.remove(key, entry);
+    return true;
+  }
+
+  clear(): void {
+    this.entries.clear();
+    this.retainedEstimatedBytes = 0;
+  }
+
+  get size(): number {
+    return this.stats().size;
+  }
+
+  get evictionCount(): number {
+    return this.evictions;
+  }
+
+  stats(): BoundedCacheStats {
+    this.purgeExpired();
+    return {
+      size: this.entries.size,
+      maxEntries: this.maxEntries,
+      ttlMs: this.ttlMs,
+      estimatedBytes: this.retainedEstimatedBytes,
+      maxEstimatedBytes: Number.isFinite(this.maxEstimatedBytes) ? this.maxEstimatedBytes : null,
+      evictionCount: this.evictions,
+      evictions: this.evictions,
+    };
+  }
+
+  private purgeExpired(): void {
+    const now = this.now();
+    for (const [key, entry] of this.entries) {
+      if (entry.expiresAtMs > now) continue;
+      this.remove(key, entry);
+      this.evictions += 1;
+    }
+  }
+
+  private remove(key: K, entry: CacheEntry<V>): void {
+    if (!this.entries.delete(key)) return;
+    this.retainedEstimatedBytes -= entry.estimatedBytes;
+  }
+}
+
+function estimatedJsonObjectBytes(value: unknown): number {
+  // JSON bytes are deterministic to measure. Doubling them is a conservative
+  // approximation for retained JS strings/object fields; telemetry labels the
+  // result as an estimate rather than claiming to report process RSS.
+  return Math.max(64, Buffer.byteLength(JSON.stringify(value), 'utf8') * 2);
+}
+
+/**
+ * Gate all MCP uses of the shared science sidecar.  Ordinary requests share a
+ * sidecar, but once an exclusive planning section is queued, later requests
+ * wait for it.  This second (runtime-level) gate is deliberate: tests and
+ * embedders may provide a ScienceClient-shaped object rather than the concrete
+ * ScienceClient, and `stop()` must still never race an MCP request in flight.
+ */
+export class ScienceLifecycleGate {
+  private activeRequests = 0;
+  private exclusiveActive = false;
+  private readonly queuedRequests: Array<() => void> = [];
+  private readonly queuedExclusives: Array<() => Promise<void>> = [];
+
+  request<T>(operation: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.queuedRequests.push(() => {
+        this.activeRequests += 1;
+        void Promise.resolve().then(operation).then(resolve, reject).finally(() => {
+          this.activeRequests -= 1;
+          this.pump();
+        });
+      });
+      this.pump();
+    });
+  }
+
+  withExclusive<T>(operation: () => Promise<T> | T): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.queuedExclusives.push(async () => {
+        try {
+          resolve(await operation());
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        } finally {
+          this.exclusiveActive = false;
+          this.pump();
+        }
+      });
+      this.pump();
+    });
+  }
+
+  private pump(): void {
+    if (this.exclusiveActive || this.activeRequests > 0) return;
+    const exclusive = this.queuedExclusives.shift();
+    if (exclusive) {
+      this.exclusiveActive = true;
+      void exclusive();
+      return;
+    }
+    // Requests already queued before an exclusive section are intentionally
+    // drained together; a later exclusive waits for all of their leases.
+    while (this.queuedRequests.length > 0) this.queuedRequests.shift()?.();
+  }
 }
 
 export interface McpRuntimeOptions {
@@ -65,6 +271,8 @@ export interface McpRuntimeOptions {
   science: ScienceClient;
   applicationVersion: string;
   authorizedRoots?: string[];
+  /** Injectable clock keeps runtime timestamps and cache expiry deterministic. */
+  clock?: () => number;
   openGui(projectPath: string): Promise<void> | void;
 }
 
@@ -188,17 +396,41 @@ function buildProjectionResults(head: LoadedHeadModel['headModel'], candidate: P
 }
 
 export class CortexLumeMcpRuntime {
-  private readonly plans = new Map<string, PlanCacheEntry>();
-  private readonly targetAnatomyCache = new Map<string, PlanningAnatomicalProfile>();
+  private readonly plans: BoundedTtlCache<string, PlanCacheEntry>;
+  private readonly targetAnatomyCache: BoundedTtlCache<string, PlanningAnatomicalProfile>;
+  /** Coalesce concurrent misses for the same immutable target map. */
+  private readonly targetAnatomyLoads = new Map<string, Promise<{ profile: PlanningAnatomicalProfile; expiresAtMs: number }>>();
+  private readonly scienceLifecycle = new ScienceLifecycleGate();
   private readonly roots: string[];
+  private readonly clock: () => number;
   private headPromise: Promise<LoadedHeadModel> | null = null;
 
   constructor(private readonly options: McpRuntimeOptions) {
+    this.clock = options.clock ?? Date.now;
     const configured = (options.authorizedRoots ?? [])
       .map((root) => root.trim())
       .filter((root) => root.length > 0);
     if (configured.length === 0) throw new Error(MCP_ROOT_CONFIGURATION_ERROR);
     this.roots = configured.map((root) => path.resolve(root));
+    this.plans = new BoundedTtlCache<string, PlanCacheEntry>(
+      MCP_PLAN_CACHE_MAX_ENTRIES,
+      MCP_PLAN_CACHE_TTL_MS,
+      this.clock,
+      MCP_PLAN_CACHE_MAX_ESTIMATED_BYTES,
+      estimatedJsonObjectBytes,
+    );
+    this.targetAnatomyCache = new BoundedTtlCache<string, PlanningAnatomicalProfile>(
+      MCP_TARGET_ANATOMY_CACHE_MAX_ENTRIES,
+      MCP_TARGET_ANATOMY_CACHE_TTL_MS,
+      this.clock,
+      MCP_TARGET_ANATOMY_CACHE_MAX_ESTIMATED_BYTES,
+      estimatedJsonObjectBytes,
+    );
+  }
+
+  /** Return bounded-cache telemetry for diagnostics and long-running MCP hosts. */
+  cacheStats(): { plans: BoundedCacheStats; targetAnatomy: BoundedCacheStats } {
+    return { plans: this.plans.stats(), targetAnatomy: this.targetAnatomyCache.stats() };
   }
 
   start(): void {
@@ -207,7 +439,7 @@ export class CortexLumeMcpRuntime {
 
   createServer(): McpServer {
     const server = new McpServer({ name: 'CortexLume', version: this.options.applicationVersion }, {
-      instructions: 'Read list_targets before searching or selecting a Quick Target. Use search_targets only to narrow the known catalog, and list_atlas_regions for anatomical targets. plan_project returns functional, robustness, specificity, and Harvard–Oxford anatomical summaries for three candidates without writing files. Broad distributed targets may recommend multiple patches. save_project writes a unique derived .cortexlume archive and never overwrites. open_project starts a separate desktop window for human review.',
+      instructions: 'Read list_targets before searching or selecting a Quick Target. Use search_targets only to narrow the known catalog, and list_atlas_regions for anatomical targets. plan_project returns functional, robustness, specificity, and Harvard–Oxford anatomical summaries for three candidates without writing files. Broad distributed targets may recommend multiple patches. save_project writes a unique derived .cortexlume archive and never overwrites; release_plan releases an unused cached plan early. open_project starts a separate desktop window for human review.',
     });
 
     server.registerTool('get_capabilities', {
@@ -218,7 +450,7 @@ export class CortexLumeMcpRuntime {
       let assetState: Record<string, unknown>;
       try {
         const assets = await this.head();
-        const health = await this.options.science.request<Record<string, unknown>>('/v1/health');
+        const health = await this.scienceRequest<Record<string, unknown>>('/v1/health');
         assetState = { ready: true, hashes: assets.assetHashes, science: health };
       } catch (error) {
         assetState = { ready: false, error: error instanceof Error ? error.message : String(error) };
@@ -231,6 +463,7 @@ export class CortexLumeMcpRuntime {
         defaults: { longChannelRangeMm: [25, 40], surfaceDistanceToleranceMm: 1.5, maximumScalpCortexGapMm: 40, kernelSigmaMm: 12, supportRadiusMm: 24, transmissionDepthMm: 25, candidateCount: 3, overlapThresholdMm: 12 },
         quickTargetDiscovery: { firstTool: 'list_targets', thenTool: 'search_targets', catalogIsOffline: true },
         authorizedRoots: this.roots,
+        cache: this.cacheStats(),
         assets: assetState,
       });
     });
@@ -239,19 +472,19 @@ export class CortexLumeMcpRuntime {
       title: 'List Quick Target catalog',
       description: 'Read the complete compact offline Quick Target catalog, grouped by domain, before choosing search terms or a target ID.',
       inputSchema: {},
-    }, async () => toolResult(await this.options.science.request<Record<string, unknown>>('/v1/targets/catalog')));
+    }, async () => toolResult(await this.scienceRequest<Record<string, unknown>>('/v1/targets/catalog')));
 
     server.registerTool('search_targets', {
       title: 'Search Quick Targets',
       description: 'Narrow the installed offline Quick Target catalog after list_targets has established the available vocabulary.',
       inputSchema: { query: z.string().max(120).default(''), limit: z.number().int().min(1).max(50).default(20) },
-    }, async ({ query, limit }) => toolResult(await this.options.science.request<Record<string, unknown>>(`/v1/targets?q=${encodeURIComponent(query)}&limit=${limit}`)));
+    }, async ({ query, limit }) => toolResult(await this.scienceRequest<Record<string, unknown>>(`/v1/targets?q=${encodeURIComponent(query)}&limit=${limit}`)));
 
     server.registerTool('list_atlas_regions', {
       title: 'List Harvard-Oxford cortical regions',
       description: 'Return exact legal Harvard-Oxford cortical region names accepted by plan_project.',
       inputSchema: {},
-    }, async () => toolResult(await this.options.science.request<Record<string, unknown>>('/v1/atlas/cortical-regions')));
+    }, async () => toolResult(await this.scienceRequest<Record<string, unknown>>('/v1/atlas/cortical-regions')));
 
     const patchSchema = z.object({
       name: z.string().min(1).max(80).optional(), columns: z.number().int().min(1).max(12).default(5), rows: z.number().int().min(1).max(12).default(3),
@@ -306,15 +539,33 @@ export class CortexLumeMcpRuntime {
         sourceProjectSha256: source?.archiveProjectSha256 ?? null,
       } as Record<string, unknown>;
       const requestHash = sha256Text(canonical(canonicalRequest));
-      let targetAnatomy = this.targetAnatomyCache.get(target.provenance.mapSha256);
+      const targetCacheEntry = this.targetAnatomyCache.getEntry(target.provenance.mapSha256);
+      let targetAnatomy = targetCacheEntry?.value;
+      let targetAnatomyExpiresAt = targetCacheEntry
+        ? new Date(targetCacheEntry.expiresAtMs).toISOString()
+        : null;
       if (!targetAnatomy) {
+        const targetKey = target.provenance.mapSha256;
+        let profileLoad = this.targetAnatomyLoads.get(targetKey);
+        if (!profileLoad) {
+          profileLoad = (async () => {
+            const profile = PlanningAnatomicalProfileSchema.parse(await this.scienceRequest('/v1/coverage/target-profile', {
+              vertexIndices: target.vertexIndices,
+              vertexMasses: target.vertexIndices.map((vertex, index) => assets.headModel.vertexAreasMm2[vertex]! * target.values[index]!),
+              minimumAtlasMembership: PLANNING_COVERAGE_SETTINGS.minimumAtlasMembership,
+            }));
+            const cachedTarget = this.targetAnatomyCache.set(targetKey, profile);
+            return { profile, expiresAtMs: cachedTarget.expiresAtMs };
+          })();
+          this.targetAnatomyLoads.set(targetKey, profileLoad);
+          void profileLoad.finally(() => {
+            if (this.targetAnatomyLoads.get(targetKey) === profileLoad) this.targetAnatomyLoads.delete(targetKey);
+          }).catch(() => undefined);
+        }
         try {
-          targetAnatomy = PlanningAnatomicalProfileSchema.parse(await this.options.science.request('/v1/coverage/target-profile', {
-            vertexIndices: target.vertexIndices,
-            vertexMasses: target.vertexIndices.map((vertex, index) => assets.headModel.vertexAreasMm2[vertex]! * target.values[index]!),
-            minimumAtlasMembership: PLANNING_COVERAGE_SETTINGS.minimumAtlasMembership,
-          }));
-          this.targetAnatomyCache.set(target.provenance.mapSha256, targetAnatomy);
+          const loaded = await profileLoad;
+          targetAnatomy = loaded.profile;
+          targetAnatomyExpiresAt = new Date(loaded.expiresAtMs).toISOString();
         } catch (error) {
           throw new Error(`Target anatomical profile failed: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -324,10 +575,12 @@ export class CortexLumeMcpRuntime {
       // peak-memory window and makes repeated planning reuse the hash cache.
       // MCP owns a dedicated sidecar, so release its loaded NumPy assets while
       // the mesh search runs; the first candidate summary restarts it cleanly.
-      this.options.science.stop();
-      const result = planLayouts(assets.headModel, {
-        target, patches: request.patches as PlannerPatchSpec[], longChannelRangeMm: request.longChannelRangeMm,
-        optodeRadiusMm: request.optodeRadiusMm, transmissionDepthMm: request.transmissionDepthMm, seed: `${request.seed}:${requestHash}`,
+      const result = await this.scienceLifecycle.withExclusive(() => {
+        this.options.science.stop();
+        return planLayouts(assets.headModel, {
+          target, patches: request.patches as PlannerPatchSpec[], longChannelRangeMm: request.longChannelRangeMm,
+          optodeRadiusMm: request.optodeRadiusMm, transmissionDepthMm: request.transmissionDepthMm, seed: `${request.seed}:${requestHash}`,
+        });
       });
       // The local science sidecar intentionally stays single-workload here:
       // three concurrent 25k-surface atlas reductions contend for the same
@@ -335,7 +588,7 @@ export class CortexLumeMcpRuntime {
       for (const [candidateIndex, candidate] of result.candidates.entries()) {
         let fullProfile: PlanningAnatomicalProfile;
         try {
-          fullProfile = PlanningAnatomicalProfileSchema.parse(await this.options.science.request(
+          fullProfile = PlanningAnatomicalProfileSchema.parse(await this.scienceRequest(
             '/v1/coverage/anatomical-summary',
             buildCandidateCoverageRequest(assets.headModel, candidate, request.optodeRadiusMm, request.transmissionDepthMm),
           ));
@@ -368,18 +621,23 @@ export class CortexLumeMcpRuntime {
         planId, requestHash, canonicalRequest, seed: request.seed, target, candidates: result.candidates,
         recommendedCandidateId: result.recommendedCandidateId,
         sourceProject: source?.project ?? null, sourceProjectSha256: source?.archiveProjectSha256 ?? null,
-        plannedAt: new Date().toISOString(),
+        plannedAt: new Date(this.clock()).toISOString(),
         optodeRadiusMm: request.optodeRadiusMm,
         transmissionDepthMm: request.transmissionDepthMm,
         targetAnatomy,
         guidance,
+        expiresAt: '',
       };
-      this.plans.set(planId, entry);
+      const cachedEntry = this.plans.set(planId, entry);
+      entry.expiresAt = new Date(cachedEntry.expiresAtMs).toISOString();
       return toolResult({
         planId,
+        expiresAt: entry.expiresAt,
+        targetAnatomyExpiresAt,
         recommendedCandidateId: entry.recommendedCandidateId,
         target: target.target,
         targetAnatomy,
+        cache: this.cacheStats(),
         guidance,
         candidates: entry.candidates.map((candidate) => candidate.summary),
       });
@@ -387,11 +645,17 @@ export class CortexLumeMcpRuntime {
 
     server.registerTool('save_project', {
       title: 'Save a planned CortexLume project',
-      description: 'Write the selected candidate as a validated v2 archive under an authorized root; path collisions receive a unique suffix and existing files are never overwritten.',
-      inputSchema: { planId: z.string().min(1), candidateId: z.string().min(1), outputPath: z.string().min(1), projectName: z.string().min(1).max(120).optional() },
-    }, async ({ planId, candidateId, outputPath, projectName }) => {
-      const entry = this.plans.get(planId);
+      description: 'Write the selected candidate as a validated v2 archive under an authorized root; path collisions receive a unique suffix and existing files are never overwritten. A successful save consumes the one-shot plan unless consumePlan is explicitly false.',
+      inputSchema: {
+        planId: z.string().min(1), candidateId: z.string().min(1), outputPath: z.string().min(1),
+        projectName: z.string().min(1).max(120).optional(),
+        consumePlan: z.boolean().default(true),
+      },
+    }, async ({ planId, candidateId, outputPath, projectName, consumePlan }) => {
+      const cachedPlan = this.plans.getEntry(planId);
+      const entry = cachedPlan?.value;
       if (!entry) throw new Error('Unknown or expired planId. Run plan_project in this MCP session first.');
+      entry.expiresAt = new Date(cachedPlan.expiresAtMs).toISOString();
       const candidate = entry.candidates.find((item) => item.summary.stableId === candidateId);
       if (!candidate) throw new Error('candidateId does not belong to this plan.');
       if (!candidate.summary.accepted) throw new Error(`Rejected candidate cannot be saved: ${candidate.summary.rejectionReasons.join(', ')}`);
@@ -401,8 +665,27 @@ export class CortexLumeMcpRuntime {
         outputPath,
         createProjectArchive(project, this.options.applicationVersion),
       );
-      return toolResult({ path: destination, projectId: project.id, formatVersion: 2, selectedCandidateId: candidateId, sha256: sha256Bytes(await readFile(destination)) });
+      const archiveSha256 = sha256Bytes(await readFile(destination));
+      // Plans are one-shot by default. A caller that deliberately needs more
+      // than one derived archive may opt out; idle plans remain TTL/LRU/byte
+      // bounded and can also be released explicitly.
+      if (consumePlan) this.plans.delete(planId);
+      return toolResult({
+        path: destination, projectId: project.id, formatVersion: 2, selectedCandidateId: candidateId,
+        expiresAt: consumePlan ? null : entry.expiresAt,
+        sha256: archiveSha256,
+      });
     });
+
+    server.registerTool('release_plan', {
+      title: 'Release a cached CortexLume plan',
+      description: 'Release a plan and its candidate object graph before its normal TTL expires. Releasing an unknown or already expired plan is idempotent.',
+      inputSchema: { planId: z.string().min(1) },
+    }, async ({ planId }) => toolResult({
+      planId,
+      released: this.plans.delete(planId),
+      cache: this.cacheStats(),
+    }));
 
     server.registerTool('inspect_project', {
       title: 'Inspect a CortexLume project',
@@ -442,14 +725,18 @@ export class CortexLumeMcpRuntime {
     return this.headPromise;
   }
 
+  private scienceRequest<T>(pathname: string, payload?: unknown): Promise<T> {
+    return this.scienceLifecycle.request(() => this.options.science.request<T>(pathname, payload));
+  }
+
   private async resolveTarget(target: { kind: string; [key: string]: unknown }, assets: LoadedHeadModel): Promise<FunctionalTargetMap> {
-    if (target.kind === 'quick-target') return FunctionalTargetMapSchema.parse(await this.options.science.request(`/v1/targets/${encodeURIComponent(String(target.id))}`));
-    if (target.kind === 'harvard-oxford-region') return FunctionalTargetMapSchema.parse(await this.options.science.request('/v1/atlas/cortical-region-target', { label: target.label }));
+    if (target.kind === 'quick-target') return FunctionalTargetMapSchema.parse(await this.scienceRequest(`/v1/targets/${encodeURIComponent(String(target.id))}`));
+    if (target.kind === 'harvard-oxford-region') return FunctionalTargetMapSchema.parse(await this.scienceRequest('/v1/atlas/cortical-region-target', { label: target.label }));
     if (target.kind === 'nifti') {
       const inputPath = await this.authorizedPath(String(target.path), true);
       if (!/\.nii(?:\.gz)?$/i.test(inputPath)) throw new Error('NIfTI target path must end in .nii or .nii.gz.');
       return withStagedNiftiFile(inputPath, async (stagedPath, sourceFileName) => {
-        const response = await this.options.science.request<Record<string, unknown>>('/v1/targets/import', {
+        const response = await this.scienceRequest<Record<string, unknown>>('/v1/targets/import', {
           fileName: sourceFileName, declaredSpace: target.declaredSpace, filePath: stagedPath,
         });
         if (!response.accepted || !response.map) throw new Error(`NIfTI target was rejected: ${JSON.stringify(response.diagnostics ?? [])}`);
@@ -476,7 +763,7 @@ export class CortexLumeMcpRuntime {
     const assets = await this.head();
     const manifestBytes = await readFile(path.join(this.options.templateRoot, 'manifest.json'));
     const manifestSha256 = sha256Bytes(Buffer.from(manifestBytes.toString('utf8').replace(/\r\n/g, '\n')));
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date(this.clock()).toISOString();
     const selectedId = candidate.summary.stableId;
     const planning: AgentPlanningRecord = {
       version: 1, engine: 'cortexlume-deterministic-planner', engineVersion: this.options.applicationVersion,

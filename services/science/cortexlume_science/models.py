@@ -4,7 +4,9 @@ from math import isclose
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+
+from .coverage_limits import ANATOMICAL_COVERAGE_LIMITS, CROSS_PROCESS_LIMITS, coverage_limit_error
 
 
 def to_camel(value: str) -> str:
@@ -18,6 +20,11 @@ class ContractModel(BaseModel):
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
+# Atlas coordinates cross a JSON/NumPy boundary and must have the same finite
+# number guarantee as the TypeScript Vec3Schema.  Keep this narrower alias
+# local to atlas requests so legacy project geometry remains wire-compatible.
+FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
+FiniteVec3 = tuple[FiniteFloat, FiniteFloat, FiniteFloat]
 
 
 class Optode(ContractModel):
@@ -142,30 +149,51 @@ class ProjectValidationRequest(ContractModel):
 
 
 class AtlasQueryPoint(ContractModel):
-    id: str
-    cortical_ras_mm: Vec3 | None = None
-    deep_target_ras_mm: Vec3 | None = None
+    id: Annotated[str, Field(min_length=1, max_length=128)]
+    cortical_ras_mm: FiniteVec3 | None = None
+    deep_target_ras_mm: FiniteVec3 | None = None
 
 
 class AtlasQueryRequest(ContractModel):
-    points: list[AtlasQueryPoint]
-    probability_threshold: Annotated[float, Field(ge=0, le=1)] = 0.0
+    points: Annotated[list[AtlasQueryPoint], Field(min_length=1, max_length=CROSS_PROCESS_LIMITS["atlasBatchPoints"])]
+    probability_threshold: Annotated[FiniteFloat, Field(ge=0, le=1)] = 0.0
 
 
 class AtlasPathQueryRequest(ContractModel):
-    points: Annotated[list[Vec3], Field(min_length=1, max_length=129)]
-    probability_threshold: Annotated[float, Field(ge=0, le=1)] = 0.0
+    points: Annotated[list[FiniteVec3], Field(
+        min_length=1,
+        max_length=ANATOMICAL_COVERAGE_LIMITS["maximumPathPointsPerChannel"],
+    )]
+    probability_threshold: Annotated[FiniteFloat, Field(ge=0, le=1)] = 0.0
 
 
-FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
-FiniteVec3 = tuple[FiniteFloat, FiniteFloat, FiniteFloat]
+class AtlasPathQueryBatchItem(ContractModel):
+    id: Annotated[str, Field(min_length=1, max_length=128)]
+    points: Annotated[list[FiniteVec3], Field(
+        min_length=1,
+        max_length=ANATOMICAL_COVERAGE_LIMITS["maximumPathPointsPerChannel"],
+    )]
+
+
+class AtlasPathQueryBatchRequest(ContractModel):
+    # ``paths`` was used by an early desktop prototype; accept it as an input
+    # alias while emitting the canonical ``items`` key on the wire.
+    items: Annotated[list[AtlasPathQueryBatchItem], Field(
+        min_length=1,
+        max_length=CROSS_PROCESS_LIMITS["atlasPathBatchItems"],
+        validation_alias=AliasChoices("items", "paths"),
+    )]
+    probability_threshold: Annotated[FiniteFloat, Field(ge=0, le=1)] = 0.0
 
 
 class AnatomicalCoverageChannel(ContractModel):
     instance_id: UUID
     pair_id: UUID
     channel_number: Annotated[int, Field(gt=0)] | None = None
-    points_ras_mm: Annotated[list[FiniteVec3], Field(min_length=2, max_length=129)]
+    points_ras_mm: Annotated[list[FiniteVec3], Field(
+        min_length=2,
+        max_length=ANATOMICAL_COVERAGE_LIMITS["maximumPathPointsPerChannel"],
+    )]
 
 
 class AnatomicalCoverageSettings(ContractModel):
@@ -181,8 +209,73 @@ class AnatomicalCoverageSettings(ContractModel):
 
 
 class AnatomicalCoverageRequest(ContractModel):
-    channels: Annotated[list[AnatomicalCoverageChannel], Field(min_length=1)]
+    channels: Annotated[list[AnatomicalCoverageChannel], Field(
+        min_length=1,
+        max_length=ANATOMICAL_COVERAGE_LIMITS["maximumChannels"],
+    )]
     settings: AnatomicalCoverageSettings = Field(default_factory=AnatomicalCoverageSettings)
+
+    @model_validator(mode="before")
+    @classmethod
+    def resource_limits_are_checked_before_parsing(cls, value):
+        """Reject valid-looking oversized JSON before constructing child models."""
+
+        if not isinstance(value, dict):
+            return value
+        channels = value.get("channels")
+        if not isinstance(channels, list):
+            return value
+        limits = ANATOMICAL_COVERAGE_LIMITS
+        if len(channels) > limits["maximumChannels"]:
+            raise ValueError(coverage_limit_error(
+                "maximumChannels", len(channels), limits["maximumChannels"]
+            ))
+        raw_point_counts = [
+            len(channel.get("pointsRasMm", []))
+            for channel in channels
+            if isinstance(channel, dict) and isinstance(channel.get("pointsRasMm"), list)
+        ]
+        if len(raw_point_counts) == len(channels):
+            total_path_points = sum(raw_point_counts)
+            if total_path_points > limits["maximumTotalPathPoints"]:
+                raise ValueError(coverage_limit_error(
+                    "maximumTotalPathPoints", total_path_points, limits["maximumTotalPathPoints"]
+                ))
+            total_segments = sum(point_count - 1 for point_count in raw_point_counts)
+            if total_segments > limits["maximumTotalSegments"]:
+                raise ValueError(coverage_limit_error(
+                    "maximumTotalSegments", total_segments, limits["maximumTotalSegments"]
+                ))
+        return value
+
+    @model_validator(mode="after")
+    def resource_limits_are_respected(self):
+        channel_count = len(self.channels)
+        total_path_points = sum(len(channel.points_ras_mm) for channel in self.channels)
+        total_segments = sum(len(channel.points_ras_mm) - 1 for channel in self.channels)
+        limits = ANATOMICAL_COVERAGE_LIMITS
+        if channel_count > limits["maximumChannels"]:
+            raise ValueError(coverage_limit_error(
+                "maximumChannels", channel_count, limits["maximumChannels"]
+            ))
+        if total_path_points > limits["maximumTotalPathPoints"]:
+            raise ValueError(coverage_limit_error(
+                "maximumTotalPathPoints", total_path_points, limits["maximumTotalPathPoints"]
+            ))
+        if total_segments > limits["maximumTotalSegments"]:
+            raise ValueError(coverage_limit_error(
+                "maximumTotalSegments", total_segments, limits["maximumTotalSegments"]
+            ))
+        # ``exclude_none`` mirrors JSON.stringify's omission of an absent
+        # optional channelNumber in the TypeScript contract.
+        serialized_bytes = len(self.model_dump_json(by_alias=True, exclude_none=True).encode("utf-8"))
+        if serialized_bytes > limits["maximumSerializedRequestBytes"]:
+            raise ValueError(coverage_limit_error(
+                "maximumSerializedRequestBytes",
+                serialized_bytes,
+                limits["maximumSerializedRequestBytes"],
+            ))
+        return self
 
 
 class AnatomicalCoverageChannelResult(ContractModel):
@@ -190,7 +283,10 @@ class AnatomicalCoverageChannelResult(ContractModel):
     instance_id: UUID
     pair_id: UUID
     channel_number: Annotated[int, Field(gt=0)] | None = None
-    path_point_count: Annotated[int, Field(ge=2, le=129)]
+    path_point_count: Annotated[int, Field(
+        ge=2,
+        le=ANATOMICAL_COVERAGE_LIMITS["maximumPathPointsPerChannel"],
+    )]
     path_length_mm: Annotated[FiniteFloat, Field(gt=0)]
     path_sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 
@@ -299,7 +395,10 @@ class AnatomicalCoverageAnalysis(ContractModel):
     source_kind: Literal["geometric-anatomical-coverage-prior"] = "geometric-anatomical-coverage-prior"
     target_surface: Literal["Cedalion-ICBM152-25k"] = "Cedalion-ICBM152-25k"
     vertex_count: Literal[25_000] = 25_000
-    channels: Annotated[list[AnatomicalCoverageChannelResult], Field(min_length=1)]
+    channels: Annotated[list[AnatomicalCoverageChannelResult], Field(
+        min_length=1,
+        max_length=ANATOMICAL_COVERAGE_LIMITS["maximumChannels"],
+    )]
     parameters: AnatomicalCoverageParameters
     mosaic: AnatomicalCoverageMosaic
     regions: list[AnatomicalCoverageRegion]

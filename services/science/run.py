@@ -9,6 +9,7 @@ import uvicorn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from cortexlume_science import BUILD_METADATA  # noqa: E402
 from cortexlume_science.app import app  # noqa: E402
 
 
@@ -18,7 +19,7 @@ def main() -> None:
     listener.bind(("127.0.0.1", 0))
     listener.listen(2048)
     port = listener.getsockname()[1]
-    print(f"CORTEXLUME_READY {json.dumps({'port': port})}", flush=True)
+    print(f"CORTEXLUME_READY {json.dumps({'port': port, **BUILD_METADATA})}", flush=True)
     config = uvicorn.Config(app, log_level="warning", access_log=False)
     server = uvicorn.Server(config)
     server.run(sockets=[listener])

@@ -103,8 +103,8 @@ try {
   process.stderr.write('packaged smoke: list tools\n');
   const tools = await client.listTools();
   const expectedTools = [
-    'get_capabilities', 'search_targets', 'list_atlas_regions', 'plan_project',
-    'save_project', 'inspect_project', 'open_project',
+    'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'plan_project',
+    'save_project', 'release_plan', 'inspect_project', 'open_project',
   ];
   if (tools.tools.map((tool) => tool.name).join(',') !== expectedTools.join(',')) {
     throw new Error(`Unexpected packaged MCP tools: ${tools.tools.map((tool) => tool.name).join(', ')}`);
@@ -138,6 +138,10 @@ try {
       projectName: 'Packaged Agent Smoke',
     },
   }));
+  const releasedAfterSave = structured(await client.callTool({
+    name: 'release_plan', arguments: { planId: planned.planId },
+  }));
+  if (releasedAfterSave.released !== false) throw new Error('Successful save did not consume its one-shot plan.');
   process.stderr.write('packaged smoke: inspect project\n');
   const inspection = structured(await client.callTool({ name: 'inspect_project', arguments: { path: saved.path } }));
   if (inspection.formatVersion !== 2 || inspection.functionalTarget?.target?.id !== target.id) {

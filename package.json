@@ -1,6 +1,6 @@
 {
   "name": "cortexlume",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "private": true,
   "packageManager": "pnpm@10.30.0",
   "engines": {
@@ -11,9 +11,13 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test && pnpm science:test",
-    "science:build": ".\\.venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --distpath services/science/dist --workpath services/science/build services/science/cortexlume-science.spec",
+    "version:metadata": "node scripts/generate-version-metadata.mjs",
+    "version:check": "node scripts/assert-version-consistency.mjs",
+    "release:metadata": "node scripts/generate-release-metadata.mjs",
+    "release:verify": "node scripts/verify-release-metadata.mjs",
+    "science:build": "pnpm run version:check && pnpm run version:metadata && .\\.venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --distpath services/science/dist --workpath services/science/build services/science/cortexlume-science.spec",
     "package:win": "pnpm science:build && pnpm --dir node_modules/electron-winstaller run install && set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& pnpm --filter @cortexlume/desktop make",
-    "science:dev": ".\\.venv\\Scripts\\python.exe services/science/run.py",
+    "science:dev": "pnpm run version:check && pnpm run version:metadata && .\\.venv\\Scripts\\python.exe services/science/run.py",
     "science:test": ".\\.venv\\Scripts\\python.exe -m pytest services/science/tests",
     "smoke:packaged:mcp": "node scripts/smoke_packaged_mcp.mjs",
     "examples:build": "vite-node scripts/build-example-dataset.ts",

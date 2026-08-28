@@ -4,6 +4,7 @@ import type {
   DesktopApi,
   AnatomicalCoverageRequest,
   FitPlacementRequest,
+  ProjectOperationProgress,
   TargetImportSpace,
 } from '@cortexlume/contracts';
 import type { StartupRuntimeApi } from '../shared/startup';
@@ -38,11 +39,19 @@ const api: CortexLumeDesktopApi = {
     targetNifti: (declaredSpace: TargetImportSpace) =>
       ipcRenderer.invoke('input:target-nifti', declaredSpace),
   },
+  operations: {
+    cancel: (operationId) => ipcRenderer.invoke('operations:cancel', operationId),
+    onProgress: (callback: (progress: ProjectOperationProgress) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: ProjectOperationProgress) => callback(progress);
+      ipcRenderer.on('operations:progress', listener);
+      return () => ipcRenderer.removeListener('operations:progress', listener);
+    },
+  },
   export: {
-    csv: (project: CortexLumeProject) => ipcRenderer.invoke('export:csv', project),
-    brainNet: (project: CortexLumeProject) => ipcRenderer.invoke('export:brainnet', project),
-    bidsGeometry: (project: CortexLumeProject) =>
-      ipcRenderer.invoke('export:bids-geometry', project),
+    csv: (project: CortexLumeProject, options) => ipcRenderer.invoke('export:csv', project, options),
+    brainNet: (project: CortexLumeProject, options) => ipcRenderer.invoke('export:brainnet', project, options),
+    bidsGeometry: (project: CortexLumeProject, options) =>
+      ipcRenderer.invoke('export:bids-geometry', project, options),
   },
   science: {
     health: () => ipcRenderer.invoke('science:health'),
@@ -52,7 +61,7 @@ const api: CortexLumeDesktopApi = {
       ipcRenderer.invoke('science:atlas-lookup', point, probabilityThreshold),
     atlasLookupPath: (points, probabilityThreshold) =>
       ipcRenderer.invoke('science:atlas-lookup-path', points, probabilityThreshold),
-    annotateProject: (project) => ipcRenderer.invoke('science:annotate-project', project),
+    annotateProject: (project, options) => ipcRenderer.invoke('science:annotate-project', project, options),
     quickTargetSearch: (query, limit) =>
       ipcRenderer.invoke('science:quick-target-search', query, limit),
     quickTargetMap: (targetId) =>

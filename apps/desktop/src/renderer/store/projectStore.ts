@@ -255,6 +255,30 @@ function updatePairDistances(layout: LayoutDefinition): LayoutDefinition {
   };
 }
 
+/**
+ * Invalidate scientific data that was computed from one or more instances.
+ *
+ * Placement edits must not leave a fit QC summary or verified projection
+ * result attached to geometry that has since changed.  Keeping this policy in
+ * one helper also makes small edits (such as removing a local optode offset)
+ * behave exactly like the larger placement transforms.
+ */
+function invalidateInstanceDerivedData(
+  project: CortexLumeProject,
+  instanceIds: Iterable<string>,
+): CortexLumeProject {
+  const affected = new Set(instanceIds);
+  return {
+    ...project,
+    instances: project.instances.map((instance) => affected.has(instance.id)
+      ? { ...instance, fitQc: undefined }
+      : instance),
+    verifiedResults: project.verifiedResults.filter((result) => (
+      result.instanceId == null || !affected.has(result.instanceId)
+    )),
+  };
+}
+
 export const useProjectStore = create<ProjectStore>((set, get) => {
   const initialProject = createProject();
   const snapshot = (project: CortexLumeProject) => JSON.stringify(project);
@@ -894,39 +918,45 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
           : instance),
       },
     })),
-    updateInstanceAnchor: (instanceId, anchorRasMm) => set((state) => ({
-      project: {
-        ...state.project,
-        updatedAt: now(),
-        instances: state.project.instances.map((instance) => instance.id === instanceId
-          ? { ...instance, anchorRasMm, fitQc: undefined }
-          : instance),
-        verifiedResults: state.project.verifiedResults.filter((result) => result.instanceId !== instanceId),
-      },
-      projectRevision: state.projectRevision + 1,
-    })),
-    rotateInstance: (instanceId, deltaRad) => set((state) => ({
-      project: {
-        ...state.project,
-        updatedAt: now(),
-        instances: state.project.instances.map((instance) => instance.id === instanceId
-          ? { ...instance, rotationRad: instance.rotationRad + deltaRad, fitQc: undefined }
-          : instance),
-        verifiedResults: state.project.verifiedResults.filter((result) => result.instanceId !== instanceId),
-      },
-      projectRevision: state.projectRevision + 1,
-    })),
-    rotateMapping: (instanceId, deltaRad) => set((state) => ({
-      project: {
-        ...state.project,
-        updatedAt: now(),
-        instances: state.project.instances.map((instance) => instance.id === instanceId
-          ? { ...instance, mappingRotationRad: (instance.mappingRotationRad ?? 0) + deltaRad, fitQc: undefined }
-          : instance),
-        verifiedResults: state.project.verifiedResults.filter((result) => result.instanceId !== instanceId),
-      },
-      projectRevision: state.projectRevision + 1,
-    })),
+    updateInstanceAnchor: (instanceId, anchorRasMm) => set((state) => {
+      const invalidated = invalidateInstanceDerivedData(state.project, [instanceId]);
+      return {
+        project: {
+          ...invalidated,
+          updatedAt: now(),
+          instances: invalidated.instances.map((instance) => instance.id === instanceId
+            ? { ...instance, anchorRasMm }
+            : instance),
+        },
+        projectRevision: state.projectRevision + 1,
+      };
+    }),
+    rotateInstance: (instanceId, deltaRad) => set((state) => {
+      const invalidated = invalidateInstanceDerivedData(state.project, [instanceId]);
+      return {
+        project: {
+          ...invalidated,
+          updatedAt: now(),
+          instances: invalidated.instances.map((instance) => instance.id === instanceId
+            ? { ...instance, rotationRad: instance.rotationRad + deltaRad }
+            : instance),
+        },
+        projectRevision: state.projectRevision + 1,
+      };
+    }),
+    rotateMapping: (instanceId, deltaRad) => set((state) => {
+      const invalidated = invalidateInstanceDerivedData(state.project, [instanceId]);
+      return {
+        project: {
+          ...invalidated,
+          updatedAt: now(),
+          instances: invalidated.instances.map((instance) => instance.id === instanceId
+            ? { ...instance, mappingRotationRad: (instance.mappingRotationRad ?? 0) + deltaRad }
+            : instance),
+        },
+        projectRevision: state.projectRevision + 1,
+      };
+    }),
     toggleInstanceVisibility: (instanceId) => set((state) => ({
       project: {
         ...state.project,
@@ -958,34 +988,38 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         projectRevision: state.projectRevision + 1,
       };
     }),
-    updateInstanceOverride: (instanceId, optodeId, uvMm) => set((state) => ({
-      project: {
-        ...state.project,
-        updatedAt: now(),
-        instances: state.project.instances.map((instance) => instance.id === instanceId
-          ? {
-              ...instance,
-              overrides: [
-                ...instance.overrides.filter((override) => override.optodeId !== optodeId),
-                { optodeId, uvMm },
-              ],
-              fitQc: undefined,
-            }
-          : instance),
-        verifiedResults: state.project.verifiedResults.filter((result) => result.instanceId !== instanceId),
-      },
-      projectRevision: state.projectRevision + 1,
-    })),
-    resetInstanceOverride: (instanceId, optodeId) => set((state) => ({
-      project: {
-        ...state.project,
-        updatedAt: now(),
-        instances: state.project.instances.map((instance) => instance.id === instanceId
-          ? { ...instance, overrides: instance.overrides.filter((override) => override.optodeId !== optodeId) }
-          : instance),
-      },
-      projectRevision: state.projectRevision + 1,
-    })),
+    updateInstanceOverride: (instanceId, optodeId, uvMm) => set((state) => {
+      const invalidated = invalidateInstanceDerivedData(state.project, [instanceId]);
+      return {
+        project: {
+          ...invalidated,
+          updatedAt: now(),
+          instances: invalidated.instances.map((instance) => instance.id === instanceId
+            ? {
+                ...instance,
+                overrides: [
+                  ...instance.overrides.filter((override) => override.optodeId !== optodeId),
+                  { optodeId, uvMm },
+                ],
+              }
+            : instance),
+        },
+        projectRevision: state.projectRevision + 1,
+      };
+    }),
+    resetInstanceOverride: (instanceId, optodeId) => set((state) => {
+      const invalidated = invalidateInstanceDerivedData(state.project, [instanceId]);
+      return {
+        project: {
+          ...invalidated,
+          updatedAt: now(),
+          instances: invalidated.instances.map((instance) => instance.id === instanceId
+            ? { ...instance, overrides: instance.overrides.filter((override) => override.optodeId !== optodeId) }
+            : instance),
+        },
+        projectRevision: state.projectRevision + 1,
+      };
+    }),
     commitPlacement: (committed, projections) => set((state) => ({
       project: {
         ...state.project,

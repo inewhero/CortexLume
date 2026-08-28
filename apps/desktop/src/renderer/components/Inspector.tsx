@@ -13,7 +13,7 @@ import { materializeProjectionSnapshot } from '../lib/projectionSnapshot';
 import { confirmProjectTransition } from '../lib/unsavedChanges';
 import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from '../store/projectStore';
-import type { DigitizerImport, Vec3 } from '@cortexlume/contracts';
+import type { DigitizerImport, ProjectOperationProgress, ProjectOperationOptions, Vec3 } from '@cortexlume/contracts';
 import { DigitizerDialog, type MappingScope } from './DigitizerDialog';
 import { FIVE_POINT_LABELS, type FivePointLabel } from '../lib/digitizer';
 import { TargetMapImportDialog } from './TargetMapImportDialog';
@@ -45,6 +45,7 @@ export function Inspector() {
   const [digitizerDialog, setDigitizerDialog] = useState<{ kind: 'import'; data: DigitizerImport } | { kind: 'manual' } | null>(null);
   const [targetMapDialog, setTargetMapDialog] = useState(false);
   const [fivePointTargets, setFivePointTargets] = useState<Record<FivePointLabel, Vec3> | null>(null);
+  const [projectOperation, setProjectOperation] = useState<ProjectOperationProgress | null>(null);
   const {
     project, projectPath, anatomyVisibility, anatomyAppearance,
     selectedInstanceId, selectedHeadOptodeId, selectedHeadPairId,
@@ -132,6 +133,14 @@ export function Inspector() {
   ]);
 
   useEffect(() => {
+    const onProgress = window.cortexlume?.operations?.onProgress;
+    if (!onProgress) return undefined;
+    return onProgress((progress) => {
+      setProjectOperation((current) => current?.operationId === progress.operationId ? progress : current);
+    });
+  }, []);
+
+  useEffect(() => {
     void fetch(new URL('./anatomy/landmarks.json', window.location.href).href)
       .then((response) => response.json())
       .then((data: { points: Array<{ label: string; rasMm: Vec3; system: string }> }) => {
@@ -204,23 +213,30 @@ export function Inspector() {
   };
 
   const exportCsv = async () => {
+    const options: ProjectOperationOptions = { operationId: crypto.randomUUID() };
+    setProjectOperation({ operationId: options.operationId!, operation: 'export', phase: 'starting', completed: 0, total: 1 });
     try {
       const snapshot = materializeProjectionSnapshot(project);
-      const result = await window.cortexlume.export.csv(await window.cortexlume.science.annotateProject(snapshot));
+      const annotated = await window.cortexlume.science.annotateProject(snapshot, options);
+      const result = await window.cortexlume.export.csv(annotated, options);
       if (result) {
         setToast(`Exported ${result.files.length} files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
       }
     } catch (error) {
       setToast(`CSV export error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setProjectOperation((current) => current?.operationId === options.operationId ? null : current);
     }
   };
 
   const exportBrainNet = async () => {
+    const options: ProjectOperationOptions = { operationId: crypto.randomUUID() };
+    setProjectOperation({ operationId: options.operationId!, operation: 'export', phase: 'starting', completed: 0, total: 1 });
     try {
       setToast('Exporting and checking MATLAB / BrainNet Viewer…');
       const snapshot = materializeProjectionSnapshot(project);
-      const annotated = await window.cortexlume.science.annotateProject(snapshot);
-      const result = await window.cortexlume.export.brainNet(annotated);
+      const annotated = await window.cortexlume.science.annotateProject(snapshot, options);
+      const result = await window.cortexlume.export.brainNet(annotated, options);
       if (result) {
         setToast(result.brainNet.launched
           ? `Exported ${result.files.length} files and opened BrainNet Viewer.`
@@ -228,6 +244,8 @@ export function Inspector() {
       }
     } catch (error) {
       setToast(`BrainNet export error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setProjectOperation((current) => current?.operationId === options.operationId ? null : current);
     }
   };
 
@@ -238,15 +256,25 @@ export function Inspector() {
       setToast(`Complete BIDS settings before export: ${missingFields.map((field) => field.label).join(', ')}.`);
       return;
     }
+    const options: ProjectOperationOptions = { operationId: crypto.randomUUID() };
+    setProjectOperation({ operationId: options.operationId!, operation: 'export', phase: 'starting', completed: 0, total: 1 });
     try {
       const snapshot = materializeProjectionSnapshot(project);
-      const result = await window.cortexlume.export.bidsGeometry(await window.cortexlume.science.annotateProject(snapshot));
+      const annotated = await window.cortexlume.science.annotateProject(snapshot, options);
+      const result = await window.cortexlume.export.bidsGeometry(annotated, options);
       if (result) {
         setToast(`Exported ${result.files.length} BIDS geometry files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
       }
     } catch (error) {
       setToast(`BIDS export error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setProjectOperation((current) => current?.operationId === options.operationId ? null : current);
     }
+  };
+
+  const cancelProjectOperation = () => {
+    if (!projectOperation) return;
+    void window.cortexlume.operations.cancel(projectOperation.operationId);
   };
 
   const importDigitizer = async () => {
@@ -308,10 +336,16 @@ export function Inspector() {
           <button onClick={() => setTargetMapDialog(true)}>NIFTI MAP</button>
         </div></div>
         <div className="workflow-row"><span>EXPORT</span><div className="project-actions">
-          <button disabled={!surfaceVerified} title={surfaceVerified ? 'Export BrainNet geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBrainNet}>BRAINNET</button>
-          <button disabled={!surfaceVerified} title={surfaceVerified ? 'Export CSV geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportCsv}>CSV</button>
-          <button disabled={!surfaceVerified} title={surfaceVerified ? 'Export BIDS geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBids}>BIDS</button>
+          <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export BrainNet geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBrainNet}>BRAINNET</button>
+          <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export CSV geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportCsv}>CSV</button>
+          <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export BIDS geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBids}>BIDS</button>
+          {projectOperation && <button onClick={cancelProjectOperation}>CANCEL</button>}
         </div></div>
+        {projectOperation && (
+          <div className="surface-export-status is-loading">
+            {projectOperation.phase.replaceAll('-', ' ').toUpperCase()} · {projectOperation.completed}/{projectOperation.total}
+          </div>
+        )}
         {surfaceStatus.state !== 'verified' && (
           <div className={`surface-export-status is-${surfaceStatus.state}`} title={surfaceStatus.issue ?? undefined}>
             {surfaceStatus.state === 'loading'

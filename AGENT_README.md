@@ -29,8 +29,9 @@ Use the tools in this order:
 3. `search_targets` or `list_atlas_regions` — resolve the user's intended target when needed.
 4. `plan_project` — request three deterministic candidates for an explicit target and patch specification.
 5. Present the candidate scores and recommendation to the user.
-6. `save_project` — write the selected candidate to a new `.cortexlume` file.
-7. `open_project` — open that file in a separate CortexLume window for human inspection.
+6. `save_project` — write the selected candidate to a new `.cortexlume` file; success consumes the plan unless `consumePlan: false` is explicitly requested.
+7. `release_plan` — release a cached plan early when it is no longer needed.
+8. `open_project` — open that file in a separate CortexLume window for human inspection.
 
 `inspect_project` can audit an existing project before deriving a new plan. CortexLume never overwrites an existing project path.
 

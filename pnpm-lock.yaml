@@ -184,6 +184,10 @@ importers:
         version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(jsdom@26.1.0)(terser@5.49.0)
 
   packages/science-client:
+    dependencies:
+      '@cortexlume/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       '@types/node':
         specifier: ^24.0.10

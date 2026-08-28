@@ -50,6 +50,14 @@ describe('project data exports', () => {
     expect(() => buildCsvExport(project)).toThrow(/missing or unverified/);
   });
 
+  it('honors the overall export deadline before doing work', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+    expect(() => buildCsvExport(project, { deadline: Date.now() - 1 }))
+      .toThrow(/overall time budget/);
+  });
+
   it('cannot create duplicate BIDS channel names through normal channel renumbering', () => {
     useProjectStore.getState().newProject();
     const state = useProjectStore.getState();

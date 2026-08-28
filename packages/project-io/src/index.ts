@@ -3,6 +3,7 @@ import { TextDecoder, TextEncoder } from 'node:util';
 import { unzipSync, zipSync } from 'fflate';
 import { z } from 'zod';
 import {
+  CROSS_PROCESS_LIMITS,
   CortexLumeProjectSchema,
   CortexLumeProjectV1Schema,
   CortexLumeProjectV2Schema,
@@ -17,7 +18,7 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 export const PROJECT_ARCHIVE_LIMITS = Object.freeze({
   compressedBytes: 16 * 1024 * 1024,
   entryCount: 2,
-  projectBytes: 8 * 1024 * 1024,
+  projectBytes: CROSS_PROCESS_LIMITS.projectJsonBytes,
   manifestBytes: 1024 * 1024,
   totalUncompressedBytes: 9 * 1024 * 1024,
   maximumCompressionRatio: 100,
@@ -31,12 +32,16 @@ const ALLOWED_ARCHIVE_ENTRIES = new Map<string, number>([
 function validateArchiveEntrySize(name: string, uncompressedSize: number): void {
   const entryLimit = ALLOWED_ARCHIVE_ENTRIES.get(name);
   if (entryLimit == null) zipError(`unexpected entry ${JSON.stringify(name)}`);
-  if (uncompressedSize > entryLimit) zipError(`${name} exceeds its uncompressed size limit`);
+  if (uncompressedSize > entryLimit) {
+    zipError(`${name} exceeds its uncompressed size limit (${uncompressedSize} > ${entryLimit} bytes)`);
+  }
 }
 
 function validateArchiveTotalUncompressedSize(totalUncompressed: number): void {
   if (totalUncompressed > PROJECT_ARCHIVE_LIMITS.totalUncompressedBytes) {
-    zipError('total uncompressed size exceeds its limit');
+    zipError(
+      `total uncompressed size exceeds its limit (${totalUncompressed} > ${PROJECT_ARCHIVE_LIMITS.totalUncompressedBytes} bytes)`,
+    );
   }
 }
 

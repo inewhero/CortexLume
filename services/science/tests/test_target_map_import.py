@@ -6,6 +6,7 @@ import struct
 import numpy as np
 import pytest
 
+import cortexlume_science.target_map_import as target_map_import_module
 from cortexlume_science.target_map_import import (
     FSL_2MM_AFFINE,
     FSL_2MM_LAS_AFFINE,
@@ -196,3 +197,20 @@ def test_contract_result_is_sparse_positive_and_camel_cased() -> None:
     assert min(values) > 0
     assert result["map"]["provenance"]["targetSurface"] == "Cedalion-ICBM152-25k"
     assert all("action" not in item or isinstance(item["action"], str) for item in result["diagnostics"])
+
+
+def test_process_import_validates_and_parses_the_volume_once(monkeypatch) -> None:
+    calls = 0
+    original = target_map_import_module.validate_target_map
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(target_map_import_module, "validate_target_map", counted)
+    result = target_map_import_module.process_target_map_import(
+        nifti_bytes(), "working_memory_z.nii.gz", "NeurosynthMNI152-2mm",
+    )
+    assert result["accepted"] is True
+    assert calls == 1

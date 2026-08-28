@@ -1,8 +1,41 @@
 import { z } from 'zod';
+import sharedCrossProcessLimits from '../../../config/cross-process-limits.json';
 
 const FiniteNumberSchema = z.number().finite();
 const BoundedNameSchema = z.string().min(1).max(256);
 const BoundedFlagSchema = z.string().min(1).max(256);
+
+/**
+ * Resource budgets for anatomical coverage requests.  The science sidecar
+ * carries the same values in its Pydantic boundary; keep the field names and
+ * values protocol-stable so every caller rejects the same request first.
+ */
+export const ANATOMICAL_COVERAGE_LIMITS = Object.freeze({
+  maximumChannels: sharedCrossProcessLimits.maximumChannels,
+  maximumPathPointsPerChannel: sharedCrossProcessLimits.maximumPathPointsPerChannel,
+  maximumTotalPathPoints: sharedCrossProcessLimits.maximumTotalPathPoints,
+  maximumTotalSegments: sharedCrossProcessLimits.maximumTotalSegments,
+  maximumSerializedRequestBytes: sharedCrossProcessLimits.maximumSerializedRequestBytes,
+});
+
+/**
+ * Budgets shared by the renderer, Electron main process and science sidecar.
+ *
+ * Keep these values in the contracts package so a payload cannot be valid in
+ * one process and oversized at the next process boundary.  The archive and
+ * science-client packages import this object rather than maintaining their
+ * own copies of the wire limits.
+ */
+export const CROSS_PROCESS_LIMITS = Object.freeze({
+  projectJsonBytes: sharedCrossProcessLimits.projectJsonBytes,
+  projectionResults: sharedCrossProcessLimits.projectionResults,
+  atlasBatchPoints: sharedCrossProcessLimits.atlasBatchPoints,
+  atlasPathBatchItems: sharedCrossProcessLimits.atlasPathBatchItems,
+  scienceRequestBytes: sharedCrossProcessLimits.scienceRequestBytes,
+  scienceResponseBytes: sharedCrossProcessLimits.scienceResponseBytes,
+  projectOperationTimeoutMs: sharedCrossProcessLimits.projectOperationTimeoutMs,
+  ...ANATOMICAL_COVERAGE_LIMITS,
+});
 
 export const PROJECT_GRAPH_LIMITS = Object.freeze({
   layouts: 128,
@@ -11,7 +44,10 @@ export const PROJECT_GRAPH_LIMITS = Object.freeze({
   instances: 2_048,
   overridesPerInstance: 100,
   digitizerPositionsPerInstance: 100,
-  verifiedResults: 65_536,
+  // A compact ProjectionResult is approximately 350-450 bytes.  Keeping the
+  // graph bound at 8k leaves room for layouts, settings and provenance under
+  // the 8 MiB project.json archive budget.
+  verifiedResults: CROSS_PROCESS_LIMITS.projectionResults,
   digitizerSessions: 128,
   digitizerPointsPerSession: 100_000,
   mappingsPerSession: 100_000,
@@ -159,6 +195,63 @@ export const AtlasLabelSchema = z.object({
   probability: z.number().min(0).max(1),
 });
 export type AtlasLabel = z.infer<typeof AtlasLabelSchema>;
+
+/** Point and path atlas queries share the same bounded science-sidecar wire contract. */
+export const AtlasQueryPointSchema = z.object({
+  id: z.string().min(1).max(128),
+  corticalRasMm: Vec3Schema.nullable().default(null),
+  deepTargetRasMm: Vec3Schema.nullable().default(null),
+});
+export type AtlasQueryPoint = z.infer<typeof AtlasQueryPointSchema>;
+
+export const AtlasQueryRequestSchema = z.object({
+  points: z.array(AtlasQueryPointSchema).min(1).max(CROSS_PROCESS_LIMITS.atlasBatchPoints),
+  probabilityThreshold: z.number().finite().min(0).max(1).default(0),
+});
+export type AtlasQueryRequest = z.infer<typeof AtlasQueryRequestSchema>;
+
+export const AtlasPathQueryRequestSchema = z.object({
+  points: z.array(Vec3Schema).min(1).max(ANATOMICAL_COVERAGE_LIMITS.maximumPathPointsPerChannel),
+  probabilityThreshold: z.number().finite().min(0).max(1).default(0),
+});
+export type AtlasPathQueryRequest = z.infer<typeof AtlasPathQueryRequestSchema>;
+
+export const AtlasPathQueryBatchItemSchema = z.object({
+  id: z.string().min(1).max(128),
+  points: z.array(Vec3Schema).min(1).max(ANATOMICAL_COVERAGE_LIMITS.maximumPathPointsPerChannel),
+});
+export type AtlasPathQueryBatchItem = z.infer<typeof AtlasPathQueryBatchItemSchema>;
+
+export const AtlasPathQueryBatchRequestSchema = z.preprocess((value) => {
+  // Accept the prototype ``paths`` spelling on input, but keep ``items`` as
+  // the canonical serialized field used by the Electron and Python clients.
+  if (value && typeof value === 'object' && 'items' in value === false && 'paths' in value) {
+    const raw = value as { paths?: unknown };
+    return { ...value, items: raw.paths };
+  }
+  return value;
+}, z.object({
+  items: z.array(AtlasPathQueryBatchItemSchema).min(1).max(CROSS_PROCESS_LIMITS.atlasPathBatchItems),
+  probabilityThreshold: z.number().finite().min(0).max(1).default(0),
+}));
+export type AtlasPathQueryBatchRequest = z.infer<typeof AtlasPathQueryBatchRequestSchema>;
+
+export const ProjectOperationOptionsSchema = z.object({
+  /** Optional stable ID used with DesktopApi.operations.cancel/onProgress. */
+  operationId: z.string().min(1).max(128).optional(),
+  /** Overall budget, capped by CROSS_PROCESS_LIMITS.projectOperationTimeoutMs. */
+  timeoutMs: z.number().int().positive().max(CROSS_PROCESS_LIMITS.projectOperationTimeoutMs).optional(),
+});
+export type ProjectOperationOptions = z.infer<typeof ProjectOperationOptionsSchema>;
+
+export const ProjectOperationProgressSchema = z.object({
+  operationId: z.string().min(1).max(128),
+  operation: z.enum(['annotation', 'export']),
+  phase: z.string().min(1).max(128),
+  completed: z.number().int().nonnegative(),
+  total: z.number().int().positive(),
+});
+export type ProjectOperationProgress = z.infer<typeof ProjectOperationProgressSchema>;
 
 export const ProjectionResultSchema = z.object({
   instanceId: z.string().uuid().nullable(),
@@ -338,7 +431,7 @@ export const AnatomicalCoverageChannelSchema = z.object({
   instanceId: z.string().uuid(),
   pairId: z.string().uuid(),
   channelNumber: z.number().int().positive().optional(),
-  pointsRasMm: z.array(Vec3Schema).min(2).max(129),
+  pointsRasMm: z.array(Vec3Schema).min(2).max(ANATOMICAL_COVERAGE_LIMITS.maximumPathPointsPerChannel),
 });
 export type AnatomicalCoverageChannel = z.infer<typeof AnatomicalCoverageChannelSchema>;
 
@@ -354,8 +447,35 @@ export const AnatomicalCoverageSettingsSchema = AnatomicalCoverageSettingsBaseSc
 export type AnatomicalCoverageSettings = z.infer<typeof AnatomicalCoverageSettingsSchema>;
 
 export const AnatomicalCoverageRequestSchema = z.object({
-  channels: z.array(AnatomicalCoverageChannelSchema).min(1),
+  channels: z.array(AnatomicalCoverageChannelSchema)
+    .min(1)
+    .max(ANATOMICAL_COVERAGE_LIMITS.maximumChannels),
   settings: AnatomicalCoverageSettingsSchema.default({}),
+}).superRefine((value, context) => {
+  const channels = value.channels.length;
+  const totalPathPoints = value.channels.reduce((sum, channel) => sum + channel.pointsRasMm.length, 0);
+  const totalSegments = value.channels.reduce((sum, channel) => sum + channel.pointsRasMm.length - 1, 0);
+  const addLimitIssue = (dimension: string, observed: number, maximum: number) => {
+    if (observed <= maximum) return;
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `coverage_request_limit_exceeded:${dimension}:${observed}:${maximum}`,
+      path: ['channels'],
+    });
+  };
+  addLimitIssue('maximumChannels', channels, ANATOMICAL_COVERAGE_LIMITS.maximumChannels);
+  addLimitIssue('maximumTotalPathPoints', totalPathPoints, ANATOMICAL_COVERAGE_LIMITS.maximumTotalPathPoints);
+  addLimitIssue('maximumTotalSegments', totalSegments, ANATOMICAL_COVERAGE_LIMITS.maximumTotalSegments);
+
+  // Count UTF-8 bytes, matching the JSON body sent by ScienceClient rather
+  // than JavaScript UTF-16 code units.  At this point all defaults and UUIDs
+  // have been normalized by Zod, making the calculation deterministic.
+  const serializedBytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  addLimitIssue(
+    'maximumSerializedRequestBytes',
+    serializedBytes,
+    ANATOMICAL_COVERAGE_LIMITS.maximumSerializedRequestBytes,
+  );
 });
 export type AnatomicalCoverageRequest = z.infer<typeof AnatomicalCoverageRequestSchema>;
 
@@ -364,7 +484,7 @@ export const AnatomicalCoverageChannelResultSchema = z.object({
   instanceId: z.string().uuid(),
   pairId: z.string().uuid(),
   channelNumber: z.number().int().positive().optional(),
-  pathPointCount: z.number().int().min(2).max(129),
+  pathPointCount: z.number().int().min(2).max(ANATOMICAL_COVERAGE_LIMITS.maximumPathPointsPerChannel),
   pathLengthMm: z.number().finite().positive(),
   pathSha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
@@ -434,7 +554,9 @@ export const AnatomicalCoverageAnalysisSchema = z.object({
   sourceKind: z.literal('geometric-anatomical-coverage-prior'),
   targetSurface: z.literal('Cedalion-ICBM152-25k'),
   vertexCount: z.literal(25_000),
-  channels: z.array(AnatomicalCoverageChannelResultSchema).min(1),
+  channels: z.array(AnatomicalCoverageChannelResultSchema)
+    .min(1)
+    .max(ANATOMICAL_COVERAGE_LIMITS.maximumChannels),
   parameters: AnatomicalCoverageSettingsBaseSchema.extend({
     distanceMetric: z.literal('euclidean-distance-to-polyline'),
     kernel: z.literal('truncated-gaussian'),
@@ -862,13 +984,17 @@ export interface DesktopApi {
     digitizer(): Promise<DigitizerImport | null>;
     targetNifti(declaredSpace: TargetImportSpace): Promise<TargetImportResult | null>;
   };
+  operations: {
+    cancel(operationId: string): Promise<boolean>;
+    onProgress(callback: (progress: ProjectOperationProgress) => void): () => void;
+  };
   export: {
-    csv(project: CortexLumeProject): Promise<{
+    csv(project: CortexLumeProject, options?: ProjectOperationOptions): Promise<{
       directory: string;
       files: string[];
       warnings: string[];
     } | null>;
-    brainNet(project: CortexLumeProject): Promise<{
+    brainNet(project: CortexLumeProject, options?: ProjectOperationOptions): Promise<{
       directory: string;
       files: string[];
       warnings: string[];
@@ -879,18 +1005,30 @@ export interface DesktopApi {
         detail: string;
       };
     } | null>;
-    bidsGeometry(project: CortexLumeProject): Promise<{
+    bidsGeometry(project: CortexLumeProject, options?: ProjectOperationOptions): Promise<{
       directory: string;
       files: string[];
       warnings: string[];
     } | null>;
   };
   science: {
-    health(): Promise<{ ok: boolean; version?: string; templateVerified?: boolean; atlasVerified?: boolean; error?: string }>;
+    health(): Promise<{
+      ok: boolean;
+      /** Legacy alias retained for existing renderer callers. */
+      version?: string;
+      applicationVersion?: string;
+      sidecarPackageVersion?: string;
+      scienceApiVersion?: string;
+      gitCommit?: string;
+      dependencyLockSha256?: string;
+      templateVerified?: boolean;
+      atlasVerified?: boolean;
+      error?: string;
+    }>;
     fitPlacement(request: FitPlacementRequest): Promise<FitPlacementResponse>;
     atlasLookup(point: Vec3, probabilityThreshold?: number): Promise<AtlasLabel[]>;
     atlasLookupPath(points: Vec3[], probabilityThreshold?: number): Promise<AtlasLabel[]>;
-    annotateProject(project: CortexLumeProject): Promise<CortexLumeProject>;
+    annotateProject(project: CortexLumeProject, options?: ProjectOperationOptions): Promise<CortexLumeProject>;
     quickTargetSearch(query: string, limit?: number): Promise<{
       targets: QuickTargetSummary[];
       provenance: Record<string, unknown>;

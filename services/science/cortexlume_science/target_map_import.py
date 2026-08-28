@@ -506,8 +506,9 @@ def _map_volume_to_cedalion_surface(volume: NiftiVolume) -> np.ndarray:
     return result
 
 
-def import_target_map(
-    raw: bytes,
+def import_validated_target_map(
+    volume: NiftiVolume,
+    validation: TargetMapValidation,
     filename: str,
     declared_space: SourceSpace,
     *,
@@ -515,12 +516,16 @@ def import_target_map(
     target_id: str | None = None,
     description: str | None = None,
     statistic: str = "continuous-statistic",
-    mni2009c_transform: Path | None = None,
 ) -> ImportedTargetMap:
-    validation, volume = validate_target_map(
-        raw, filename, declared_space, mni2009c_transform=mni2009c_transform,
-    )
-    if not validation.accepted or volume is None:
+    """Convert an already validated volume without parsing it a second time.
+
+    ``process_target_map_import`` deliberately keeps the validation result and
+    decoded NumPy volume together.  Importing from this helper avoids a second
+    gzip decompression, header scan, and finite-value traversal for large maps.
+    The public ``import_target_map`` wrapper below still performs validation for
+    callers that only have raw bytes.
+    """
+    if not validation.accepted:
         raise NiftiImportError("target_map_validation_failed")
     # Verify both official correspondence assets. The sparse matrix columns use
     # this exact sequential vertex order; its rows use Cedalion's C-order grid.
@@ -566,19 +571,48 @@ def import_target_map(
     return ImportedTargetMap(target, 25_000, indices, values, validation, provenance)
 
 
+def import_target_map(
+    raw: bytes,
+    filename: str,
+    declared_space: SourceSpace,
+    *,
+    map_name: str | None = None,
+    target_id: str | None = None,
+    description: str | None = None,
+    statistic: str = "continuous-statistic",
+    mni2009c_transform: Path | None = None,
+) -> ImportedTargetMap:
+    """Validate and import a raw NIfTI map in one pass."""
+    validation, volume = validate_target_map(
+        raw, filename, declared_space, mni2009c_transform=mni2009c_transform,
+    )
+    if volume is None:
+        raise NiftiImportError("target_map_validation_failed")
+    return import_validated_target_map(
+        volume,
+        validation,
+        filename,
+        declared_space,
+        map_name=map_name,
+        target_id=target_id,
+        description=description,
+        statistic=statistic,
+    )
+
+
 def process_target_map_import(
     raw: bytes,
     filename: str,
     declared_space: SourceSpace,
 ) -> dict:
     """Return the exact renderer/IPC import contract, including blocked results."""
-    validation, _ = validate_target_map(raw, filename, declared_space)
+    validation, volume = validate_target_map(raw, filename, declared_space)
     result = validation.to_dict()
     result["map"] = None
-    if not validation.accepted:
+    if not validation.accepted or volume is None:
         return result
     try:
-        imported = import_target_map(raw, filename, declared_space)
+        imported = import_validated_target_map(volume, validation, filename, declared_space)
     except NiftiImportError as error:
         result["accepted"] = False
         result["diagnostics"].append(Diagnostic(

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ProjectionResult } from '@cortexlume/contracts';
 import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore } from './projectStore';
 
@@ -204,5 +205,63 @@ describe('default optode matrix', () => {
     expect(calibrated.project.instances.find((candidate) => candidate.id === original.id)?.visible).toBe(false);
     expect(derived).toMatchObject({ visible: true, digitizerSessionId: sessionId, digitizerPositions: [] });
     expect(calibrated.library.some((layout) => layout.id === derived.definitionId)).toBe(true);
+  });
+
+  it('invalidates only the edited instance when resetting a local offset', () => {
+    useProjectStore.getState().newProject();
+    const layoutId = useProjectStore.getState().activeLayoutId;
+    const firstId = useProjectStore.getState().placeLayout(layoutId)!;
+    const secondId = useProjectStore.getState().placeLayout(layoutId)!;
+    const state = useProjectStore.getState();
+    const first = state.project.instances.find((instance) => instance.id === firstId)!;
+    const second = state.project.instances.find((instance) => instance.id === secondId)!;
+    const firstLayout = state.project.layouts.find((layout) => layout.id === first.definitionId)!;
+    const secondLayout = state.project.layouts.find((layout) => layout.id === second.definitionId)!;
+    const firstOptodeId = firstLayout.optodes[0]!.id;
+    const secondOptodeId = secondLayout.optodes[0]!.id;
+    const fitQc = {
+      converged: true,
+      iterations: 2,
+      meanAbsoluteErrorMm: 0.5,
+      maxAbsoluteErrorMm: 1,
+      flags: [],
+    };
+    const verified = (instanceId: string, subjectId: string): ProjectionResult => ({
+      instanceId,
+      subjectKind: 'optode',
+      subjectId,
+      scalpRasMm: [0, 0, 0],
+      displayRasMm: null,
+      corticalRasMm: null,
+      depthTargetRasMm: null,
+      underlyingCorticalRegions: [],
+      deepTargetStructures: [],
+      tissueAtTarget: null,
+      claimLevel: 'geometric',
+      status: 'verified',
+      qcFlags: [],
+    });
+
+    useProjectStore.getState().commitPlacement({
+      ...first,
+      overrides: [{ optodeId: firstOptodeId, uvMm: [1, 2] }],
+      fitQc,
+    }, [verified(first.id, crypto.randomUUID())]);
+    useProjectStore.getState().commitPlacement({
+      ...second,
+      overrides: [{ optodeId: secondOptodeId, uvMm: [3, 4] }],
+      fitQc,
+    }, [verified(second.id, crypto.randomUUID())]);
+
+    useProjectStore.getState().resetInstanceOverride(first.id, firstOptodeId);
+
+    const after = useProjectStore.getState().project;
+    const firstAfter = after.instances.find((instance) => instance.id === first.id)!;
+    const secondAfter = after.instances.find((instance) => instance.id === second.id)!;
+    expect(firstAfter.overrides).toEqual([]);
+    expect(firstAfter.fitQc).toBeUndefined();
+    expect(after.verifiedResults.map((result) => result.instanceId)).toEqual([second.id]);
+    expect(secondAfter.overrides).toEqual([{ optodeId: secondOptodeId, uvMm: [3, 4] }]);
+    expect(secondAfter.fitQc).toEqual(fitQc);
   });
 });

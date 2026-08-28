@@ -2,15 +2,25 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import os
 import stat as stat_module
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
-from . import __version__
+from . import (
+    APPLICATION_VERSION,
+    BUILD_METADATA,
+    SCIENCE_API_VERSION,
+    SIDECAR_PACKAGE_VERSION,
+    __version__,
+)
 from .anatomical_coverage import (
     AnatomicalCoverageError,
     compute_anatomical_coverage,
@@ -19,9 +29,11 @@ from .anatomical_coverage import (
     target_anatomical_profile,
 )
 from .atlas import atlas_status, query_probability_path, query_probability_volume
+from .coverage_limits import ANATOMICAL_COVERAGE_LIMITS, coverage_limit_error
 from .geometry import cortex_projection, fit_errors, fitted_positions, inward_depth_target, pair_midpoint
 from .models import (
     AtlasLabel,
+    AtlasPathQueryBatchRequest,
     AtlasPathQueryRequest,
     AtlasQueryRequest,
     AnatomicalCoverageAnalysis,
@@ -32,16 +44,158 @@ from .models import (
     FitQc,
     ProjectValidationRequest,
     ProjectionResult,
+    CROSS_PROCESS_LIMITS,
 )
 from .quick_targets import QuickTargetError, load_quick_target_pack, quick_target_status
 from .target_map_import import MAX_COMPRESSED_BYTES, process_target_map_import
 from .template_gate import inspect_template_gate
 
-app = FastAPI(title="CortexLume Science", version=__version__, docs_url=None, redoc_url=None)
+app = FastAPI(title="CortexLume Science", version=SCIENCE_API_VERSION, docs_url=None, redoc_url=None)
+
+
+SCIENCE_REQUEST_BYTES = CROSS_PROCESS_LIMITS["scienceRequestBytes"]
+ANATOMICAL_COVERAGE_PATHS = frozenset({
+    "/v1/coverage/anatomical",
+    "/v1/coverage/anatomical-summary",
+})
+_insecure_auth_warning_emitted = False
+
+
+def _coverage_error_detail(message: str) -> dict[str, object]:
+    marker = "coverage_request_limit_exceeded:"
+    if marker in message:
+        dimensions = message.split(marker, 1)[1].split(":")
+        if len(dimensions) == 3:
+            dimension, observed, maximum = dimensions
+            try:
+                return {
+                    "code": "coverage_request_limit_exceeded",
+                    "dimension": dimension,
+                    "observed": int(observed),
+                    "maximum": int(maximum),
+                    "message": message,
+                }
+            except ValueError:
+                pass
+    return {"code": "coverage_request_limit_exceeded", "message": message}
+
+
+@app.exception_handler(RequestValidationError)
+async def coverage_validation_error_handler(request: Request, exc: RequestValidationError):
+    """Expose coverage budget breaches as compact, actionable 413 errors.
+
+    Pydantic's normal 422 response includes the complete invalid input in its
+    ``input`` field.  That is both noisy and needlessly echoes a potentially
+    multi-megabyte payload, so only the coverage budget error is normalized;
+    all other validation failures retain FastAPI's standard response.
+    """
+
+    if request.url.path.startswith("/v1/coverage/"):
+        marker = "coverage_request_limit_exceeded:"
+        for issue in exc.errors():
+            message = str(issue.get("msg", ""))
+            if marker not in message:
+                continue
+            return JSONResponse(status_code=413, content={"detail": _coverage_error_detail(message)})
+    return await request_validation_exception_handler(request, exc)
+
+
+def _coverage_limit_detail(observed: int) -> dict[str, object]:
+    maximum = ANATOMICAL_COVERAGE_LIMITS["maximumSerializedRequestBytes"]
+    message = coverage_limit_error("maximumSerializedRequestBytes", observed, maximum)
+    return _coverage_error_detail(message)
+
+
+@app.middleware("http")
+async def enforce_request_budget(request: Request, call_next):
+    """Bound request bodies before Pydantic or scientific code sees them.
+
+    A declared ``Content-Length`` is only an early rejection hint: proxies and
+    clients can omit it, use chunked transfer encoding, or lie about it.  For
+    those requests, consume the ASGI body one chunk at a time and stop as soon
+    as the path-specific budget is crossed.  A successful read is cached on
+    this ``Request`` so FastAPI receives exactly the same bytes downstream.
+
+    Authentication intentionally runs before any body read.  The sidecar is
+    loopback-only, but an unauthenticated client must not be able to make us
+    consume even a bounded upload before it is rejected.
+    """
+    if request.method in {"POST", "PUT", "PATCH"}:
+        try:
+            authorize(request.headers.get("authorization"))
+        except HTTPException as error:
+            headers = dict(error.headers or {})
+            return JSONResponse(
+                status_code=error.status_code,
+                content={"detail": error.detail},
+                headers=headers,
+            )
+
+        is_coverage_request = request.url.path in ANATOMICAL_COVERAGE_PATHS
+        request_limit = (
+            ANATOMICAL_COVERAGE_LIMITS["maximumSerializedRequestBytes"]
+            if is_coverage_request else SCIENCE_REQUEST_BYTES
+        )
+        declared = request.headers.get("content-length")
+        if declared is not None:
+            try:
+                declared_bytes = int(declared)
+                if declared_bytes > request_limit:
+                    detail: object = _coverage_limit_detail(declared_bytes) if is_coverage_request else (
+                        f"Request exceeds the {SCIENCE_REQUEST_BYTES}-byte science payload limit"
+                    )
+                    return JSONResponse(
+                        status_code=413,
+                        content={"detail": detail},
+                    )
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length"})
+
+        # ``Request.body()`` reads until the client closes the stream.  Use the
+        # streaming API so a missing/false Content-Length cannot turn into an
+        # unbounded read.  Do not retain the chunk that crossed the boundary:
+        # it is not needed for the rejection response.
+        chunks: list[bytes] = []
+        received_bytes = 0
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            received_bytes += len(chunk)
+            if received_bytes > request_limit:
+                detail = _coverage_limit_detail(received_bytes) if is_coverage_request else (
+                    f"Request exceeds the {SCIENCE_REQUEST_BYTES}-byte science payload limit"
+                )
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": detail},
+                )
+            chunks.append(chunk)
+
+        # Starlette's BaseHTTPMiddleware replays ``_body`` through its wrapped
+        # receive callable.  Setting it after a complete stream read therefore
+        # makes FastAPI's body parser see the bounded bytes exactly once.
+        request._body = b"".join(chunks)  # type: ignore[attr-defined]
+    return await call_next(request)
 
 
 def authorize(authorization: str | None = Header(default=None)) -> None:
-    expected = os.environ.get("CORTEXLUME_TOKEN", "development-token")
+    global _insecure_auth_warning_emitted
+    expected = os.environ.get("CORTEXLUME_TOKEN", "").strip()
+    if not expected:
+        if os.environ.get("CORTEXLUME_ALLOW_INSECURE_DEV_AUTH") != "1":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="CORTEXLUME_TOKEN is required; set CORTEXLUME_ALLOW_INSECURE_DEV_AUTH=1 only for local development",
+            )
+        # Deliberately noisy: a developer must be able to see that this
+        # sidecar is accepting a well-known token. The warning is emitted by
+        # the standard server logger and does not disclose a production token.
+        if not _insecure_auth_warning_emitted:
+            logging.getLogger("cortexlume_science.auth").warning(
+                "INSECURE DEVELOPMENT AUTH ENABLED: using the well-known development-token; configure CORTEXLUME_TOKEN for normal use",
+            )
+            _insecure_auth_warning_emitted = True
+        expected = "development-token"
     if authorization != f"Bearer {expected}":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid sidecar token")
 
@@ -92,7 +246,14 @@ def health(_: None = Header(default=None, alias="x-unused"), authorization: str 
     targets = quick_target_status()
     return {
         "ok": True,
+        # Kept for clients using the original health response shape.
         "version": __version__,
+        **BUILD_METADATA,
+        # Spell these out as well so a future metadata implementation cannot
+        # accidentally omit the fields from this compatibility endpoint.
+        "applicationVersion": APPLICATION_VERSION,
+        "sidecarPackageVersion": SIDECAR_PACKAGE_VERSION,
+        "scienceApiVersion": SCIENCE_API_VERSION,
         "templateVerified": gate.passed,
         "templateIssues": list(gate.issues),
         "atlasVerified": atlas.available,
@@ -385,6 +546,32 @@ def atlas_query_path(request: AtlasPathQueryRequest, authorization: str | None =
     }
 
 
+@app.post("/v1/atlas/query-path-batch")
+def atlas_query_path_batch(
+    request: AtlasPathQueryBatchRequest,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Annotate several channel paths in one sidecar request."""
+    authorize(authorization)
+    atlas = atlas_status()
+    if not atlas.available:
+        return {
+            "atlasVerified": False,
+            "issue": atlas.issue,
+            "results": [{"id": item.id, "regions": []} for item in request.items],
+        }
+    return {
+        "atlasVerified": True,
+        "issue": None,
+        "results": [{
+            "id": item.id,
+            "regions": [region.model_dump(by_alias=True) for region in query_probability_path(
+                item.points, "cortical", request.probability_threshold,
+            )],
+        } for item in request.items],
+    }
+
+
 @app.post(
     "/v1/coverage/anatomical",
     response_model=AnatomicalCoverageAnalysis,
@@ -400,6 +587,8 @@ def anatomical_coverage(
         return compute_anatomical_coverage(request)
     except AnatomicalCoverageError as error:
         detail = str(error)
+        if detail.startswith("coverage_request_limit_exceeded"):
+            raise HTTPException(status_code=413, detail=_coverage_error_detail(detail)) from error
         if detail.startswith(("coverage_channel_", "coverage_kernel_")):
             raise HTTPException(status_code=422, detail=detail) from error
         raise HTTPException(status_code=503, detail=detail) from error
@@ -416,6 +605,8 @@ def anatomical_coverage_summary(
         analysis = compute_anatomical_coverage(request)
     except AnatomicalCoverageError as error:
         detail = str(error)
+        if detail.startswith("coverage_request_limit_exceeded"):
+            raise HTTPException(status_code=413, detail=_coverage_error_detail(detail)) from error
         if detail.startswith(("coverage_channel_", "coverage_kernel_")):
             raise HTTPException(status_code=422, detail=detail) from error
         raise HTTPException(status_code=503, detail=detail) from error

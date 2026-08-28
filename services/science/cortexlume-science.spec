@@ -6,6 +6,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 
 science_root = Path(SPECPATH)
+repository_root = science_root.parent.parent
 hiddenimports = (
     collect_submodules("fastapi")
     + collect_submodules("pydantic")
@@ -16,7 +17,7 @@ a = Analysis(
     [str(science_root / "run.py")],
     pathex=[str(science_root)],
     binaries=[],
-    datas=[],
+    datas=[(str(repository_root / "config" / "cross-process-limits.json"), "config")],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

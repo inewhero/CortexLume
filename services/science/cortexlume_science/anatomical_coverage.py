@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from .atlas import ATLAS_SHA256, CORTICAL_ATLAS_ID, cortical_probability_fields
+from .coverage_limits import ANATOMICAL_COVERAGE_LIMITS, coverage_limit_error
 from .models import (
     AnatomicalCoverageAnalysis,
     AnatomicalCoverageChannel,
@@ -312,27 +313,86 @@ def _stable_region_color(atlas_id: str, label: str) -> str:
     return f"#{round(red * 255):02X}{round(green * 255):02X}{round(blue * 255):02X}"
 
 
+def _validate_coverage_resource_limits(request: AnatomicalCoverageRequest) -> None:
+    """Re-check the request budget at the computation boundary.
+
+    Pydantic normally performs this validation while parsing the request.  A
+    second check keeps the engine safe for callers that use ``model_construct``
+    (or otherwise bypass normal validation) and makes the limit a property of
+    the scientific computation rather than just an HTTP endpoint.
+    """
+
+    limits = ANATOMICAL_COVERAGE_LIMITS
+    channel_count = len(request.channels)
+    if channel_count > limits["maximumChannels"]:
+        raise AnatomicalCoverageError(coverage_limit_error(
+            "maximumChannels", channel_count, limits["maximumChannels"]
+        ))
+    total_path_points = sum(len(channel.points_ras_mm) for channel in request.channels)
+    if total_path_points > limits["maximumTotalPathPoints"]:
+        raise AnatomicalCoverageError(coverage_limit_error(
+            "maximumTotalPathPoints", total_path_points, limits["maximumTotalPathPoints"]
+        ))
+    total_segments = sum(len(channel.points_ras_mm) - 1 for channel in request.channels)
+    if total_segments > limits["maximumTotalSegments"]:
+        raise AnatomicalCoverageError(coverage_limit_error(
+            "maximumTotalSegments", total_segments, limits["maximumTotalSegments"]
+        ))
+    serialized_bytes = len(request.model_dump_json(by_alias=True, exclude_none=True).encode("utf-8"))
+    if serialized_bytes > limits["maximumSerializedRequestBytes"]:
+        raise AnatomicalCoverageError(coverage_limit_error(
+            "maximumSerializedRequestBytes",
+            serialized_bytes,
+            limits["maximumSerializedRequestBytes"],
+        ))
+
+
 class AnatomicalCoverageEngine:
     def __init__(self, surface_atlas: SurfaceAtlasData | None = None):
         self.surface_atlas = surface_atlas or load_surface_atlas_data()
         self.surface_atlas.validate()
 
     def compute(self, request: AnatomicalCoverageRequest) -> AnatomicalCoverageAnalysis:
+        _validate_coverage_resource_limits(request)
         ordered_channels = sorted(request.channels, key=_stable_id)
         stable_ids = [_stable_id(channel) for channel in ordered_channels]
         if len(set(stable_ids)) != len(stable_ids):
             raise AnatomicalCoverageError("coverage_channel_id_duplicate")
 
-        paths: list[np.ndarray] = []
         channel_results: list[AnatomicalCoverageChannelResult] = []
-        for channel, stable_id in zip(ordered_channels, stable_ids, strict=True):
+        settings = request.settings
+        memberships = self.surface_atlas.atlas_memberships
+        label_indices = self.surface_atlas.atlas_label_indices
+        valid_slots = (
+            (label_indices != 255)
+            & (memberships > 0)
+            & (memberships >= settings.minimum_atlas_membership)
+        )
+
+        # Keep only O(vertices) kernel state.  The previous implementation
+        # stacked every channel kernel into a channels x vertices matrix,
+        # which made a large but valid request allocate hundreds of MiB.
+        combined_weights = np.zeros(VERTEX_COUNT, dtype=np.float64)
+        dominant_channels = np.zeros(VERTEX_COUNT, dtype=np.int64)
+        # Keep per-channel atlas contributions sparse as well.  A dense
+        # channel-by-vertex accumulator was the original memory failure; a
+        # channel-by-label matrix would still scale with an unexpectedly
+        # large/custom atlas.  The dictionaries contain only labels touched
+        # by each channel and are populated while that channel kernel is live.
+        channel_region_masses: list[dict[int, float]] = [
+            {} for _ in ordered_channels
+        ]
+        for channel_index, (channel, stable_id) in enumerate(zip(ordered_channels, stable_ids, strict=True)):
             path = np.asarray(channel.points_ras_mm, dtype=np.float64)
-            if path.shape != (len(channel.points_ras_mm), 3) or not np.all(np.isfinite(path)):
+            if (
+                path.shape != (len(channel.points_ras_mm), 3)
+                or len(path) > ANATOMICAL_COVERAGE_LIMITS["maximumPathPointsPerChannel"]
+                or not np.all(np.isfinite(path))
+            ):
                 raise AnatomicalCoverageError(f"coverage_channel_path_invalid:{stable_id}")
             path_length = _path_length_mm(path)
             if path_length <= 1e-6:
                 raise AnatomicalCoverageError(f"coverage_channel_path_degenerate:{stable_id}")
-            paths.append(path)
             channel_results.append(AnatomicalCoverageChannelResult(
                 stable_id=stable_id,
                 instance_id=channel.instance_id,
@@ -343,48 +403,53 @@ class AnatomicalCoverageEngine:
                 path_sha256=_canonical_path_sha256(path),
             ))
 
-        settings = request.settings
-        channel_weights = np.stack([
-            _channel_kernel(
+            channel_weights = _channel_kernel(
                 self.surface_atlas.vertices_ras_mm,
                 path,
                 settings.kernel_sigma_mm,
                 settings.support_radius_mm,
             )
-            for path in paths
-        ])
-        combined_weights = np.max(channel_weights, axis=0)
-        dominant_channels = np.argmax(channel_weights, axis=0)
+            better = channel_weights > combined_weights
+            combined_weights[better] = channel_weights[better]
+            dominant_channels[better] = channel_index
+
+            # Accumulate only the channel's touched atlas regions while its
+            # kernel is live, then let that kernel be released before the next
+            # channel is evaluated.  The inverse index keeps this linear in
+            # the covered vertices without allocating a C x 25k matrix.
+            covered = channel_weights > 0
+            for slot in range(3):
+                selected = covered & valid_slots[:, slot]
+                if not np.any(selected):
+                    continue
+                labels = label_indices[selected, slot].astype(np.int64, copy=False)
+                contributions = channel_weights[selected] * memberships[selected, slot]
+                unique_labels, inverse = np.unique(labels, return_inverse=True)
+                masses = np.bincount(inverse, weights=contributions)
+                per_channel = channel_region_masses[channel_index]
+                for label, mass in zip(unique_labels, masses, strict=True):
+                    per_channel[int(label)] = per_channel.get(int(label), 0.0) + float(mass)
+
         geometric_mask = combined_weights > 0
         geometric_vertex_indices = np.flatnonzero(geometric_mask)
 
-        memberships = self.surface_atlas.atlas_memberships
-        label_indices = self.surface_atlas.atlas_label_indices
-        valid_slots = (
-            (label_indices != 255)
-            & (memberships > 0)
-            & (memberships >= settings.minimum_atlas_membership)
-        )
         atlas_labeled_mask = geometric_mask & np.any(valid_slots, axis=1)
         mosaic_vertex_indices = np.flatnonzero(atlas_labeled_mask)
 
         region_masses: dict[int, float] = {}
-        channel_region_masses: dict[int, np.ndarray] = {}
         for slot in range(3):
             selected = geometric_mask & valid_slots[:, slot]
             if not np.any(selected):
                 continue
-            for label_index in np.unique(label_indices[selected, slot]):
-                label = int(label_index)
-                label_mask = selected & (label_indices[:, slot] == label)
-                atlas_membership = memberships[label_mask, slot]
-                combined_mass = float(np.dot(combined_weights[label_mask], atlas_membership))
-                region_masses[label] = region_masses.get(label, 0.0) + combined_mass
-                per_channel = channel_weights[:, label_mask] @ atlas_membership
-                if label in channel_region_masses:
-                    channel_region_masses[label] += per_channel
-                else:
-                    channel_region_masses[label] = np.asarray(per_channel, dtype=np.float64)
+            labels = label_indices[selected, slot].astype(np.int64, copy=False)
+            contributions = combined_weights[selected] * memberships[selected, slot]
+            combined_region_masses = np.bincount(
+                labels,
+                weights=contributions,
+                minlength=len(self.surface_atlas.atlas_labels),
+            )
+            for label in np.flatnonzero(combined_region_masses > 0):
+                region_masses[int(label)] = region_masses.get(int(label), 0.0) + float(combined_region_masses[label])
 
         total_region_mass = float(sum(region_masses.values()))
         sorted_labels = sorted(
@@ -408,8 +473,11 @@ class AnatomicalCoverageEngine:
 
         regions: list[AnatomicalCoverageRegion] = []
         for region_index, label in enumerate(sorted_labels):
-            per_channel = channel_region_masses[label]
-            contribution_total = float(per_channel.sum())
+            per_channel = [
+                channel_region_masses[channel_index].get(label, 0.0)
+                for channel_index in range(len(ordered_channels))
+            ]
+            contribution_total = float(sum(per_channel))
             channel_shares = [
                 AnatomicalCoverageChannelShare(
                     channel_index=channel_index,

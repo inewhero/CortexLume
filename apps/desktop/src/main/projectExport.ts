@@ -12,6 +12,24 @@ export interface ExportBundle {
   warnings: string[];
 }
 
+export interface ExportRunOptions {
+  signal?: AbortSignal;
+  deadline?: number;
+  onProgress?: (completed: number, total: number, phase: string) => void;
+}
+
+/** Let Electron service the operations:cancel IPC between bounded build steps. */
+function yieldExportTurn(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function checkExportBudget(options: ExportRunOptions): void {
+  if (options.signal?.aborted) throw new Error('Project export cancelled');
+  if (options.deadline != null && Date.now() >= options.deadline) {
+    throw new Error('Project export exceeded its overall time budget');
+  }
+}
+
 function cell(value: unknown, delimiter: ',' | '\t'): string {
   const raw = value == null ? '' : String(value);
   const spreadsheetFormula = typeof value === 'string'
@@ -76,10 +94,11 @@ function layoutForInstance(
   return project.layouts.find((layout) => layout.id === instance.definitionId);
 }
 
-function assertProjectionResultsReady(project: CortexLumeProject): void {
+function assertProjectionResultsReady(project: CortexLumeProject, options: ExportRunOptions = {}): void {
   const missingOrUnverified: string[] = [];
   const results = resultMap(project);
   for (const instance of exportInstances(project)) {
+    checkExportBudget(options);
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     for (const subject of layout.optodes) {
@@ -103,10 +122,11 @@ function assertProjectionResultsReady(project: CortexLumeProject): void {
   }
 }
 
-function qualityControl(project: CortexLumeProject) {
+function qualityControl(project: CortexLumeProject, options: ExportRunOptions = {}) {
   const results = resultMap(project);
   const codes = instanceCodes(project);
   const channelSpacing = exportInstances(project).flatMap((instance) => {
+    checkExportBudget(options);
     const layout = layoutForInstance(project, instance);
     if (!layout) return [];
     return layout.pairs.map((pair) => {
@@ -140,7 +160,8 @@ function qualityControl(project: CortexLumeProject) {
   };
 }
 
-function exportMetadata(project: CortexLumeProject, kind: string, warnings: string[]) {
+function exportMetadata(project: CortexLumeProject, kind: string, warnings: string[], options: ExportRunOptions = {}) {
+  checkExportBudget(options);
   return {
     format: 'cortexlume-export',
     formatVersion: 4,
@@ -175,14 +196,15 @@ function exportMetadata(project: CortexLumeProject, kind: string, warnings: stri
       instances: project.instances,
       digitizerSessions: project.digitizerSessions,
       projectionResults: project.verifiedResults,
-      qualityControl: qualityControl(project),
+      qualityControl: qualityControl(project, options),
     },
     warnings,
   };
 }
 
-export function buildCsvExport(project: CortexLumeProject): ExportBundle {
-  assertProjectionResultsReady(project);
+export function buildCsvExport(project: CortexLumeProject, options: ExportRunOptions = {}): ExportBundle {
+  checkExportBudget(options);
+  assertProjectionResultsReady(project, options);
   const warnings: string[] = [];
   const results = resultMap(project);
   const codes = instanceCodes(project);
@@ -209,7 +231,10 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
     'cortical_region_3', 'cortical_region_3_percent',
   ]];
 
-  for (const instance of instances) {
+  const progressTotal = Math.max(1, instances.length);
+  options.onProgress?.(0, progressTotal, 'export-csv');
+  for (const [instanceIndex, instance] of instances.entries()) {
+    checkExportBudget(options);
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const code = codes.get(instance.id) ?? '';
@@ -245,6 +270,7 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
         ...topRegions(result?.underlyingCorticalRegions ?? []),
       ]);
     }
+    options.onProgress?.(instanceIndex + 1, progressTotal, 'export-csv');
   }
 
   if (project.instances.length === 0) {
@@ -262,7 +288,116 @@ export function buildCsvExport(project: CortexLumeProject): ExportBundle {
     'cortexlume_optodes.csv': csvTable(optodeRows),
     'cortexlume_channels.csv': csvTable(channelRows),
   };
-  files['cortexlume_export.json'] = `${JSON.stringify(exportMetadata(project, 'csv', warnings), null, 2)}\n`;
+  files['cortexlume_export.json'] = `${JSON.stringify(exportMetadata(project, 'csv', warnings, options), null, 2)}\n`;
+  return { files, warnings };
+}
+
+/**
+ * Asynchronous CSV builder used by the Electron operation boundary.  The
+ * synchronous builder remains available to pure callers/tests, while this
+ * variant yields once per placed instance so cancellation and the operation
+ * deadline can be observed during a large export rather than only after
+ * JSON/CSV construction has finished.
+ */
+export async function buildCsvExportAsync(
+  project: CortexLumeProject,
+  options: ExportRunOptions = {},
+): Promise<ExportBundle> {
+  checkExportBudget(options);
+  assertProjectionResultsReady(project, options);
+  const warnings: string[] = [];
+  const results = resultMap(project);
+  const codes = instanceCodes(project);
+  const instances = exportInstances(project);
+  const optodeRows: unknown[][] = [[
+    'patch', 'optode', 'type',
+    'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
+    'display_mni_r', 'display_mni_a', 'display_mni_s',
+    'cortical_contact_mni_r', 'cortical_contact_mni_a', 'cortical_contact_mni_s',
+    'cortical_region_1', 'cortical_region_1_percent',
+    'cortical_region_2', 'cortical_region_2_percent',
+    'cortical_region_3', 'cortical_region_3_percent',
+  ]];
+  const channelRows: unknown[][] = [[
+    'patch', 'channel', 'source', 'detector',
+    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_display_spacing_mm', 'actual_cortical_contact_spacing_mm',
+    'short_channel',
+    'scalp_mni_r', 'scalp_mni_a', 'scalp_mni_s',
+    'display_mni_r', 'display_mni_a', 'display_mni_s',
+    'cortical_contact_mni_r', 'cortical_contact_mni_a', 'cortical_contact_mni_s',
+    'depth_target_mni_r', 'depth_target_mni_a', 'depth_target_mni_s',
+    'cortical_region_1', 'cortical_region_1_percent',
+    'cortical_region_2', 'cortical_region_2_percent',
+    'cortical_region_3', 'cortical_region_3_percent',
+  ]];
+
+  const progressTotal = Math.max(1, instances.length);
+  options.onProgress?.(0, progressTotal, 'export-csv');
+  for (const [instanceIndex, instance] of instances.entries()) {
+    await yieldExportTurn();
+    checkExportBudget(options);
+    const layout = layoutForInstance(project, instance);
+    if (!layout) continue;
+    const code = codes.get(instance.id) ?? '';
+    const byId = new Map(layout.optodes.map((optode) => [optode.id, optode]));
+    for (const optode of layout.optodes) {
+      checkExportBudget(options);
+      const result = results.get(resultKey(instance.id, 'optode', optode.id));
+      optodeRows.push([
+        code, optode.label, optode.type,
+        ...vector(result?.scalpRasMm),
+        ...vector(result?.displayRasMm),
+        ...vector(result?.corticalRasMm),
+        ...topRegions(result?.underlyingCorticalRegions ?? []),
+      ]);
+    }
+    for (const pair of layout.pairs) {
+      checkExportBudget(options);
+      const result = results.get(resultKey(instance.id, 'pair', pair.id));
+      const sourceResult = results.get(resultKey(instance.id, 'optode', pair.sourceId));
+      const detectorResult = results.get(resultKey(instance.id, 'optode', pair.detectorId));
+      const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
+      const actualDisplaySpacing = distance3(sourceResult?.displayRasMm, detectorResult?.displayRasMm);
+      const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
+      channelRows.push([
+        code, pair.channelNumber ?? '',
+        byId.get(pair.sourceId)?.label ?? pair.sourceId,
+        byId.get(pair.detectorId)?.label ?? pair.detectorId,
+        Number(pair.nominalDistanceMm.toFixed(3)),
+        actualScalpSpacing, actualDisplaySpacing, actualCortexSpacing,
+        pair.shortChannel,
+        ...vector(result?.scalpRasMm),
+        ...vector(result?.displayRasMm),
+        ...vector(result?.corticalRasMm),
+        ...vector(result?.depthTargetRasMm),
+        ...topRegions(result?.underlyingCorticalRegions ?? []),
+      ]);
+    }
+    checkExportBudget(options);
+    options.onProgress?.(instanceIndex + 1, progressTotal, 'export-csv');
+  }
+
+  checkExportBudget(options);
+  if (project.instances.length === 0) {
+    warnings.push('No 3D patch instances exist; exported coordinate columns are empty.');
+  }
+  const expectedResults = instances.reduce((total, instance) => {
+    const layout = layoutForInstance(project, instance);
+    return total + (layout ? layout.optodes.length + layout.pairs.length : 0);
+  }, 0);
+  if (project.verifiedResults.length < expectedResults) {
+    warnings.push('Some placed optodes or channels do not have computed projection results.');
+  }
+  // Yield before the potentially large metadata serialization as well.  This
+  // gives a queued cancel a chance to run before its final side effect.
+  await yieldExportTurn();
+  checkExportBudget(options);
+  const files: Record<string, string> = {
+    'cortexlume_optodes.csv': csvTable(optodeRows),
+    'cortexlume_channels.csv': csvTable(channelRows),
+  };
+  files['cortexlume_export.json'] = `${JSON.stringify(exportMetadata(project, 'csv', warnings, options), null, 2)}\n`;
+  checkExportBudget(options);
   return { files, warnings };
 }
 
@@ -333,15 +468,17 @@ function brainNetMatlabScript(): string {
   ].join('\r\n')}\r\n`;
 }
 
-export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
-  assertProjectionResultsReady(project);
-  const csv = buildCsvExport(project);
+export function buildBrainNetExport(project: CortexLumeProject, options: ExportRunOptions = {}): ExportBundle {
+  checkExportBudget(options);
+  assertProjectionResultsReady(project, options);
+  const csv = buildCsvExport(project, options);
   const warnings = [...csv.warnings];
   const results = resultMap(project);
   const codes = instanceCodes(project);
   const nodes: Array<{ label: string; coordinate: Vec3; color: number }> = [];
 
   for (const instance of exportInstances(project)) {
+    checkExportBudget(options);
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const patch = codes.get(instance.id) ?? instance.id;
@@ -358,7 +495,7 @@ export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
   if (nodes.length === 0) warnings.push('BrainNet Viewer output contains no finite cortical optode coordinates.');
   const files = {
     ...csv.files,
-    'cortexlume_export.json': `${JSON.stringify(exportMetadata(project, 'brainnet-viewer', warnings), null, 2)}\n`,
+    'cortexlume_export.json': `${JSON.stringify(exportMetadata(project, 'brainnet-viewer', warnings, options), null, 2)}\n`,
     'cortexlume_brainnet.node': `${nodes.map((node) => [
       ...node.coordinate.map((value) => value.toFixed(6)),
       node.color,
@@ -384,8 +521,72 @@ export function buildBrainNetExport(project: CortexLumeProject): ExportBundle {
   return { files, warnings };
 }
 
-export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundle {
-  assertProjectionResultsReady(project);
+export async function buildBrainNetExportAsync(
+  project: CortexLumeProject,
+  options: ExportRunOptions = {},
+): Promise<ExportBundle> {
+  checkExportBudget(options);
+  assertProjectionResultsReady(project, options);
+  const csv = await buildCsvExportAsync(project, options);
+  const warnings = [...csv.warnings];
+  const results = resultMap(project);
+  const codes = instanceCodes(project);
+  const nodes: Array<{ label: string; coordinate: Vec3; color: number }> = [];
+
+  const instances = exportInstances(project);
+  for (const instance of instances) {
+    await yieldExportTurn();
+    checkExportBudget(options);
+    const layout = layoutForInstance(project, instance);
+    if (!layout) continue;
+    const patch = codes.get(instance.id) ?? instance.id;
+    for (const optode of layout.optodes) {
+      checkExportBudget(options);
+      const coordinate = results.get(resultKey(instance.id, 'optode', optode.id))?.corticalRasMm;
+      if (!coordinate?.every(Number.isFinite)) continue;
+      nodes.push({
+        label: `${patch}-${optode.label}`.replaceAll(/\s+/g, '-'),
+        coordinate,
+        color: optode.type === 'source' ? 1 : 2,
+      });
+    }
+  }
+  checkExportBudget(options);
+  if (nodes.length === 0) warnings.push('BrainNet Viewer output contains no finite cortical optode coordinates.');
+  await yieldExportTurn();
+  checkExportBudget(options);
+  const files = {
+    ...csv.files,
+    'cortexlume_export.json': `${JSON.stringify(exportMetadata(project, 'brainnet-viewer', warnings, options), null, 2)}\n`,
+    'cortexlume_brainnet.node': `${nodes.map((node) => [
+      ...node.coordinate.map((value) => value.toFixed(6)),
+      node.color,
+      '4.000',
+      node.label,
+    ].join(' ')).join('\r\n')}\r\n`,
+    'cortexlume_open_brainnet.m': brainNetMatlabScript(),
+    'README_BRAINNET.txt': `${[
+      'CortexLume BrainNet Viewer export',
+      '',
+      'Run cortexlume_open_brainnet.m in MATLAB to open the validated .node file in BrainNet Viewer.',
+      'Scalp MNI is the physical optode sphere centre: nearest scalp contact plus one outward optode radius.',
+      'Display MNI is the collision-safe sphere centre reached by sweeping the finite optode inward against the CortexLume cortical mesh; it is mesh-specific and is not used for BrainNet nodes.',
+      'Cortical contact MNI is the first contact with the correspondence-backed gray-matter surface and is used for cortical atlas lookup.',
+      'Columns 1-3 are cortical-contact MNI x/y/z (R/A/S) in millimetres; no display-axis conversion is applied.',
+      'Column 4 uses modular index 1 for sources and 2 for detectors. The script enforces red source and blue detector colors.',
+      'Node labels are stored in column 6 but hidden by default in BrainNet Viewer.',
+      'BrainNet receives the exported cortical MNI coordinates unchanged; no snapping, offset, or display-space correction is applied.',
+      'No edge file is generated: CortexLume exports optode locations only.',
+      'The MATLAB script writes eight fNIRS-relevant PNG views, one array-facing optimized PNG, and one logically arranged 3x3 mosaic without colorbars or a ventral view.',
+    ].join('\r\n')}\r\n`,
+  };
+  checkExportBudget(options);
+  return { files, warnings };
+}
+
+export function buildBidsGeometryExport(project: CortexLumeProject, options: ExportRunOptions = {}): ExportBundle {
+  checkExportBudget(options);
+  assertProjectionResultsReady(project, options);
   const warnings = [
     'Add the matching SNIRF recording to complete the BIDS NIRS dataset.',
   ];
@@ -425,6 +626,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
   let shortChannelCount = 0;
 
   for (const instance of exportInstances(project)) {
+    checkExportBudget(options);
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const code = codes.get(instance.id)!;
@@ -447,6 +649,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
   }
 
   for (const instance of exportInstances(project)) {
+    checkExportBudget(options);
     const layout = layoutForInstance(project, instance);
     if (!layout) continue;
     const code = codes.get(instance.id)!;
@@ -545,7 +748,7 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
     }, null, 2)}\n`,
     [`${nirsDirectory}/${recordingPrefix}_nirs.json`]: `${JSON.stringify(nirsSidecar, null, 2)}\n`,
     'sourcedata/cortexlume_export.json':
-      `${JSON.stringify(exportMetadata(project, 'bids-nirs', warnings), null, 2)}\n`,
+      `${JSON.stringify(exportMetadata(project, 'bids-nirs', warnings, options), null, 2)}\n`,
     README: `${[
       'CortexLume BIDS-NIRS geometry package.',
       'Add the corresponding SNIRF recording under the generated subject nirs directory.',
@@ -555,5 +758,203 @@ export function buildBidsGeometryExport(project: CortexLumeProject): ExportBundl
       ...warnings,
     ].join('\r\n')}\r\n`,
   };
+  return { files, warnings };
+}
+
+export async function buildBidsGeometryExportAsync(
+  project: CortexLumeProject,
+  options: ExportRunOptions = {},
+): Promise<ExportBundle> {
+  checkExportBudget(options);
+  assertProjectionResultsReady(project, options);
+  const warnings = [
+    'Add the matching SNIRF recording to complete the BIDS NIRS dataset.',
+  ];
+  const results = resultMap(project);
+  const codes = instanceCodes(project);
+  const settings = project.bidsSettings;
+  const subject = `sub-${settings.subjectLabel}`;
+  const session = settings.sessionLabel ? `ses-${settings.sessionLabel}` : '';
+  const acquisition = settings.acquisitionLabel ? `acq-${settings.acquisitionLabel}` : '';
+  const run = settings.runIndex == null ? '' : `run-${String(settings.runIndex).padStart(2, '0')}`;
+  const nirsDirectory = [subject, session, 'nirs'].filter(Boolean).join('/');
+  const sharedPrefix = [subject, session, acquisition].filter(Boolean).join('_');
+  const recordingPrefix = [subject, session, `task-${settings.taskLabel}`, acquisition, run]
+    .filter(Boolean).join('_');
+  const optodeRows: unknown[][] = [[
+    'name', 'type', 'x', 'y', 'z',
+    'display_x', 'display_y', 'display_z',
+    'cortical_contact_x', 'cortical_contact_y', 'cortical_contact_z',
+    'cortical_region_1', 'cortical_region_1_percent',
+    'cortical_region_2', 'cortical_region_2_percent',
+    'cortical_region_3', 'cortical_region_3_percent',
+  ]];
+  const channelRows: unknown[][] = [[
+    'name', 'type', 'source', 'detector', 'wavelength_nominal', 'units',
+    'short_channel', 'status', 'status_description',
+    'nominal_distance_mm', 'actual_scalp_spacing_mm', 'actual_cortical_contact_spacing_mm',
+  ]];
+  const optodeNames = new Map<string, string>();
+  let missingCoordinates = 0;
+  let sourceCount = 0;
+  let detectorCount = 0;
+  let shortChannelCount = 0;
+
+  const instances = exportInstances(project);
+  const progressTotal = Math.max(1, instances.length * 2);
+  let progressCompleted = 0;
+  options.onProgress?.(0, progressTotal, 'export-bids');
+  for (const instance of instances) {
+    await yieldExportTurn();
+    checkExportBudget(options);
+    const layout = layoutForInstance(project, instance);
+    if (!layout) {
+      progressCompleted += 1;
+      options.onProgress?.(progressCompleted, progressTotal, 'export-bids');
+      continue;
+    }
+    const code = codes.get(instance.id)!;
+    for (const optode of layout.optodes) {
+      checkExportBudget(options);
+      const name = `${code}_${optode.label}`;
+      optodeNames.set(`${instance.id}:${optode.id}`, name);
+      const result = results.get(resultKey(instance.id, 'optode', optode.id));
+      if (!result?.scalpRasMm) missingCoordinates += 1;
+      if (optode.type === 'source') sourceCount += 1;
+      else detectorCount += 1;
+      optodeRows.push([
+        name, optode.type,
+        ...vector(result?.scalpRasMm, 'n/a'),
+        ...vector(result?.displayRasMm, 'n/a'),
+        ...vector(result?.corticalRasMm, 'n/a'),
+        ...topRegions(result?.underlyingCorticalRegions ?? [])
+          .map((value) => value === '' ? 'n/a' : value),
+      ]);
+    }
+    progressCompleted += 1;
+    options.onProgress?.(progressCompleted, progressTotal, 'export-bids');
+  }
+
+  for (const instance of instances) {
+    await yieldExportTurn();
+    checkExportBudget(options);
+    const layout = layoutForInstance(project, instance);
+    if (!layout) {
+      progressCompleted += 1;
+      options.onProgress?.(progressCompleted, progressTotal, 'export-bids');
+      continue;
+    }
+    const code = codes.get(instance.id)!;
+    for (const pair of layout.pairs) {
+      checkExportBudget(options);
+      const result = results.get(resultKey(instance.id, 'pair', pair.id));
+      const sourceResult = results.get(resultKey(instance.id, 'optode', pair.sourceId));
+      const detectorResult = results.get(resultKey(instance.id, 'optode', pair.detectorId));
+      const actualScalpSpacing = distance3(sourceResult?.scalpRasMm, detectorResult?.scalpRasMm);
+      const actualCortexSpacing = distance3(sourceResult?.corticalRasMm, detectorResult?.corticalRasMm);
+      const spacingError = actualScalpSpacing === ''
+        ? null
+        : Math.abs(actualScalpSpacing - pair.nominalDistanceMm);
+      const status = spacingError != null && spacingError <= 5 && result?.status !== 'blocked'
+        ? 'good'
+        : 'bad';
+      const statusDescription = spacingError == null
+        ? 'Missing projected optode coordinates'
+        : status === 'good' ? 'Spacing QC passed' : `Spacing differs by ${spacingError.toFixed(3)} mm`;
+      for (const wavelength of project.deviceProfile.wavelengthsNm) {
+        checkExportBudget(options);
+        if (pair.shortChannel) shortChannelCount += 1;
+        channelRows.push([
+          `${code}_CH${pair.channelNumber ?? pair.id}_${wavelength}`,
+          project.deviceProfile.measurementType,
+          optodeNames.get(`${instance.id}:${pair.sourceId}`) ?? `${code}_${pair.sourceId}`,
+          optodeNames.get(`${instance.id}:${pair.detectorId}`) ?? `${code}_${pair.detectorId}`,
+          wavelength, project.deviceProfile.units, pair.shortChannel,
+          status, statusDescription,
+          Number(pair.nominalDistanceMm.toFixed(3)),
+          actualScalpSpacing === '' ? 'n/a' : actualScalpSpacing,
+          actualCortexSpacing === '' ? 'n/a' : actualCortexSpacing,
+        ]);
+      }
+    }
+    progressCompleted += 1;
+    options.onProgress?.(progressCompleted, progressTotal, 'export-bids');
+  }
+
+  checkExportBudget(options);
+  if (project.instances.length === 0) warnings.push('No 3D patch instances exist.');
+  if (missingCoordinates > 0) warnings.push(`${missingCoordinates} optodes do not have computed scalp coordinates.`);
+  if (project.deviceProfile.samplingFrequencyHz == null) {
+    warnings.push('Set the sampling frequency from the recording before BIDS validation.');
+  }
+
+  const nirsSidecar: Record<string, unknown> = {
+    TaskName: settings.taskLabel,
+    Manufacturer: project.deviceProfile.manufacturer,
+    ManufacturersModelName: project.deviceProfile.model,
+    SourceType: project.deviceProfile.sourceType,
+    DetectorType: project.deviceProfile.detectorType,
+    Wavelengths: project.deviceProfile.wavelengthsNm,
+    NIRSChannelCount: channelRows.length - 1,
+    NIRSSourceOptodeCount: sourceCount,
+    NIRSDetectorOptodeCount: detectorCount,
+    ShortChannelCount: shortChannelCount,
+    NIRSPlacementScheme: 'n/a',
+  };
+  if (project.deviceProfile.samplingFrequencyHz != null) {
+    nirsSidecar.SamplingFrequency = project.deviceProfile.samplingFrequencyHz;
+  }
+
+  await yieldExportTurn();
+  checkExportBudget(options);
+  const files: Record<string, string> = {
+    'dataset_description.json': `${JSON.stringify({
+      Name: project.name,
+      BIDSVersion: '1.11.1',
+      DatasetType: 'raw',
+      GeneratedBy: [{ Name: 'CortexLume' }],
+    }, null, 2)}\n`,
+    [`${nirsDirectory}/${sharedPrefix}_optodes.tsv`]: table(optodeRows, '\t'),
+    [`${nirsDirectory}/${sharedPrefix}_optodes.json`]: `${JSON.stringify({
+      display_x: { Description: 'Collision-safe CortexLume cortical display sphere centre, right axis', Units: 'mm' },
+      display_y: { Description: 'Collision-safe CortexLume cortical display sphere centre, anterior axis', Units: 'mm' },
+      display_z: { Description: 'Collision-safe CortexLume cortical display sphere centre, superior axis', Units: 'mm' },
+      cortex_x: { Description: 'First gray-matter contact, right axis', Units: 'mm' },
+      cortex_y: { Description: 'First gray-matter contact, anterior axis', Units: 'mm' },
+      cortex_z: { Description: 'First gray-matter contact, superior axis', Units: 'mm' },
+      cortical_region_1: { Description: 'Highest-probability cortical atlas label' },
+      cortical_region_1_percent: { Description: 'Atlas probability in percent', Units: '%' },
+      cortical_region_2: { Description: 'Second-highest cortical atlas label' },
+      cortical_region_2_percent: { Description: 'Atlas probability in percent', Units: '%' },
+      cortical_region_3: { Description: 'Third-highest cortical atlas label' },
+      cortical_region_3_percent: { Description: 'Atlas probability in percent', Units: '%' },
+    }, null, 2)}\n`,
+    [`${nirsDirectory}/${sharedPrefix}_coordsystem.json`]: `${JSON.stringify({
+      NIRSCoordinateSystem: project.template.id,
+      NIRSCoordinateUnits: project.template.units,
+      NIRSCoordinateProcessingDescription: 'surface_projection',
+      NIRSCoordinateSystemDescription:
+        `Scalp optode sphere centres in MNI RAS+ space from CortexLume template ${project.template.assetVersion}.`,
+    }, null, 2)}\n`,
+    [`${nirsDirectory}/${recordingPrefix}_channels.tsv`]: table(channelRows, '\t'),
+    [`${nirsDirectory}/${recordingPrefix}_channels.json`]: `${JSON.stringify({
+      short_channel: { Description: 'Whether the source-detector pair is designated as short separation' },
+      nominal_distance_mm: { Description: 'Distance in the 2D optode design', Units: 'mm' },
+      actual_scalp_spacing_mm: { Description: 'Projected source-detector distance on the scalp', Units: 'mm' },
+      actual_cortical_contact_spacing_mm: { Description: 'Source-detector distance at cortical contact', Units: 'mm' },
+    }, null, 2)}\n`,
+    [`${nirsDirectory}/${recordingPrefix}_nirs.json`]: `${JSON.stringify(nirsSidecar, null, 2)}\n`,
+    'sourcedata/cortexlume_export.json':
+      `${JSON.stringify(exportMetadata(project, 'bids-nirs', warnings, options), null, 2)}\n`,
+    README: `${[
+      'CortexLume BIDS-NIRS geometry package.',
+      'Add the corresponding SNIRF recording under the generated subject nirs directory.',
+      'Scalp MNI (standard optodes.tsv x/y/z) is the physical optode sphere centre: nearest scalp contact plus one outward optode radius.',
+      'Display MNI (display_x/y/z extension columns) is the collision-safe sphere centre reached by sweeping the finite optode inward against the CortexLume cortical mesh; it is an intermediate visualization coordinate.',
+      'Cortical contact MNI (cortical_contact_x/y/z extension columns) is the first contact with the correspondence-backed gray-matter surface and is used for cortical atlas lookup.',
+      ...warnings,
+    ].join('\r\n')}\r\n`,
+  };
+  checkExportBudget(options);
   return { files, warnings };
 }

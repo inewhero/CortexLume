@@ -16,6 +16,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
 
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -37,6 +42,22 @@ jobs:
 
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Assert single product version source
+        run: pnpm version:check
+
+      - name: Assert release tag matches product version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $expectedTag = "v$version"
+          if ("${{ github.ref_name }}" -ne $expectedTag) {
+            throw "Release tag '${{ github.ref_name }}' does not match the root product version ('$expectedTag')."
+          }
+
+      - name: Generate science build metadata
+        run: pnpm version:metadata
 
       - name: Create Python environment
         shell: pwsh
@@ -110,6 +131,47 @@ jobs:
           Copy-Item $portable.FullName `
             "release/CortexLume-$version-win-x64-portable.zip"
 
+      - name: Sign Windows installer (optional secret-gated Authenticode)
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          CORTEXLUME_CODESIGN_PFX_B64: ${{ secrets.CORTEXLUME_CODESIGN_PFX_B64 }}
+          CORTEXLUME_CODESIGN_PASSWORD: ${{ secrets.CORTEXLUME_CODESIGN_PASSWORD }}
+          CORTEXLUME_CODESIGN_TIMESTAMP_URL: ${{ secrets.CORTEXLUME_CODESIGN_TIMESTAMP_URL }}
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ([string]::IsNullOrWhiteSpace($env:CORTEXLUME_CODESIGN_PFX_B64) -or [string]::IsNullOrWhiteSpace($env:CORTEXLUME_CODESIGN_PASSWORD)) {
+            Write-Host "Authenticode signing skipped: signing secrets are not configured (expected for ordinary forks)."
+            exit 0
+          }
+          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          if (-not $signtool) {
+            throw "Authenticode signing was requested, but signtool.exe is unavailable on the runner."
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "cortexlume-signing.pfx"
+          try {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CORTEXLUME_CODESIGN_PFX_B64))
+            $timestamp = if ([string]::IsNullOrWhiteSpace($env:CORTEXLUME_CODESIGN_TIMESTAMP_URL)) { "http://timestamp.digicert.com" } else { $env:CORTEXLUME_CODESIGN_TIMESTAMP_URL }
+            $password = ConvertTo-SecureString $env:CORTEXLUME_CODESIGN_PASSWORD -AsPlainText -Force
+            $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+            if (-not $certificate) { throw "The configured Authenticode certificate could not be imported." }
+            & $signtool.Source sign /fd SHA256 /f $pfxPath /p $env:CORTEXLUME_CODESIGN_PASSWORD /tr $timestamp /td SHA256 "release\CortexLume-$version-win-x64-Setup.exe"
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed to sign the Windows installer." }
+            & $signtool.Source verify /pa /all "release\CortexLume-$version-win-x64-Setup.exe"
+            if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed for the Windows installer." }
+            "Authenticode: Valid" | Set-Content -Path "release\AUTHENTICODE.txt" -Encoding utf8
+          } finally {
+            Remove-Item -LiteralPath $pfxPath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Generate release checksums and SPDX SBOM
+        if: github.event_name != 'pull_request'
+        run: pnpm release:metadata
+
+      - name: Verify release checksums and SPDX SBOM
+        if: github.event_name != 'pull_request'
+        run: pnpm release:verify
+
       - name: Upload workflow artifacts
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
@@ -118,6 +180,12 @@ jobs:
           path: release/*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Attest release artifacts
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release/*
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

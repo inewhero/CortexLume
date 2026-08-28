@@ -2,12 +2,24 @@ import { describe, expect, it } from 'vitest';
 import {
   BidsSettingsSchema,
   AnatomicalCoverageAnalysisSchema,
+  ANATOMICAL_COVERAGE_LIMITS,
   AnatomicalCoverageRequestSchema,
   DeviceProfileSchema,
   FunctionalTargetMapSchema,
   LayoutDefinitionSchema,
   ProjectionSettingsSchema,
 } from './index';
+
+function budgetChannel(index: number, pointCount = 2, coordinate?: number) {
+  const id = (offset: number) => `00000000-0000-4000-8000-${(offset + index).toString(16).padStart(12, '0')}`;
+  return {
+    instanceId: id(10_000),
+    pairId: id(20_000),
+    pointsRasMm: Array.from({ length: pointCount }, (_, point) => (
+      coordinate === undefined ? [point, 0, 0] : [coordinate, coordinate, coordinate]
+    )),
+  };
+}
 
 describe('LayoutDefinitionSchema', () => {
   it('rejects non-UUID optode identifiers', () => {
@@ -159,5 +171,77 @@ describe('LayoutDefinitionSchema', () => {
         geometricCoverageWeights: [0.8],
       },
     }).success).toBe(false);
+  });
+
+  it('enforces anatomical coverage channel, point and segment budgets at boundaries', () => {
+    const limits = ANATOMICAL_COVERAGE_LIMITS;
+    expect(AnatomicalCoverageRequestSchema.safeParse({ channels: [budgetChannel(1)] }).success).toBe(true);
+    expect(AnatomicalCoverageRequestSchema.safeParse({
+      channels: Array.from({ length: limits.maximumChannels }, (_, index) => budgetChannel(index)),
+    }).success).toBe(true);
+
+    const tooManyChannels = AnatomicalCoverageRequestSchema.safeParse({
+      channels: Array.from({ length: limits.maximumChannels + 1 }, (_, index) => budgetChannel(index)),
+    });
+    expect(tooManyChannels.success).toBe(false);
+    if (!tooManyChannels.success) {
+      expect(tooManyChannels.error.issues.map((issue) => issue.message)).toContain(
+        'coverage_request_limit_exceeded:maximumChannels:129:128',
+      );
+    }
+
+    const maximumPointCounts = Array.from({ length: limits.maximumChannels }, () => (
+      limits.maximumTotalPathPoints / limits.maximumChannels
+    ));
+    expect(maximumPointCounts.every(Number.isInteger)).toBe(true);
+    const maximumPoints = {
+      channels: maximumPointCounts.map((pointCount, index) => budgetChannel(index, pointCount)),
+    };
+    expect(AnatomicalCoverageRequestSchema.safeParse(maximumPoints).success).toBe(true);
+    const tooManyPoints = {
+      channels: maximumPointCounts.map((pointCount, index) => budgetChannel(index, pointCount + (index === 0 ? 1 : 0))),
+    };
+    const tooManyPointsResult = AnatomicalCoverageRequestSchema.safeParse(tooManyPoints);
+    expect(tooManyPointsResult.success).toBe(false);
+    if (!tooManyPointsResult.success) {
+      expect(tooManyPointsResult.error.issues.some((issue) => issue.message.startsWith(
+        'coverage_request_limit_exceeded:maximumTotalPathPoints:',
+      ))).toBe(true);
+    }
+
+    const maximumSegments = {
+      channels: Array.from({ length: limits.maximumChannels }, (_, index) => budgetChannel(index, 125)),
+    };
+    expect(AnatomicalCoverageRequestSchema.safeParse(maximumSegments).success).toBe(true);
+    const segmentPlusOne = {
+      channels: [
+        ...Array.from({ length: 124 }, (_, index) => budgetChannel(index, 129)),
+        budgetChannel(124, 2),
+      ],
+    };
+    const segmentPlusOneResult = AnatomicalCoverageRequestSchema.safeParse(segmentPlusOne);
+    expect(segmentPlusOneResult.success).toBe(false);
+    if (!segmentPlusOneResult.success) {
+      expect(segmentPlusOneResult.error.issues.some((issue) => issue.message.startsWith(
+        'coverage_request_limit_exceeded:maximumTotalSegments:',
+      ))).toBe(true);
+    }
+
+    // High-precision coordinates exercise the independent UTF-8 serialized
+    // request budget without exceeding the point/segment budgets above.
+    const ordinaryNumbers = AnatomicalCoverageRequestSchema.safeParse(maximumSegments);
+    expect(ordinaryNumbers.success).toBe(true);
+    const byteHeavy = AnatomicalCoverageRequestSchema.safeParse({
+      channels: Array.from(
+        { length: limits.maximumChannels },
+        (_, index) => budgetChannel(index, 125, -1.2345678901234567e-123),
+      ),
+    });
+    expect(byteHeavy.success).toBe(false);
+    if (!byteHeavy.success) {
+      expect(byteHeavy.error.issues.some((issue) => issue.message.startsWith(
+        'coverage_request_limit_exceeded:maximumSerializedRequestBytes:',
+      ))).toBe(true);
+    }
   });
 });

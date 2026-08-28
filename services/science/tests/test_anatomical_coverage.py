@@ -6,15 +6,21 @@ from uuid import UUID
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from cortexlume_science.anatomical_coverage import (
     AnatomicalCoverageEngine,
     AnatomicalCoverageError,
     SurfaceAtlasData,
+    _channel_kernel,
+    _canonical_path_sha256,
+    _path_length_mm,
+    _stable_id,
     _stable_region_color,
     load_surface_atlas_data,
     target_anatomical_profile,
 )
+from cortexlume_science.coverage_limits import ANATOMICAL_COVERAGE_LIMITS
 from cortexlume_science.models import (
     AnatomicalCoverageChannel,
     AnatomicalCoverageRequest,
@@ -98,6 +104,156 @@ def test_mosaic_is_permutation_invariant_and_uses_stable_multi_patch_ids() -> No
         actual = next(region.weighted_atlas_mass for region in forward.regions if region.label_en == label)
         assert actual == pytest.approx(expected_mass)
     json.dumps(forward.model_dump(mode="json"), allow_nan=False)
+
+
+def test_coverage_kernel_accumulation_is_streaming(monkeypatch) -> None:
+    """The engine must not materialize a channels x vertices kernel matrix."""
+
+    def fail_stack(*_args, **_kwargs):
+        raise AssertionError("coverage must not stack channel kernels")
+
+    monkeypatch.setattr(np, "stack", fail_stack)
+    result = AnatomicalCoverageEngine(fixture_surface()).compute(AnatomicalCoverageRequest(
+        channels=[channel(INSTANCE_A, PAIR_A, 0.0), channel(INSTANCE_B, PAIR_B, 3.0)],
+        settings=settings(),
+    ))
+    assert len(result.channels) == 2
+
+
+def test_streaming_kernel_matches_legacy_stacked_result_on_small_fixture() -> None:
+    """The bounded accumulator keeps the old max/dominant/region semantics."""
+
+    fixture = fixture_surface()
+    request = AnatomicalCoverageRequest(
+        channels=[
+            channel(INSTANCE_B, PAIR_B, 3.0).model_copy(update={"channel_number": 22}),
+            channel(INSTANCE_A, PAIR_A, 0.0).model_copy(update={"channel_number": 11}),
+        ],
+        settings=settings(),
+    )
+    result = AnatomicalCoverageEngine(fixture).compute(request)
+    ordered_channels = sorted(request.channels, key=_stable_id)
+    for actual, expected in zip(result.channels, ordered_channels, strict=True):
+        path = np.asarray(expected.points_ras_mm, dtype=np.float64)
+        assert actual.stable_id == f"{expected.instance_id}:{expected.pair_id}"
+        assert actual.instance_id == expected.instance_id
+        assert actual.pair_id == expected.pair_id
+        assert actual.channel_number == expected.channel_number
+        assert actual.path_point_count == len(path)
+        assert actual.path_length_mm == pytest.approx(_path_length_mm(path), rel=1e-12, abs=1e-15)
+        assert actual.path_sha256 == _canonical_path_sha256(path)
+
+    legacy_kernels = np.stack([
+        _channel_kernel(
+            fixture.vertices_ras_mm,
+            np.asarray(item.points_ras_mm, dtype=np.float64),
+            request.settings.kernel_sigma_mm,
+            request.settings.support_radius_mm,
+        )
+        for item in ordered_channels
+    ])
+    legacy_weights = legacy_kernels.max(axis=0)
+    legacy_dominant = legacy_kernels.argmax(axis=0)
+    valid_slots = (
+        (fixture.atlas_label_indices != 255)
+        & (fixture.atlas_memberships > 0)
+        & (fixture.atlas_memberships >= request.settings.minimum_atlas_membership)
+    )
+
+    legacy_candidate_memberships = np.where(
+        valid_slots,
+        fixture.atlas_memberships,
+        -1.0,
+    )
+    legacy_winner_slots = legacy_candidate_memberships.argmax(axis=1)
+    legacy_winner_labels = fixture.atlas_label_indices[
+        np.arange(fixture.atlas_label_indices.shape[0]), legacy_winner_slots
+    ].astype(np.int64)
+    legacy_winner_memberships = fixture.atlas_memberships[
+        np.arange(fixture.atlas_memberships.shape[0]), legacy_winner_slots
+    ]
+
+    expected_geometric = np.flatnonzero(legacy_weights > 0)
+    assert result.mosaic.geometric_vertex_indices == expected_geometric.tolist()
+    np.testing.assert_allclose(
+        result.mosaic.geometric_coverage_weights,
+        legacy_weights[expected_geometric],
+        rtol=1e-12,
+        atol=1e-15,
+    )
+
+    expected_mosaic = np.flatnonzero((legacy_weights > 0) & np.any(valid_slots, axis=1))
+    assert result.mosaic.vertex_indices == expected_mosaic.tolist()
+    assert result.mosaic.dominant_channel_indices == legacy_dominant[expected_mosaic].tolist()
+    np.testing.assert_allclose(
+        result.mosaic.coverage_weights,
+        legacy_weights[expected_mosaic],
+        rtol=1e-12,
+        atol=1e-15,
+    )
+    np.testing.assert_allclose(
+        result.mosaic.atlas_memberships,
+        legacy_winner_memberships[expected_mosaic],
+        rtol=1e-12,
+        atol=1e-15,
+    )
+    np.testing.assert_allclose(
+        result.mosaic.opacity_weights,
+        legacy_weights[expected_mosaic] * legacy_winner_memberships[expected_mosaic],
+        rtol=1e-12,
+        atol=1e-15,
+    )
+
+    legacy_region_masses = np.zeros(len(fixture.atlas_labels), dtype=np.float64)
+    legacy_channel_region_masses = np.zeros((len(ordered_channels), len(fixture.atlas_labels)), dtype=np.float64)
+    for slot in range(3):
+        selected = (legacy_weights > 0) & valid_slots[:, slot]
+        for label in np.unique(fixture.atlas_label_indices[selected, slot]):
+            label = int(label)
+            label_mask = selected & (fixture.atlas_label_indices[:, slot] == label)
+            legacy_region_masses[label] += np.dot(
+                legacy_weights[label_mask], fixture.atlas_memberships[label_mask, slot]
+            )
+            for channel_index in range(len(ordered_channels)):
+                channel_mask = (legacy_kernels[channel_index] > 0) & valid_slots[:, slot]
+                channel_label_mask = channel_mask & (fixture.atlas_label_indices[:, slot] == label)
+                legacy_channel_region_masses[channel_index, label] += np.dot(
+                    legacy_kernels[channel_index, channel_label_mask],
+                    fixture.atlas_memberships[channel_label_mask, slot],
+                )
+    sorted_labels = sorted(
+        (label for label, mass in enumerate(legacy_region_masses) if mass > 0),
+        key=lambda label: (-legacy_region_masses[label], fixture.atlas_labels[label].casefold(), label),
+    )
+    label_to_region = {label: index for index, label in enumerate(sorted_labels)}
+    expected_region_indices = [
+        label_to_region[int(label)]
+        for label in legacy_winner_labels[expected_mosaic]
+    ]
+    assert result.mosaic.region_indices == expected_region_indices
+
+    total_region_mass = legacy_region_masses.sum()
+    dominant_counts = {
+        label: int(np.count_nonzero(legacy_winner_labels == label))
+        for label in sorted_labels
+    }
+    for region in result.regions:
+        label = fixture.atlas_labels.index(region.label_en)
+        assert region.weighted_atlas_mass == pytest.approx(legacy_region_masses[label])
+        assert region.covered_atlas_mass_fraction == pytest.approx(
+            legacy_region_masses[label] / total_region_mass,
+        )
+        assert region.dominant_vertex_count == dominant_counts[label]
+        expected_total = legacy_channel_region_masses[:, label].sum()
+        expected_shares = {
+            index: float(mass / expected_total)
+            for index, mass in enumerate(legacy_channel_region_masses[:, label])
+            if mass > 0 and expected_total > 0
+        }
+        assert {
+            share.channel_index: share.geometric_share
+            for share in region.channel_shares
+        } == pytest.approx(expected_shares)
 
 
 def test_target_anatomical_profile_uses_planner_supplied_surface_mass(monkeypatch) -> None:
@@ -199,6 +355,68 @@ def test_default_22_channel_analysis_remains_interactive() -> None:
     # A generous regression ceiling accommodates shared CI hosts while still
     # catching accidental O(vertex^2) or mesh-per-region implementations.
     assert elapsed < 8.0
+
+
+def _budget_channel(index: int, point_count: int, coordinate: float | None = None) -> AnatomicalCoverageChannel:
+    """Build a valid, uniquely identified channel for request-boundary tests."""
+
+    points = [
+        [float(point), 0.0, 0.0] if coordinate is None else [coordinate, coordinate, coordinate]
+        for point in range(point_count)
+    ]
+    return AnatomicalCoverageChannel(
+        instanceId=UUID(int=10_000 + index),
+        pairId=UUID(int=20_000 + index),
+        pointsRasMm=points,
+    )
+
+
+def _budget_request(point_counts: list[int]) -> AnatomicalCoverageRequest:
+    return AnatomicalCoverageRequest(
+        channels=[_budget_channel(index, point_count) for index, point_count in enumerate(point_counts)],
+    )
+
+
+def test_anatomical_coverage_request_limits_accept_maximum_and_reject_maximum_plus_one() -> None:
+    limits = ANATOMICAL_COVERAGE_LIMITS
+    maximum_channels = limits["maximumChannels"]
+    maximum_points = limits["maximumTotalPathPoints"]
+    maximum_segments = limits["maximumTotalSegments"]
+
+    # 1, maximum and maximum+1 channels.
+    _budget_request([2])
+    _budget_request([2] * maximum_channels)
+    with pytest.raises(ValidationError, match=r"maximumChannels:129:128"):
+        _budget_request([2] * (maximum_channels + 1))
+
+    # The point budget is independently reachable: 128 channels x 125 points.
+    maximum_point_counts = [maximum_points // maximum_channels] * maximum_channels
+    assert sum(maximum_point_counts) == maximum_points
+    _budget_request(maximum_point_counts)
+    with pytest.raises(ValidationError, match="maximumTotalPathPoints"):
+        _budget_request([maximum_point_counts[0] + 1, *maximum_point_counts[1:]])
+
+    # The segment budget's +1 case uses fewer channels, keeping points within
+    # the separate point budget and every path within its 129-point bound.
+    maximum_segment_counts = [maximum_point_counts[0]] * maximum_channels
+    assert sum(point_count - 1 for point_count in maximum_segment_counts) == maximum_segments
+    _budget_request(maximum_segment_counts)
+    segment_plus_one_counts = [129] * 124 + [2]
+    assert sum(point_count - 1 for point_count in segment_plus_one_counts) == maximum_segments + 1
+    assert sum(segment_plus_one_counts) <= maximum_points
+    with pytest.raises(ValidationError, match="maximumTotalSegments"):
+        _budget_request(segment_plus_one_counts)
+
+    # High-precision coordinates exercise the independent UTF-8 serialized
+    # request budget without exceeding the point/segment budgets above.
+    _budget_request([125] * maximum_channels)  # control: ordinary numbers remain admissible
+    with pytest.raises(ValidationError, match="maximumSerializedRequestBytes"):
+        AnatomicalCoverageRequest(
+            channels=[
+                _budget_channel(index, 125, -1.2345678901234567e-123)
+                for index in range(maximum_channels)
+            ],
+        )
 
 
 def test_locked_surface_and_atlas_assets_pass_shape_and_hash_gate() -> None:
