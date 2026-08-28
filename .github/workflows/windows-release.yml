@@ -202,12 +202,12 @@ jobs:
           name: CortexLume-Windows-x64
           path: release
 
-      - name: Publish GitHub Release
+      - name: Publish user-facing GitHub Release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" \
-            release/* \
+            release/CortexLume-* \
             --repo "${{ github.repository }}" \
             --verify-tag \
             --generate-notes
