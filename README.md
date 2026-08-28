@@ -9,11 +9,24 @@
 
 CortexLume is an offline Windows workstation for designing fNIRS source–detector layouts, placing reusable patches on an anatomical head model, checking cortical targets, and exporting reproducible MNI-space results.
 
-## Install
+## Quick install
 
-Download and run `CortexLume-*-win-x64-Setup.exe` from the [latest release](https://github.com/inewhero/CortexLume/releases/latest). The optional `CortexLume-*-examples.zip` contains ready-to-open projects and input files for learning the main workflows without changing the application install.
+### Windows desktop
 
-AI agents use CortexLume through its local MCP interface. Installation, connection, and planning instructions are kept separately in the [Agent Guide](./AGENT_README.md).
+Download and run **`CortexLume-*-win-x64-Setup.exe`** from the [latest release](https://github.com/inewhero/CortexLume/releases/latest). The installer launches CortexLume and creates Desktop and Start Menu shortcuts. The optional `CortexLume-*-examples.zip` is a separate tutorial dataset; it is not the application installer.
+
+Detailed instructions: [Installation and first launch](./wiki/Installation-and-First-Launch.md).
+
+### Install with an AI coding agent
+
+Send this short prompt to Claude Code, Codex, or another local coding agent:
+
+```text
+Install CortexLume for Windows and connect its local MCP server by following:
+https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md
+```
+
+The [Agent Guide](./AGENT_README.md) is the machine-facing operating guide. The desktop UI and the [User Guide](./wiki/Home.md) remain focused on human review and editing.
 
 ## Core workflow
 
@@ -23,6 +36,8 @@ AI agents use CortexLume through its local MCP interface. Installation, connecti
 4. **Check the anatomy.** Inspect functional targeting, projection results, cortical regions, anatomical coverage, and cross-patch overlap.
 5. **Validate acquired geometry.** Import digitizer data and use five-point calibration to compare measured and planned optodes.
 6. **Save or export.** Preserve the editable project as `.cortexlume`, or export CSV/JSON, BIDS-NIRS, and BrainNet Viewer files.
+
+For complete task-oriented instructions, open the [CortexLume User Guide](./wiki/Home.md).
 
 ## Functional targeting
 
@@ -46,7 +61,7 @@ Anatomical Coverage shows the Harvard–Oxford cortical regions intersected by t
 
 ## Digitizer validation
 
-CortexLume imports common MNE, Polhemus, EEG, CSV, TSV, JSON, and MATLAB coordinate data. Five-point calibration maps measured geometry to the template head, while the correspondence editor makes planned-to-measured optode matching visible and reviewable before the calibrated layout is stored as a new patch.
+CortexLume imports common MNE/Polhemus text exports, EEG position files, delimited text, and JSON coordinate data. Five-point calibration maps measured geometry to the template head, while the correspondence editor makes planned-to-measured optode matching visible and reviewable before the calibrated layout is stored as a new patch.
 
 The optional [example dataset](./examples/README.md) includes a placed starter project, a complex irregular patch, interactive five-point calibration, full-array digitizer matching, and NIfTI target mapping.
 
