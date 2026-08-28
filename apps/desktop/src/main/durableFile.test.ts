@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import {
   mkdtemp,
   readFile,
+  realpath,
   readdir,
   rm,
   symlink,
@@ -257,7 +258,7 @@ describe('resolveAuthorizedPath', () => {
   it('requires existing real directory roots and supports missing output suffixes', async () => {
     const root = await newRoot();
     const resolved = await resolveAuthorizedPath(path.join(root, 'new', 'output.cortexlume'), [root], { mustExist: false });
-    expect(resolved).toBe(path.join(root, 'new', 'output.cortexlume'));
+    expect(resolved).toBe(path.join(await realpath(root), 'new', 'output.cortexlume'));
     await expect(resolveAuthorizedPath(path.join(root, 'missing-root', 'output.cortexlume'), [path.join(root, 'missing-root')], { mustExist: false }))
       .rejects.toThrow('existing real directory');
   });
