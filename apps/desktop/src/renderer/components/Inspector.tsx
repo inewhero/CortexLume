@@ -14,7 +14,7 @@ import { confirmProjectTransition } from '../lib/unsavedChanges';
 import { updateTransmissionDepth } from '../lib/transmissionDepth';
 import { getMissingBidsFields } from '../lib/bidsValidation';
 import { useProjectStore, type AnatomyAppearance, type AnatomyVisibility } from '../store/projectStore';
-import type { DigitizerImport, ProjectOperationProgress, ProjectOperationOptions, Vec3 } from '@cortexlume/contracts';
+import type { DigitizerImport, ProjectOperationOptions, Vec3 } from '@cortexlume/contracts';
 import { DigitizerDialog, type MappingScope } from './DigitizerDialog';
 import { FIVE_POINT_LABELS, type FivePointLabel } from '../lib/digitizer';
 import { TargetMapImportDialog } from './TargetMapImportDialog';
@@ -46,11 +46,11 @@ export function Inspector() {
   const [digitizerDialog, setDigitizerDialog] = useState<{ kind: 'import'; data: DigitizerImport } | { kind: 'manual' } | null>(null);
   const [targetMapDialog, setTargetMapDialog] = useState(false);
   const [fivePointTargets, setFivePointTargets] = useState<Record<FivePointLabel, Vec3> | null>(null);
-  const [projectOperation, setProjectOperation] = useState<ProjectOperationProgress | null>(null);
   const {
     project, projectPath, anatomyVisibility, anatomyAppearance,
     selectedInstanceId, selectedHeadOptodeId, selectedHeadPairId,
     newProject, loadProject, setProjectPath, setProjectName, setToast,
+    projectOperation, setProjectOperation,
     setProjectionMode, resetInstanceOverride, setAnatomyLayer, setAnatomyAppearance,
     setBidsSettingsExpanded, setDefaultDepth, setPairDepthOverride,
     confirmDigitizerMapping, confirmFivePointCalibration, setDigitizerPreview,
@@ -132,14 +132,6 @@ export function Inspector() {
     selectedCoverageRegionIndex,
     setSelectedCoverageRegion,
   ]);
-
-  useEffect(() => {
-    const onProgress = window.cortexlume?.operations?.onProgress;
-    if (!onProgress) return undefined;
-    return onProgress((progress) => {
-      setProjectOperation((current) => current?.operationId === progress.operationId ? progress : current);
-    });
-  }, []);
 
   useEffect(() => {
     void fetch(new URL('./anatomy/landmarks.json', window.location.href).href)
@@ -234,7 +226,6 @@ export function Inspector() {
     const options: ProjectOperationOptions = { operationId: crypto.randomUUID() };
     setProjectOperation({ operationId: options.operationId!, operation: 'export', phase: 'starting', completed: 0, total: 1 });
     try {
-      setToast('Exporting and checking MATLAB / BrainNet Viewer…');
       const snapshot = materializeProjectionSnapshot(project);
       const annotated = await window.cortexlume.science.annotateProject(snapshot, options);
       const result = await window.cortexlume.export.brainNet(annotated, options);
@@ -271,11 +262,6 @@ export function Inspector() {
     } finally {
       setProjectOperation((current) => current?.operationId === options.operationId ? null : current);
     }
-  };
-
-  const cancelProjectOperation = () => {
-    if (!projectOperation) return;
-    void window.cortexlume.operations.cancel(projectOperation.operationId);
   };
 
   const importDigitizer = async () => {
@@ -340,13 +326,7 @@ export function Inspector() {
           <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export BrainNet geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBrainNet}>BRAINNET</button>
           <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export CSV geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportCsv}>CSV</button>
           <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export BIDS geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBids}>BIDS</button>
-          {projectOperation && <button onClick={cancelProjectOperation}>CANCEL</button>}
         </div></div>
-        {projectOperation && (
-          <div className="surface-export-status is-loading">
-            {projectOperation.phase.replaceAll('-', ' ').toUpperCase()} · {projectOperation.completed}/{projectOperation.total}
-          </div>
-        )}
         {surfaceStatus.state !== 'verified' && (
           <div className={`surface-export-status is-${surfaceStatus.state}`} title={surfaceStatus.issue ?? undefined}>
             {surfaceStatus.state === 'loading'

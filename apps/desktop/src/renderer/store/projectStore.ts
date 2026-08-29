@@ -11,6 +11,7 @@ import type {
   LayoutDefinition,
   LayoutInstance,
   OptodeType,
+  ProjectOperationProgress,
   ProjectionResult,
   Vec2,
   Vec3,
@@ -172,6 +173,7 @@ interface ProjectStore {
   pastLayouts: LayoutDefinition[];
   futureLayouts: LayoutDefinition[];
   toast: string | null;
+  projectOperation: ProjectOperationProgress | null;
   bidsSettingsExpanded: boolean;
   bidsValidationFields: BidsField[];
   activeDigitizerSessionId: string | null;
@@ -185,6 +187,7 @@ interface ProjectStore {
   anatomicalCoverageStatus: AnatomicalCoverageStatus;
   anatomicalCoverageError: string | null;
   setToast(message: string | null): void;
+  setProjectOperation(operation: ProjectOperationProgress | null | ((current: ProjectOperationProgress | null) => ProjectOperationProgress | null)): void;
   setBidsSettingsExpanded(expanded: boolean, validationFields?: BidsField[]): void;
   addDigitizerSession(session: DigitizerSession): void;
   confirmDigitizerMapping(session: DigitizerSession, mappings: DigitizerOptodeMapping[]): void;
@@ -331,6 +334,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     pastLayouts: [],
     futureLayouts: [],
     toast: null,
+    projectOperation: null,
     bidsSettingsExpanded: false,
     bidsValidationFields: [],
     activeDigitizerSessionId: null,
@@ -349,6 +353,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     anatomicalCoverageError: null,
 
     setToast: (toast) => set({ toast }),
+    setProjectOperation: (update) => set((state) => ({
+      projectOperation: typeof update === 'function' ? update(state.projectOperation) : update,
+    })),
     setBidsSettingsExpanded: (bidsSettingsExpanded, bidsValidationFields = []) => set({
       bidsSettingsExpanded,
       bidsValidationFields,

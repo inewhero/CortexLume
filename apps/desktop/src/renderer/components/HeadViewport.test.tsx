@@ -1,14 +1,26 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../store/projectStore';
 import { registerSurfaceProjectors, type SurfaceModelStatus } from '../lib/geometry';
-import { ProjectedPatches } from './HeadViewport';
+import { ProjectedPatches, ProjectOperationBubble } from './HeadViewport';
 
 afterEach(cleanup);
 
 describe('HeadViewport surface readiness', () => {
+  it('renders project operation progress as a cancellable 3D viewport bubble', () => {
+    const onCancel = vi.fn();
+    render(<ProjectOperationBubble progress={{
+      operationId: 'export-1', operation: 'annotation', phase: 'atlas-paths', completed: 7, total: 20,
+    }} onCancel={onCancel} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('PREPARING SCIENTIFIC EXPORT');
+    expect(screen.getByRole('status')).toHaveTextContent('ATLAS PATHS · 7/20');
+    fireEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
   it('can render an existing instance while loading without invoking a projector', () => {
     useProjectStore.getState().newProject();
     useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);

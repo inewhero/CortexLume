@@ -906,23 +906,6 @@ if (!squirrelStartupHandled) app.whenReady().then(async () => {
   if (squirrelFirstRun && installTestMarker) {
     await writeFile(installTestMarker, `${process.execPath}\n`, 'utf8');
   }
-  if (squirrelFirstRun && mainWindow && !headlessSmokeTest) {
-    const result = await dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'CortexLume Workstation',
-      message: 'CortexLume Workstation is ready.',
-      detail: [
-        'Desktop and Start Menu shortcuts have been created.',
-        `Application files: ${path.dirname(process.execPath)}`,
-        'To remove CortexLume, use Uninstall CortexLume in the Start Menu or Windows Installed apps.',
-      ].join('\n\n'),
-      buttons: ['Start CortexLume', 'Open installation folder'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    });
-    if (result.response === 1) shell.showItemInFolder(process.execPath);
-  }
   if (headlessSmokeTest) setTimeout(() => app.quit(), 5_000);
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();

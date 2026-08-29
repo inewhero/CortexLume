@@ -5,7 +5,7 @@
 1. Open the [latest CortexLume release](https://github.com/inewhero/CortexLume/releases/latest).
 2. Download **`CortexLume-<version>-win-x64-Setup.exe`**.
 3. Run the setup executable and allow it to finish.
-4. Choose **Start CortexLume** when installation completes, or use the new Desktop or Start Menu shortcut.
+4. CortexLume starts automatically when installation completes. Use the new Desktop or Start Menu shortcut on later launches.
 
 The setup executable is the normal Windows installer. The portable ZIP is for a no-install copy, and the examples ZIP contains tutorial data only.
 

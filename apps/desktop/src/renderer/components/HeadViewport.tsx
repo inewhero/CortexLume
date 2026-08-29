@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { HeadModel } from '@cortexlume/core';
-import type { AnatomicalCoverageAnalysis, CortexLumeProject, DigitizerSession, LayoutDefinition, LayoutInstance, Vec3 } from '@cortexlume/contracts';
+import type { AnatomicalCoverageAnalysis, CortexLumeProject, DigitizerSession, LayoutDefinition, LayoutInstance, ProjectOperationProgress, Vec3 } from '@cortexlume/contracts';
 import { useProjectStore } from '../store/projectStore';
 import {
   add3,
@@ -38,6 +38,25 @@ import {
 
 interface LandmarkFile {
   points: Array<{ label: string; rasMm: Vec3; threeMm: Vec3; system: 'five-point' | '10-10' }>;
+}
+
+export function ProjectOperationBubble({ progress, onCancel }: {
+  progress: ProjectOperationProgress;
+  onCancel(): void;
+}) {
+  const completed = Math.min(progress.completed, progress.total);
+  const percentage = Math.max(0, Math.min(100, (completed / progress.total) * 100));
+  const operationLabel = progress.operation === 'annotation' ? 'PREPARING SCIENTIFIC EXPORT' : 'EXPORTING PROJECT';
+  return (
+    <div className="viewport-overlay project-operation-bubble" role="status" aria-live="polite">
+      <div className="project-operation-copy">
+        <strong>{operationLabel}</strong>
+        <span>{progress.phase.replaceAll('-', ' ').toUpperCase()} · {completed}/{progress.total}</span>
+        <i aria-hidden="true"><b style={{ width: `${percentage}%` }} /></i>
+      </div>
+      <button type="button" onClick={onCancel}>CANCEL</button>
+    </div>
+  );
 }
 
 const anatomyUrl = (name: string) => new URL(`./anatomy/${name}`, window.location.href).href;
@@ -875,6 +894,7 @@ export function HeadViewport() {
     placeLayout, selectInstance, setInstanceEditMode, updateInstanceAnchor,
     updateInstanceOverride, rotateMapping, toggleInstanceVisibility, removeInstance,
     toast, setToast,
+    projectOperation, setProjectOperation,
     functionalTarget,
     anatomicalCoverage, anatomicalCoverageEnabled, anatomicalCoverageMode,
     selectedCoverageRegionIndex, anatomicalCoverageSettings, anatomicalCoverageStatus,
@@ -923,6 +943,14 @@ export function HeadViewport() {
     const timeout = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(timeout);
   }, [setToast, toast]);
+
+  useEffect(() => {
+    const onProgress = window.cortexlume?.operations?.onProgress;
+    if (!onProgress) return undefined;
+    return onProgress((progress) => {
+      setProjectOperation((current) => current?.operationId === progress.operationId ? progress : current);
+    });
+  }, [setProjectOperation]);
 
   useEffect(() => {
     if (!anatomicalCoverageEnabled) return;
@@ -1024,6 +1052,13 @@ export function HeadViewport() {
         <button key={toast} className="viewport-overlay toast" onClick={() => setToast(null)}>
           <span>{toast}</span><b>×</b>
         </button>
+      )}
+
+      {projectOperation && (
+        <ProjectOperationBubble
+          progress={projectOperation}
+          onCancel={() => { void window.cortexlume.operations.cancel(projectOperation.operationId); }}
+        />
       )}
 
       <div className="viewport-overlay bottom-left legend">

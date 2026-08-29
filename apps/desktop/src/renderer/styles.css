@@ -477,6 +477,31 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
   7%, 84% { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(4px); }
 }
+
+.project-operation-bubble {
+  z-index: 2147483000;
+  left: 50%;
+  bottom: 17px;
+  width: min(430px, calc(100% - 80px));
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 11px;
+  color: #edf0ee;
+  border: 1px solid #627073;
+  background: #222a2df2;
+  box-shadow: 0 10px 28px #0006;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+.project-operation-copy { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.project-operation-copy strong { color: #f3f5f3; font-size: 10px; letter-spacing: .06em; }
+.project-operation-copy span { overflow: hidden; color: #c5cecc; font: 9px/1.35 var(--font-mono); letter-spacing: .04em; text-overflow: ellipsis; white-space: nowrap; }
+.project-operation-copy > i { height: 3px; overflow: hidden; background: #566164; }
+.project-operation-copy > i > b { display: block; height: 100%; background: var(--accent); transition: width 120ms linear; }
+.project-operation-bubble > button { flex: 0 0 auto; min-height: 29px; padding: 4px 9px; color: #edf0ee; border-color: #7a8587; background: #303a3d; font-size: 9px; }
+.project-operation-bubble > button:hover { color: #171b1d; border-color: var(--accent); background: var(--accent); }
 /* Strict functional-target NIfTI import. Kept isolated for Inspector integration. */
 .target-import-scrim {
   position: fixed;
