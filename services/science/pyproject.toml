@@ -34,7 +34,9 @@ dev = [
   "httpx2==2.12.0",
   "pyinstaller>=6.14,<7",
   "pytest>=8.4,<9",
-  "pytest-cov>=6.2,<7"
+  "pytest-cov>=6.2,<7",
+  # Independent compatibility oracle for the AtlasViewer MATLAB-v5 SD export test.
+  "scipy>=1.15,<2"
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -1,6 +1,6 @@
 import { Html, Line, OrbitControls, useGLTF } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { HeadModel } from '@cortexlume/core';
@@ -35,6 +35,14 @@ import {
   requestAnatomicalCoverage,
   scientificCoverageAttributes,
 } from '../lib/anatomicalCoverage';
+import {
+  applyScreenshotCamera,
+  captureScientificScene,
+  scientificScreenshotBlockReason,
+  screenshotPngToBase64,
+  type ScientificScreenshotResult,
+} from '../lib/sceneScreenshot';
+import type { McpScreenshotWorkerRequest } from '../../shared/mcpScreenshot';
 
 interface LandmarkFile {
   points: Array<{ label: string; rasMm: Vec3; threeMm: Vec3; system: 'five-point' | '10-10' }>;
@@ -510,7 +518,18 @@ function ReferenceMarkers({ landmarks }: { landmarks: LandmarkFile['points'] }) 
       {landmarks.filter((point) => point.system === 'five-point' ? visibility.fivePoint : visibility.tenTen).map((point) => {
         const isFivePoint = point.system === 'five-point';
         return (
-          <group key={point.label} position={point.threeMm}>
+          <group
+            key={point.label}
+            position={point.threeMm}
+            userData={(isFivePoint || visibility.pointLabels) ? {
+              scientificScreenshotLabel: {
+                label: point.label,
+                position: point.threeMm,
+                accent: isFivePoint,
+                compact: !isFivePoint,
+              },
+            } : {}}
+          >
             <mesh>
               <sphereGeometry args={[isFivePoint ? 2.9 : 1.45, 14, 12]} />
               <meshStandardMaterial
@@ -520,9 +539,11 @@ function ReferenceMarkers({ landmarks }: { landmarks: LandmarkFile['points'] }) 
               />
             </mesh>
             {(isFivePoint || visibility.pointLabels) && (
-              <Html position={[3, 3, 0]} zIndexRange={[1200, 200]} style={{ pointerEvents: 'none' }}>
-                <span className={`reference-label ${isFivePoint ? 'landmark-label' : ''}`}>{point.label}</span>
-              </Html>
+              <>
+                <Html position={[3, 3, 0]} zIndexRange={[1200, 200]} style={{ pointerEvents: 'none' }}>
+                  <span className={`reference-label ${isFivePoint ? 'landmark-label' : ''}`}>{point.label}</span>
+                </Html>
+              </>
             )}
           </group>
         );
@@ -719,7 +740,17 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
           ? midpoint3(projectScalpSphereCenter(sourceScalp, optodeRadiusMm), projectScalpSphereCenter(detectorScalp, optodeRadiusMm))
           : undefined;
         const channelSelected = selected && selectedHeadPairId === pair.id;
-        return <group key={pair.id}>
+        return <group
+          key={pair.id}
+          userData={channelLabels ? {
+            scientificScreenshotLabel: {
+              label: String(pair.channelNumber ?? '—'),
+              position: threeFromRas(midpoint),
+              accent: true,
+              compact: true,
+            },
+          } : {}}
+        >
           <Line points={[threeFromRas(a), threeFromRas(b)]} color={selected ? '#f0c95b' : '#8c989d'} lineWidth={selected ? 1.8 : 1.05} />
           {channelLabels && <Html center position={threeFromRas(midpoint)} zIndexRange={[2200, 1300]} style={{ pointerEvents: 'auto' }}>
             <button
@@ -787,12 +818,26 @@ function DigitizerOverlay({ session, active }: { session: DigitizerSession; acti
       if (!ras) return null;
       const color = point.kind === 'source' ? '#df4b3f' : point.kind === 'detector' ? '#1c83b3' : point.kind === 'landmark' ? '#f0c653' : point.kind === 'headshape' ? '#d8dfdc' : '#aa8bc2';
       const radius = point.kind === 'headshape' ? 1.1 : point.kind === 'landmark' ? 2.4 : 2;
-      return <group key={point.id} position={threeFromRas(ras)}>
+      const position = threeFromRas(ras);
+      return <group
+        key={point.id}
+        position={position}
+        userData={point.kind === 'landmark' ? {
+          scientificScreenshotLabel: {
+            label: point.label,
+            position,
+            accent: true,
+            compact: false,
+          },
+        } : {}}
+      >
         <mesh renderOrder={5}>
           <sphereGeometry args={[active ? radius * 1.12 : radius, 12, 10]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={active ? 0.32 : 0.12} depthTest />
         </mesh>
-        {point.kind === 'landmark' && <Html position={[2.8, 2.8, 0]} zIndexRange={[1500, 800]} style={{ pointerEvents: 'none' }}><span className="digitizer-label">{point.label}</span></Html>}
+        {point.kind === 'landmark' && <>
+          <Html position={[2.8, 2.8, 0]} zIndexRange={[1500, 800]} style={{ pointerEvents: 'none' }}><span className="digitizer-label">{point.label}</span></Html>
+        </>}
       </group>;
     })}
   </group>;
@@ -880,17 +925,83 @@ function HeadScene({ landmarks, surfaceRevision, onSurfacesReady }: {
       <ProjectedPatches project={project} surfaceRevision={surfaceRevision} surfaceStatus={surfaceStatus} />
       {project.digitizerSessions.filter((session) => session.visible && session.optodeMappings.length === 0).map((session) => <DigitizerOverlay key={session.id} session={session} active={session.id === activeDigitizerSessionId} />)}
       {surfaceStatus.state === 'verified' && <DigitizerMappingPreview />}
-      <gridHelper args={[360, 18, '#3c484c', '#273135']} position={[0, -145, 0]} />
+      <gridHelper
+        args={[360, 18, '#3c484c', '#273135']}
+        position={[0, -145, 0]}
+        userData={{ excludeFromScientificScreenshot: true }}
+      />
       <OrbitControls makeDefault minDistance={150} maxDistance={430} target={[0, -12, 3]} enableDamping dampingFactor={0.08} />
     </>
+  );
+}
+
+type WorkerCaptureRequest = Pick<McpScreenshotWorkerRequest,
+  'logicalWidth' | 'logicalHeight' | 'dpr' | 'camera' | 'layers'>;
+type CaptureScientificScene = (request?: WorkerCaptureRequest) => ScientificScreenshotResult;
+
+function createScientificSceneCapture(
+  gl: THREE.WebGLRenderer,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+): CaptureScientificScene {
+  return (request?: WorkerCaptureRequest) => {
+    if (!request || !(camera instanceof THREE.PerspectiveCamera)) {
+      return captureScientificScene(gl, scene, camera);
+    }
+    const previous = {
+      position: camera.position.clone(), up: camera.up.clone(), quaternion: camera.quaternion.clone(),
+      fov: camera.fov, aspect: camera.aspect,
+    };
+    try {
+      applyScreenshotCamera(camera, request.camera);
+      camera.aspect = request.logicalWidth / request.logicalHeight;
+      camera.updateProjectionMatrix();
+      return captureScientificScene(gl, scene, camera, {
+        width: Math.round(request.logicalWidth * request.dpr),
+        height: Math.round(request.logicalHeight * request.dpr),
+      });
+    } finally {
+      camera.position.copy(previous.position);
+      camera.up.copy(previous.up);
+      camera.quaternion.copy(previous.quaternion);
+      camera.fov = previous.fov;
+      camera.aspect = previous.aspect;
+      camera.updateMatrixWorld(true);
+      camera.updateProjectionMatrix();
+    }
+  };
+}
+
+export function ScientificScreenshotButton({ pending, sceneReady = true, onClick }: {
+  pending: boolean;
+  sceneReady?: boolean;
+  onClick(): void;
+}) {
+  return (
+    <button
+      type="button"
+      className="viewport-overlay scientific-screenshot-button"
+      aria-label="Save transparent 3D scene screenshot"
+      title={sceneReady ? 'Save transparent 3D scene screenshot' : 'Wait for the scientific 3D scene to finish loading'}
+      disabled={pending || !sceneReady}
+      onClick={onClick}
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M8.2 6.5 9.5 4.8h5L15.8 6.5H19a2 2 0 0 1 2 2v8.7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2h3.2Zm3.8 2.1a4.1 4.1 0 1 0 0 8.2 4.1 4.1 0 0 0 0-8.2Zm0 1.8a2.3 2.3 0 1 1 0 4.6 2.3 2.3 0 0 1 0-4.6Z" />
+      </svg>
+    </button>
   );
 }
 
 export function HeadViewport() {
   const [landmarks, setLandmarks] = useState<LandmarkFile['points']>([]);
   const [surfaceRevision, setSurfaceRevision] = useState(0);
+  const [screenshotPending, setScreenshotPending] = useState(false);
+  const [workerCaptureRequest, setWorkerCaptureRequest] = useState<WorkerCaptureRequest | null>(null);
+  const screenshotCapture = useRef<CaptureScientificScene | null>(null);
+  const workerCaptureStarted = useRef(false);
   const {
-    project, selectedInstanceId, selectedHeadOptodeId, instanceEditMode,
+    project, projectPath, selectedInstanceId, selectedHeadOptodeId, instanceEditMode,
     placeLayout, selectInstance, setInstanceEditMode, updateInstanceAnchor,
     updateInstanceOverride, rotateMapping, toggleInstanceVisibility, removeInstance,
     toast, setToast,
@@ -898,7 +1009,7 @@ export function HeadViewport() {
     functionalTarget,
     anatomicalCoverage, anatomicalCoverageEnabled, anatomicalCoverageMode,
     selectedCoverageRegionIndex, anatomicalCoverageSettings, anatomicalCoverageStatus,
-    setAnatomicalCoverageResult, setAnatomicalCoverageStatus,
+    setAnatomicalCoverageResult, setAnatomicalCoverageStatus, setAnatomyLayer,
   } = useProjectStore();
   const surfaceStatus = useSyncExternalStore(
     subscribeSurfaceModelStatus, getSurfaceModelStatus, getSurfaceModelStatus,
@@ -933,10 +1044,96 @@ export function HeadViewport() {
     surfaceStatus.state,
   ]);
   const coverageRequestKey = coverageRequest ? anatomicalCoverageRequestKey(coverageRequest) : null;
+  const screenshotBlockReason = scientificScreenshotBlockReason({
+    projectPath,
+    surfaceVerified: surfaceStatus.state === 'verified',
+    surfaceRevision,
+    anatomicalCoverageEnabled,
+    anatomicalCoverageReady: anatomicalCoverageStatus === 'ready',
+  });
+  // Keep the unsaved-project action clickable so it can explain the required
+  // save-first workflow; loading scientific content is disabled fail-closed.
+  const screenshotSceneReady = screenshotBlockReason === null || screenshotBlockReason === 'save-project';
+  const registerScreenshotRenderer = useCallback((state: {
+    gl: THREE.WebGLRenderer;
+    scene: THREE.Scene;
+    camera: THREE.Camera;
+  }) => {
+    screenshotCapture.current = createScientificSceneCapture(state.gl, state.scene, state.camera);
+  }, []);
 
   useEffect(() => {
     void fetch(anatomyUrl('landmarks.json')).then((response) => response.json()).then((data: LandmarkFile) => setLandmarks(data.points));
   }, []);
+
+  useEffect(() => {
+    const worker = window.cortexlumeMcpScreenshot;
+    if (!worker) return;
+    let active = true;
+    void worker.request().then((request) => {
+      if (!active) return;
+      setAnatomyLayer('scalp', request.layers.scalp);
+      setAnatomyLayer('grayMatter', request.layers.grayMatter);
+      setAnatomyLayer('whiteMatter', request.layers.whiteMatter);
+      setAnatomyLayer('fivePoint', request.layers.fivePoint);
+      setAnatomyLayer('tenTen', request.layers.tenTen);
+      setAnatomyLayer('pointLabels', request.layers.pointLabels);
+      setAnatomyLayer('channelLabels', request.layers.channelLabels);
+      setWorkerCaptureRequest(request);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('MCP screenshot request failed:', error);
+      void worker.fail(message.slice(0, 1000));
+    });
+    return () => { active = false; };
+  }, [setAnatomyLayer]);
+
+  useEffect(() => {
+    const worker = window.cortexlumeMcpScreenshot;
+    if (!worker || !workerCaptureRequest || !screenshotCapture.current
+      || !screenshotSceneReady || workerCaptureStarted.current) return;
+    workerCaptureStarted.current = true;
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        try {
+          const captured = screenshotCapture.current!(workerCaptureRequest);
+          void worker.complete({
+            pngBase64: screenshotPngToBase64(captured.png),
+            width: captured.width,
+            height: captured.height,
+            camera: workerCaptureRequest.camera,
+            layers: workerCaptureRequest.layers,
+          }).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error('MCP screenshot completion failed:', error);
+            void worker.fail(message.slice(0, 1000));
+          });
+        } catch (error) {
+          console.error('MCP scientific screenshot capture failed:', error);
+          const message = error instanceof Error ? error.message : String(error);
+          void worker.fail(message.slice(0, 1000));
+        }
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [screenshotSceneReady, workerCaptureRequest]);
+
+  useEffect(() => {
+    const worker = window.cortexlumeMcpScreenshot;
+    if (!worker || !workerCaptureRequest || workerCaptureStarted.current) return;
+    const failure = surfaceStatus.state === 'failed'
+      ? surfaceStatus.issue ?? 'Scientific surface model failed to load.'
+      : workerCaptureRequest.layers.anatomicalCoverage && anatomicalCoverageStatus === 'error'
+        ? 'Anatomical coverage failed before screenshot capture.'
+        : null;
+    if (!failure) return;
+    workerCaptureStarted.current = true;
+    void worker.fail(failure.slice(0, 1000));
+  }, [anatomicalCoverageStatus, surfaceStatus, workerCaptureRequest]);
 
   useEffect(() => {
     if (!toast) return;
@@ -997,8 +1194,40 @@ export function HeadViewport() {
     updateInstanceAnchor(selected.id, projectToScalpSurface(add3(selected.anchorRasMm, add3(scale3(basis.u, uMm), scale3(basis.v, vMm)))));
   };
 
+  const takeScientificScreenshot = async () => {
+    if (screenshotBlockReason === 'save-project' || !projectPath) {
+      setToast('Save the project before taking a 3D screenshot.');
+      return;
+    }
+    if (!screenshotCapture.current) {
+      setToast('The 3D scene is not ready for capture yet.');
+      return;
+    }
+    if (screenshotBlockReason) {
+      setToast(screenshotBlockReason === 'coverage-loading'
+        ? 'Wait for anatomical coverage to finish before taking a screenshot.'
+        : 'Wait for the scientific 3D scene to finish loading.');
+      return;
+    }
+    setScreenshotPending(true);
+    try {
+      const captured = screenshotCapture.current();
+      const saved = await window.cortexlume.screenshot.save(
+        projectPath,
+        screenshotPngToBase64(captured.png),
+        captured.width,
+        captured.height,
+      );
+      setToast(`Saved transparent 3D screenshot to ${saved.fileName}.`);
+    } catch {
+      setToast('Could not save the transparent 3D screenshot.');
+    } finally {
+      setScreenshotPending(false);
+    }
+  };
+
   return (
-    <div className={`head-viewport ${displayedFunctionalTarget ? 'has-target-map' : ''}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+    <div className="head-viewport" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
       event.preventDefault();
       const layoutId = event.dataTransfer.getData('application/x-cortexlume-layout');
       if (layoutId) placeLayout(layoutId);
@@ -1048,12 +1277,6 @@ export function HeadViewport() {
         </div>
       )}
 
-      {toast && (
-        <button key={toast} className="viewport-overlay toast" onClick={() => setToast(null)}>
-          <span>{toast}</span><b>×</b>
-        </button>
-      )}
-
       {projectOperation && (
         <ProjectOperationBubble
           progress={projectOperation}
@@ -1061,39 +1284,58 @@ export function HeadViewport() {
         />
       )}
 
-      <div className="viewport-overlay bottom-left legend">
-        <span><i className="source-dot" /> SOURCE</span><span><i className="detector-dot" /> DETECTOR</span>
-        <span>{project.instances.length} PATCH{project.instances.length === 1 ? '' : 'ES'}</span>
-        {project.digitizerSessions.length > 0 && <span>{project.digitizerSessions.reduce((sum, session) => sum + session.points.length, 0)} DIGITIZED PTS</span>}
+      <div className="viewport-overlay bottom-left-stack">
+        {toast && (
+          <button key={toast} className="toast" onClick={() => setToast(null)}>
+            <span>{toast}</span><b>×</b>
+          </button>
+        )}
+        {displayedFunctionalTarget && (
+          <div className="target-map-legend">
+            <strong>{displayedFunctionalTarget.target.label}</strong>
+            <span>{displayedFunctionalTarget.provenance.statistic.toUpperCase()}</span>
+            <i aria-hidden="true" />
+            <div className="target-map-range"><small>{targetDisplayRange?.[0].toFixed(2)}</small><small>{targetDisplayRange?.[1].toFixed(2)}</small></div>
+          </div>
+        )}
+        {anatomicalCoverageEnabled && (
+          <div className="coverage-map-legend">
+            <strong>GEOMETRIC ANATOMICAL COVERAGE</strong>
+            <span>{anatomicalCoverageStatus === 'loading'
+              ? 'CALCULATING ATLAS OVERLAP…'
+              : anatomicalCoverageStatus === 'error'
+                ? 'ANALYSIS UNAVAILABLE'
+                : anatomicalCoverageMode === 'region'
+                  ? anatomicalCoverage?.regions.find((region) => region.regionIndex === selectedCoverageRegionIndex)?.labelEn ?? 'SELECT REGION'
+                  : 'OVERALL MOSAIC'}</span>
+            {anatomicalCoverageStatus === 'ready' && anatomicalCoverage?.regions.slice(0, 5).map((region) => (
+              <div className={`coverage-legend-row ${anatomicalCoverageMode === 'region' && selectedCoverageRegionIndex !== region.regionIndex ? 'is-muted' : ''}`} key={`${region.atlasId}:${region.labelEn}`}>
+                <i style={{ backgroundColor: coverageRegionColors.get(region.regionIndex) }} />
+                <b>{region.labelEn}</b>
+                <code>{Math.round(region.coveredAtlasMassFraction * 100)}%</code>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="legend">
+          <span><i className="source-dot" /> SOURCE</span><span><i className="detector-dot" /> DETECTOR</span>
+          <span>{project.instances.length} PATCH{project.instances.length === 1 ? '' : 'ES'}</span>
+          {project.digitizerSessions.length > 0 && <span>{project.digitizerSessions.reduce((sum, session) => sum + session.points.length, 0)} DIGITIZED PTS</span>}
+        </div>
       </div>
-      {displayedFunctionalTarget && (
-        <div className="viewport-overlay target-map-legend">
-          <strong>{displayedFunctionalTarget.target.label}</strong>
-          <span>{displayedFunctionalTarget.provenance.statistic.toUpperCase()}</span>
-          <i aria-hidden="true" />
-          <div className="target-map-range"><small>{targetDisplayRange?.[0].toFixed(2)}</small><small>{targetDisplayRange?.[1].toFixed(2)}</small></div>
-        </div>
-      )}
-      {anatomicalCoverageEnabled && (
-        <div className="viewport-overlay coverage-map-legend">
-          <strong>GEOMETRIC ANATOMICAL COVERAGE</strong>
-          <span>{anatomicalCoverageStatus === 'loading'
-            ? 'CALCULATING ATLAS OVERLAP…'
-            : anatomicalCoverageStatus === 'error'
-              ? 'ANALYSIS UNAVAILABLE'
-              : anatomicalCoverageMode === 'region'
-                ? anatomicalCoverage?.regions.find((region) => region.regionIndex === selectedCoverageRegionIndex)?.labelEn ?? 'SELECT REGION'
-                : 'OVERALL MOSAIC'}</span>
-          {anatomicalCoverageStatus === 'ready' && anatomicalCoverage?.regions.slice(0, 5).map((region) => (
-            <div className={`coverage-legend-row ${anatomicalCoverageMode === 'region' && selectedCoverageRegionIndex !== region.regionIndex ? 'is-muted' : ''}`} key={`${region.atlasId}:${region.labelEn}`}>
-              <i style={{ backgroundColor: coverageRegionColors.get(region.regionIndex) }} />
-              <b>{region.labelEn}</b>
-              <code>{Math.round(region.coveredAtlasMassFraction * 100)}%</code>
-            </div>
-          ))}
-        </div>
-      )}
-      <Canvas onPointerMissed={() => selectInstance(selectedInstanceId, null)} camera={{ position: [215, 138, -300], fov: 39 }} dpr={[1, 1.6]} gl={{ antialias: true }}>
+      <ScientificScreenshotButton
+        pending={screenshotPending}
+        sceneReady={screenshotSceneReady}
+        onClick={() => { void takeScientificScreenshot(); }}
+      />
+      {/* WebGL-owning module updates use a full document reload in development. */}
+      <Canvas
+        onPointerMissed={() => selectInstance(selectedInstanceId, null)}
+        onCreated={registerScreenshotRenderer}
+        camera={{ position: [215, 138, -300], fov: 39 }}
+        dpr={[1, 1.6]}
+        gl={{ antialias: true }}
+      >
         <HeadScene landmarks={landmarks} surfaceRevision={surfaceRevision} onSurfacesReady={() => setSurfaceRevision((value) => value + 1)} />
       </Canvas>
     </div>

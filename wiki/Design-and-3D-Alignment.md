@@ -31,6 +31,14 @@ The 3D workspace separates camera control from patch control:
 
 CortexLume warns when optodes from different patches are closer than the cross-patch overlap threshold. Resolve an overlap by moving or rotating the active patch, hiding a patch for inspection, or deleting the unwanted instance.
 
+## Capture the scientific 3D view
+
+Save the `.cortexlume` project first, arrange the camera, and set **Anatomy Layers** to the view you want to review. Choose the compact camera button in the upper-right corner of **3D Align**. An unsaved project is rejected because CortexLume has no safe project-relative destination yet.
+
+The PNG is written beside the saved project under `CortexLume_Screenshots/`. Names include a timestamp and resolution; an existing file is never replaced. The capture uses the current 3D camera and current scientific visibility: anatomy surfaces, visible patches and channel edges, functional or anatomical-coverage surfaces, visible digitizer geometry, and enabled scientific point/channel labels are retained. The workspace background, ground grid, selection tooltips, controls, legends, progress messages, and other DOM interface elements are always omitted.
+
+Screenshots are transparent, non-quantized 8-bit RGBA PNGs. PNG's required DEFLATE stage is lossless; CortexLume does not palette-quantize or apply JPEG-style lossy compression. Capture does not depend on WebGL `preserveDrawingBuffer`, and bounded pixel-ratio, edge-length, and total-pixel limits prevent accidental oversized allocations.
+
 ## Inspect anatomy and projection
 
 Use **Info Panel → Anatomy Layers** to show or hide the scalp, gray matter, white matter, five-point references, 10–10 positions, position labels, channel numbers, and an active functional map. Gray- and white-matter color and opacity controls open from their color swatches.
@@ -52,4 +60,4 @@ Load at least one visible patch, then choose one of the mutually exclusive modes
 
 Selecting the active mode again turns coverage off. Functional Map and Anatomical Coverage are alternative overlays; their underlying data remains available when you switch views.
 
-Next: [Functional Targeting](Functional-Targeting.md).
+Next: [Functional Targeting](Functional-Targeting).

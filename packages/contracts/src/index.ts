@@ -1101,7 +1101,17 @@ export interface DesktopApi {
     startup(): Promise<{ project: CortexLumeProject; path: string } | null>;
     open(): Promise<{ project: CortexLumeProject; path: string } | null>;
     save(project: CortexLumeProject, currentPath?: string): Promise<{ path: string } | null>;
+    reveal(projectPath: string): Promise<boolean>;
     confirmUnsavedChanges(): Promise<'save' | 'discard' | 'cancel'>;
+  };
+  screenshot: {
+    save(projectPath: string, pngBase64: string, width: number, height: number): Promise<{
+      path: string;
+      directory: string;
+      fileName: string;
+      width: number;
+      height: number;
+    }>;
   };
   input: {
     digitizer(): Promise<DigitizerImport | null>;
@@ -1129,6 +1139,11 @@ export interface DesktopApi {
       };
     } | null>;
     bidsGeometry(project: CortexLumeProject, options?: ProjectOperationOptions): Promise<{
+      directory: string;
+      files: string[];
+      warnings: string[];
+    } | null>;
+    atlasViewer(project: CortexLumeProject, options?: ProjectOperationOptions): Promise<{
       directory: string;
       files: string[];
       warnings: string[];

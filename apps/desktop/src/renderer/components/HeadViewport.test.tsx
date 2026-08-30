@@ -4,11 +4,23 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../store/projectStore';
 import { registerSurfaceProjectors, type SurfaceModelStatus } from '../lib/geometry';
-import { ProjectedPatches, ProjectOperationBubble } from './HeadViewport';
+import { ProjectedPatches, ProjectOperationBubble, ScientificScreenshotButton } from './HeadViewport';
 
 afterEach(cleanup);
 
 describe('HeadViewport surface readiness', () => {
+  it('renders a minimal accessible screenshot action and prevents duplicate capture while pending', () => {
+    const onClick = vi.fn();
+    const { rerender } = render(<ScientificScreenshotButton pending={false} onClick={onClick} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save transparent 3D scene screenshot' }));
+    expect(onClick).toHaveBeenCalledOnce();
+    rerender(<ScientificScreenshotButton pending onClick={onClick} />);
+    expect(screen.getByRole('button', { name: 'Save transparent 3D scene screenshot' })).toBeDisabled();
+    rerender(<ScientificScreenshotButton pending={false} sceneReady={false} onClick={onClick} />);
+    expect(screen.getByRole('button', { name: 'Save transparent 3D scene screenshot' })).toBeDisabled();
+    expect(screen.getByRole('button')).toHaveAttribute('title', 'Wait for the scientific 3D scene to finish loading');
+  });
+
   it('renders project operation progress as a cancellable 3D viewport bubble', () => {
     const onCancel = vi.fn();
     render(<ProjectOperationBubble progress={{

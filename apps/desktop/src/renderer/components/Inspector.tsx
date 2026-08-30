@@ -18,6 +18,7 @@ import type { DigitizerImport, ProjectOperationOptions, Vec3 } from '@cortexlume
 import { DigitizerDialog, type MappingScope } from './DigitizerDialog';
 import { FIVE_POINT_LABELS, type FivePointLabel } from '../lib/digitizer';
 import { TargetMapImportDialog } from './TargetMapImportDialog';
+import { WorkflowExportActions } from './WorkflowExportActions';
 
 const ANATOMY_LAYERS: Array<{ key: keyof AnatomyVisibility; label: string; code: string }> = [
   { key: 'scalp', label: 'Scalp envelope', code: 'SCLP' },
@@ -264,6 +265,22 @@ export function Inspector() {
     }
   };
 
+  const exportAtlasViewer = async () => {
+    const options: ProjectOperationOptions = { operationId: crypto.randomUUID() };
+    setProjectOperation({ operationId: options.operationId!, operation: 'export', phase: 'starting', completed: 0, total: 1 });
+    try {
+      const snapshot = materializeProjectionSnapshot(project);
+      const result = await window.cortexlume.export.atlasViewer(snapshot, options);
+      if (result) {
+        setToast(`Exported ${result.files.length} AtlasViewer files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
+      }
+    } catch (error) {
+      setToast(`AtlasViewer export error: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setProjectOperation((current) => current?.operationId === options.operationId ? null : current);
+    }
+  };
+
   const importDigitizer = async () => {
     if (project.instances.length === 0) {
       setToast('Load at least one patch into 3D Align before importing digitizer optodes.');
@@ -304,9 +321,24 @@ export function Inspector() {
             }}
           />
         </label>
-        <code className="project-file-path" title={projectPath ?? 'This project has not been saved yet.'}>
-          {projectPath ?? 'UNSAVED PROJECT'}
-        </code>
+        {projectPath ? (
+          <button
+            type="button"
+            className="project-file-path is-clickable"
+            title={`Show in File Explorer: ${projectPath}`}
+            onClick={() => {
+              void window.cortexlume.project.reveal(projectPath).catch((error) => {
+                setToast(`Open project location error: ${error instanceof Error ? error.message : String(error)}`);
+              });
+            }}
+          >
+            {projectPath}
+          </button>
+        ) : (
+          <code className="project-file-path" title="This project has not been saved yet.">
+            UNSAVED PROJECT
+          </code>
+        )}
         <div className="workflow-row"><span>PROJECT</span><div className="project-actions">
           <button onClick={() => void confirmProjectTransition().then((confirmed) => {
             if (!confirmed) return;
@@ -322,11 +354,14 @@ export function Inspector() {
           <button onClick={openFivePointEntry}>5-POINT</button>
           <button onClick={() => setTargetMapDialog(true)}>NIFTI MAP</button>
         </div></div>
-        <div className="workflow-row"><span>EXPORT</span><div className="project-actions">
-          <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export BrainNet geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBrainNet}>BRAINNET</button>
-          <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export CSV geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportCsv}>CSV</button>
-          <button disabled={!surfaceVerified || projectOperation != null} title={surfaceVerified ? 'Export BIDS geometry' : surfaceStatus.issue ?? 'Verified HeadModel surfaces are required'} onClick={exportBids}>BIDS</button>
-        </div></div>
+        <div className="workflow-row"><span>EXPORT</span><WorkflowExportActions
+          disabled={!surfaceVerified || projectOperation != null}
+          disabledReason={!surfaceVerified ? surfaceStatus.issue ?? 'Verified HeadModel surfaces are required' : null}
+          onCsv={exportCsv}
+          onBids={exportBids}
+          onBrainNet={exportBrainNet}
+          onAtlasViewer={exportAtlasViewer}
+        /></div>
         {surfaceStatus.state !== 'verified' && (
           <div className={`surface-export-status is-${surfaceStatus.state}`} title={surfaceStatus.issue ?? undefined}>
             {surfaceStatus.state === 'loading'

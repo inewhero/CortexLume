@@ -17,7 +17,7 @@ https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md
 
 The Agent Guide contains the client-specific MCP instructions. During setup, choose a dedicated project folder that CortexLume may read and write. The Agent should configure that folder as an authorized MCP root rather than requesting broad filesystem access.
 
-CortexLume MCP runs locally through stdio. It does not start an HTTP service, open a hidden GUI, or bind the workflow to a particular model provider.
+CortexLume MCP runs locally through stdio. It does not start an HTTP service or bind the workflow to a particular model provider. Planning and inspection tools do not open a window. The screenshot tool starts one isolated hidden Electron renderer for the requested capture, closes it when the PNG is complete, and never writes renderer diagnostics to MCP stdout.
 
 ## Ask for a layout
 
@@ -56,6 +56,19 @@ and save a new project without overwriting any existing file.
 ```
 
 The NIfTI file and output location must both be inside an authorized MCP root.
+
+### Visual-check screenshot example
+
+```text
+Inspect D:\CortexLume-Projects\pilot.cortexlume, then call
+capture_project_screenshot with the front camera preset, the project's saved
+surface overlay, and a 1200 × 900 logical viewport. Return the PNG path,
+resolved camera, dimensions, and included layer metadata.
+```
+
+`capture_project_screenshot` renders the saved project in an isolated renderer. It cannot read or claim the current camera of a separate CortexLume window. Choose a deterministic preset (`gui-default`, `front`, `left`, `right`, or `superior`) or provide an explicit `position`, `target`, `up`, and field of view. Explicit vectors use CortexLume 3D scene coordinates in millimetres: X is RAS right, Y is RAS superior, and Z is negative RAS anterior. The result reports the resolved pose, so a later visual check is reproducible.
+
+The default output is a unique PNG under `CortexLume_Screenshots/` beside the authorized project. A custom PNG path must also remain inside an authorized MCP root. Background and ground grid are always excluded and cannot be enabled by tool input. Layer input can select anatomy, scientific labels, visible patches/digitizer data, and either the project's saved functional/coverage overlay or an explicit supported overlay. Returned metadata states the effective layers and physical pixel dimensions.
 
 ### Derive from an existing project
 
@@ -97,6 +110,7 @@ The Agent-generated planning record remains in the project for provenance. Manua
 - The Agent can only use folders explicitly authorized as MCP roots.
 - Missing, altered, or unavailable scientific assets stop planning instead of falling back to approximate geometry.
 - Project saving creates a unique derived filename and never overwrites an existing project.
+- Screenshot capture validates both the project and output against authorized roots, uses a deterministic camera contract, and creates a unique transparent PNG without overwriting.
 - Layout projection, collision, overlap, coverage, and robustness checks use the shared CortexLume core.
 - Opening an Agent project remains a human review step; CortexLume does not silently approve it on your behalf.
 
@@ -122,4 +136,4 @@ Ask the Agent to read the complete Quick Target catalog or list the legal Harvar
 
 Open it in CortexLume and edit the patch in **3D Align**. The MCP planner creates a scientifically evaluated starting point; the GUI is the final workspace for cap fit, hardware access, and researcher approval.
 
-Continue with [Installation and First Launch](Installation-and-First-Launch.md), the [Example Dataset](Example-Dataset.md), or [Design and 3D Alignment](Design-and-3D-Alignment.md).
+Continue with [Installation and First Launch](Installation-and-First-Launch), the [Example Dataset](Example-Dataset), or [Design and 3D Alignment](Design-and-3D-Alignment).

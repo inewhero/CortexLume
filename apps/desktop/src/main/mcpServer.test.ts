@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AnatomicalCoverageRequest, FunctionalTargetMap } from '@cortexlume/contracts';
@@ -44,6 +45,40 @@ function structured(result: Awaited<ReturnType<Client['callTool']>>): Record<str
     throw new Error(`MCP tool failed: ${JSON.stringify(result.content)}`);
   }
   return result.structuredContent as Record<string, unknown>;
+}
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Uint8Array): Buffer {
+  const typeBytes = Buffer.from(type, 'ascii');
+  const chunk = Buffer.alloc(12 + data.byteLength);
+  chunk.writeUInt32BE(data.byteLength, 0);
+  typeBytes.copy(chunk, 4);
+  Buffer.from(data).copy(chunk, 8);
+  chunk.writeUInt32BE(crc32(Buffer.concat([typeBytes, Buffer.from(data)])), 8 + data.byteLength);
+  return chunk;
+}
+
+function transparentPng(width: number, height: number): Buffer {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const scanlines = Buffer.alloc(height * (1 + width * 4));
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(scanlines)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
 }
 
 function fixtureCoverage(request: AnatomicalCoverageRequest) {
@@ -304,6 +339,77 @@ describe('CortexLume MCP runtime', () => {
       .toThrow('requires at least one authorized project root');
   });
 
+  it('captures bounded transparent PNGs with deterministic metadata and unique authorized paths', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-screenshot-'));
+    const projectPath = path.join(root, 'fixture.cortexlume');
+    await copyFile(path.resolve(process.cwd(), '../../Mentalizing-5x3.cortexlume'), projectPath);
+    const captureProjectScreenshot = vi.fn(async (request) => {
+      const physicalWidth = Math.round(request.logicalWidth * request.dpr);
+      const physicalHeight = Math.round(request.logicalHeight * request.dpr);
+      await writeFile(request.temporaryPath, transparentPng(physicalWidth, physicalHeight), { flag: 'wx' });
+      return {
+        width: physicalWidth,
+        height: physicalHeight,
+        camera: request.camera,
+        layers: request.layers,
+      };
+    });
+    const runtime = new CortexLumeMcpRuntime({
+      templateRoot: TEMPLATE_ROOT,
+      science: { stop: vi.fn(), request: vi.fn() } as unknown as ScienceClient,
+      applicationVersion: 'test',
+      authorizedRoots: [root],
+      openGui: vi.fn(),
+      captureProjectScreenshot,
+    });
+    const server = runtime.createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: 'cortexlume-screenshot-test', version: '1.0.0' });
+    clients.push(client);
+    await client.connect(clientTransport);
+
+    const first = structured(await client.callTool({
+      name: 'capture_project_screenshot',
+      arguments: { projectPath, width: 320, height: 256, dpr: 1.5, layers: { grid: true } },
+    }));
+    const second = structured(await client.callTool({
+      name: 'capture_project_screenshot',
+      arguments: { projectPath, width: 320, height: 256, dpr: 1.5 },
+    }));
+    expect(first).toMatchObject({
+      width: 480,
+      height: 384,
+      logicalWidth: 320,
+      logicalHeight: 256,
+      dpr: 1.5,
+      transparent: true,
+      encoding: 'rgba8-lossless-png',
+      quantized: false,
+      lossless: true,
+      backgroundIncluded: false,
+      camera: { source: 'preset', preset: 'gui-default', position: [215, 138, -300] },
+      layers: {
+        surfaceOverlay: 'functional-target',
+        functionalMap: true,
+        anatomicalCoverage: false,
+        groundGrid: false,
+      },
+    });
+    expect(path.dirname(first.path as string)).toBe(path.join(root, 'CortexLume_Screenshots'));
+    expect(second.path).not.toBe(first.path);
+    expect(await readFile(first.path as string)).toEqual(transparentPng(480, 384));
+    expect(captureProjectScreenshot).toHaveBeenCalledTimes(2);
+
+    const outside = await client.callTool({
+      name: 'capture_project_screenshot',
+      arguments: { projectPath, outputPath: path.join(path.dirname(root), 'outside.png') },
+    });
+    expect(outside.isError).toBe(true);
+    expect(JSON.stringify(outside.content)).toMatch(/outside MCP authorized roots/);
+    expect(captureProjectScreenshot).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects over-limit patches before loading assets or running science', async () => {
     const openGui = vi.fn();
     const science = {
@@ -424,7 +530,7 @@ describe('CortexLume MCP runtime', () => {
     const listed = await client.listTools();
     expect(listed.tools.map((tool) => tool.name)).toEqual([
       'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'plan_project',
-      'save_project', 'release_plan', 'inspect_project', 'open_project',
+      'save_project', 'release_plan', 'inspect_project', 'capture_project_screenshot', 'open_project',
     ]);
     expect(listed.tools.find((tool) => tool.name === 'plan_project')?.inputSchema.required).toContain('target');
     expect((listed.tools.find((tool) => tool.name === 'save_project')?.inputSchema.properties as Record<string, { default?: unknown }>).consumePlan?.default).toBe(true);

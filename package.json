@@ -20,6 +20,7 @@
     "science:dev": "pnpm run version:check && pnpm run version:metadata && .\\.venv\\Scripts\\python.exe services/science/run.py",
     "science:test": ".\\.venv\\Scripts\\python.exe -m pytest services/science/tests",
     "smoke:packaged:mcp": "node scripts/smoke_packaged_mcp.mjs",
+    "smoke:packaged:mcp-screenshot": "node scripts/smoke_packaged_mcp_screenshot.mjs",
     "examples:build": "vite-node scripts/build-example-dataset.ts",
     "examples:verify": "vite-node scripts/build-example-dataset.ts --verify-only",
     "examples:package": "vite-node scripts/build-example-dataset.ts --package-only"

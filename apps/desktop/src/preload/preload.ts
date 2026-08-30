@@ -8,6 +8,7 @@ import type {
   TargetImportSpace,
 } from '@cortexlume/contracts';
 import type { StartupRuntimeApi } from '../shared/startup';
+import type { McpScreenshotWorkerCompletion } from '../shared/mcpScreenshot';
 
 type CortexLumeDesktopApi = DesktopApi & { startup: StartupRuntimeApi };
 
@@ -32,7 +33,12 @@ const api: CortexLumeDesktopApi = {
     open: () => ipcRenderer.invoke('project:open'),
     save: (project: CortexLumeProject, currentPath?: string) =>
       ipcRenderer.invoke('project:save', project, currentPath),
+    reveal: (projectPath: string) => ipcRenderer.invoke('project:reveal', projectPath),
     confirmUnsavedChanges: () => ipcRenderer.invoke('project:confirm-unsaved'),
+  },
+  screenshot: {
+    save: (projectPath, pngBase64, width, height) =>
+      ipcRenderer.invoke('screenshot:save', projectPath, pngBase64, width, height),
   },
   input: {
     digitizer: () => ipcRenderer.invoke('input:digitizer'),
@@ -52,6 +58,8 @@ const api: CortexLumeDesktopApi = {
     brainNet: (project: CortexLumeProject, options) => ipcRenderer.invoke('export:brainnet', project, options),
     bidsGeometry: (project: CortexLumeProject, options) =>
       ipcRenderer.invoke('export:bids-geometry', project, options),
+    atlasViewer: (project: CortexLumeProject, options) =>
+      ipcRenderer.invoke('export:atlasviewer', project, options),
   },
   science: {
     health: () => ipcRenderer.invoke('science:health'),
@@ -72,3 +80,12 @@ const api: CortexLumeDesktopApi = {
 };
 
 contextBridge.exposeInMainWorld('cortexlume', api);
+
+if (process.env.CORTEXLUME_MCP_CAPTURE_WORKER === '1') {
+  contextBridge.exposeInMainWorld('cortexlumeMcpScreenshot', {
+    request: () => ipcRenderer.invoke('screenshot:mcp-worker-request'),
+    complete: (completion: McpScreenshotWorkerCompletion) =>
+      ipcRenderer.invoke('screenshot:mcp-worker-complete', completion),
+    fail: (message: string) => ipcRenderer.invoke('screenshot:mcp-worker-fail', message),
+  });
+}

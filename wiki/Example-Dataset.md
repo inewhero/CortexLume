@@ -94,4 +94,4 @@ To repeat validation:
 
 ## Continue from the examples
 
-Use the supplied projects as editable starting points, then save study-specific work as a new `.cortexlume` archive. Continue with [Design and 3D Alignment](Design-and-3D-Alignment.md), [Functional Targeting](Functional-Targeting.md), or [Digitizer and Five-Point Calibration](Digitizer-and-Five-Point-Calibration.md) for the complete workflow.
+Use the supplied projects as editable starting points, then save study-specific work as a new `.cortexlume` archive. Continue with [Design and 3D Alignment](Design-and-3D-Alignment), [Functional Targeting](Functional-Targeting), or [Digitizer and Five-Point Calibration](Digitizer-and-Five-Point-Calibration) for the complete workflow.

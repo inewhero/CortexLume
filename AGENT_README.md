@@ -31,9 +31,18 @@ Use the tools in this order:
 5. Present the candidate scores and recommendation to the user.
 6. `save_project` — write the selected candidate to a new `.cortexlume` file; success consumes the plan unless `consumePlan: false` is explicitly requested.
 7. `release_plan` — release a cached plan early when it is no longer needed.
-8. `open_project` — open that file in a separate CortexLume window for human inspection.
+8. `capture_project_screenshot` — optionally render a deterministic transparent scientific PNG for an Agent visual check.
+9. `open_project` — open that file in a separate CortexLume window for human inspection.
 
 `inspect_project` can audit an existing project before deriving a new plan. CortexLume never overwrites an existing project path.
+
+## Generate a visual-check screenshot
+
+`capture_project_screenshot` requires an authorized saved project. By default it writes a unique transparent PNG under `CortexLume_Screenshots/` beside that project; any custom output path must also be inside an authorized MCP root. Background, ground grid, and application UI are always excluded. The result includes the saved path, physical dimensions, effective scientific layers, project hash, and resolved camera.
+
+This tool does not reuse or claim the current view of an independently open CortexLume window. Use a deterministic camera preset (`gui-default`, `front`, `left`, `right`, or `superior`) or an explicit pose with `position`, `target`, `up`, and `fov`. Explicit vectors are CortexLume 3D scene millimetres: `[x, y, z] = [RAS right, RAS superior, -RAS anterior]`. The default layer request follows the project's saved functional or anatomical-coverage overlay while preserving project-level visibility for individual patch and digitizer instances.
+
+PNG pixels are native, non-quantized RGBA8. Standard PNG DEFLATE is lossless; no lossy image compression is applied. The screenshot worker is an isolated hidden Electron renderer launched only for the bounded capture, and its stdout is never forwarded into the MCP stdio protocol.
 
 ## Planning inputs
 
@@ -53,6 +62,7 @@ chosen candidate under D:\authorized-projects without overwriting existing files
 
 - Treat `.cortexlume` as the handoff artifact; do not reproduce the planner with ad hoc coordinates.
 - Use only MCP-authorized roots for NIfTI input and project output.
+- Treat screenshot camera presets or explicit poses as deterministic render requests, not as the current camera of another GUI process.
 - Stop if `get_capabilities` reports missing, altered, or failed scientific assets.
 - Let `plan_project` perform mesh-aware projection, sphere collision, spacing, overlap, coverage, and robustness evaluation.
 - Do not silently change the requested target, patch count, geometry, channel range, or short-channel count.

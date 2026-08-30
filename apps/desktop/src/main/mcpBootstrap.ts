@@ -4,6 +4,7 @@ import path from 'node:path';
 import { ScienceClient, type ScienceCommand } from '@cortexlume/science-client';
 import { CortexLumeMcpRuntime } from './mcpServer';
 import { requireConfiguredRoots } from './mcpBootstrapConfig';
+import { createMcpCaptureProcess } from './mcpCaptureProcess';
 
 const appRoot = path.resolve(process.env.CORTEXLUME_APP_ROOT ?? process.cwd());
 const resourcesRoot = path.resolve(
@@ -43,12 +44,19 @@ function openGui(projectPath: string): void {
 }
 
 const science = new ScienceClient(scienceCommand, (message) => console.error(message));
+const authorizedRoots = requireConfiguredRoots();
 const runtime = new CortexLumeMcpRuntime({
   templateRoot,
   science,
   applicationVersion: process.env.CORTEXLUME_APP_VERSION ?? 'development',
-  authorizedRoots: requireConfiguredRoots(),
+  authorizedRoots,
   openGui,
+  captureProjectScreenshot: createMcpCaptureProcess({
+    executable: process.execPath,
+    appRoot,
+    packaged,
+    authorizedRoots,
+  }),
 });
 const keepAlive = setInterval(() => {}, 0x7fffffff);
 runtime.start();

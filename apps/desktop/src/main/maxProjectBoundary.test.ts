@@ -12,6 +12,7 @@ import { maximumVerifiedProject } from '@cortexlume/project-io/src/maxProjectFix
 describe('maximum verified project integration boundary', () => {
   it('saves, opens, annotates, and exports a complete 8192-result project', async () => {
     const project = maximumVerifiedProject();
+    project.deviceProfile.samplingFrequencyHz = 36;
     expect(project.verifiedResults).toHaveLength(CROSS_PROCESS_LIMITS.projectionResults);
 
     const opened = readProjectArchive(createProjectArchive(project));

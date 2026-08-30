@@ -5,6 +5,7 @@
 # CortexLume
 
 [![Latest release](https://img.shields.io/github/v/release/inewhero/CortexLume?display_name=tag&sort=semver)](https://github.com/inewhero/CortexLume/releases/latest)
+[![User Wiki](https://img.shields.io/badge/Wiki-User_Guide-2f6f8f?logo=github)](https://github.com/inewhero/CortexLume/wiki)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/inewhero/CortexLume)
 
 CortexLume is an offline Windows workstation for designing fNIRS source–detector layouts, placing reusable patches on an anatomical head model, checking cortical targets, and exporting reproducible MNI-space results.
@@ -35,7 +36,7 @@ The [Agent Guide](./AGENT_README.md) is the machine-facing operating guide. The 
 3. **Place the patch.** Drag one or more reusable patches into the 3D workspace and align them on the scalp.
 4. **Check the anatomy.** Inspect functional targeting, projection results, cortical regions, anatomical coverage, and cross-patch overlap.
 5. **Validate acquired geometry.** Import digitizer data and use five-point calibration to compare measured and planned optodes.
-6. **Save or export.** Preserve the editable project as `.cortexlume`, or export CSV/JSON, BIDS-NIRS, and BrainNet Viewer files.
+6. **Save or export.** Preserve the editable project as `.cortexlume`, or export CSV/JSON, BIDS-NIRS, BrainNet Viewer, and AtlasViewer files.
 
 For complete task-oriented instructions, open the [CortexLume User Guide](./wiki/Home.md).
 
@@ -47,7 +48,7 @@ Quick Target maps curated Neurosynth association statistics onto the Cedalion 25
 
 ## Layout design and 3D alignment
 
-The 2D editor provides fine and coarse grid snapping, regular matrix generation, S/D reversal, channel solving, direct channel numbering, zoom, and reusable patch storage. The 3D workspace supports independent multi-patch placement, mapping rotation, local optode adjustment, overlap warnings, scalp and cortical projection, and selectable anatomy layers.
+The 2D editor provides fine and coarse grid snapping, regular matrix generation, S/D reversal, channel solving, direct channel numbering, zoom, and reusable patch storage. The 3D workspace supports independent multi-patch placement, mapping rotation, local optode adjustment, overlap warnings, scalp and cortical projection, selectable anatomy layers, and transparent scientific-scene screenshots without the background, grid, or interface overlays.
 
 ![Array design](./screenshots/ScreenShot_array_design.png)
 
@@ -71,6 +72,7 @@ The optional [example dataset](./examples/README.md) includes a placed starter p
 - CSV files contain clear optode and channel results; the companion technical JSON contains reproducibility metadata.
 - BIDS-NIRS export prepares standardized geometry and coordinate-system sidecars for downstream recording datasets.
 - BrainNet export creates node data and a MATLAB launcher for anatomical visualization.
+- AtlasViewer export creates a MATLAB v5 `.SD` probe file from verified scalp geometry for AtlasViewer registration and photon-simulation workflows. It does not claim subject registration.
 
 ## Scientific foundation
 

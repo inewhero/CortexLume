@@ -26,6 +26,8 @@ node_modules/
 /cortexlume_brainnet.edge
 /cortexlume_open_brainnet.m
 /README_BRAINNET.txt
+CortexLume_Screenshots/
+CortexLume_brainnet/
 
 # Local configuration and credentials
 /.env

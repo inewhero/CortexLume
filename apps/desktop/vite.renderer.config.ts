@@ -2,7 +2,33 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'cortexlume-webgl-full-reload',
+      handleHotUpdate(context) {
+        // Fast Refresh can dispose and immediately recreate the R3F Canvas.
+        // Three.js intentionally loses the old WebGL context during disposal;
+        // affected Windows ANGLE drivers can then invalidate the replacement
+        // context as well. Reload the document whenever a changed module feeds
+        // HeadViewport, while preserving Fast Refresh for the rest of the UI.
+        const queue = [...context.modules];
+        const visited = new Set<typeof queue[number]>();
+        while (queue.length > 0) {
+          const module = queue.pop()!;
+          if (visited.has(module)) continue;
+          visited.add(module);
+          const id = module.id?.replaceAll('\\', '/');
+          if (id?.endsWith('/src/renderer/components/HeadViewport.tsx')) {
+            context.server.ws.send({ type: 'full-reload', path: '*' });
+            return [];
+          }
+          module.importers.forEach((importer) => queue.push(importer));
+        }
+        return undefined;
+      },
+    },
+  ],
   base: './',
   // Workspace science/geometry code must stay source-linked in development.
   // Prebundling it leaves Vite serving an old optimized copy after core edits,

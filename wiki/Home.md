@@ -4,11 +4,11 @@ CortexLume is a Windows workstation for designing fNIRS source–detector arrays
 
 ## Start here
 
-1. [Install CortexLume and complete the first launch](Installation-and-First-Launch.md).
-2. [Design an array and align it in 3D](Design-and-3D-Alignment.md).
-3. Add a functional target with [Quick Target or a NIfTI map](Functional-Targeting.md).
-4. If measured coordinates are available, [calibrate and match digitizer data](Digitizer-and-Five-Point-Calibration.md).
-5. [Save the project or export CSV, BIDS-NIRS, and BrainNet files](Projects-and-Exports.md).
+1. [Install CortexLume and complete the first launch](Installation-and-First-Launch).
+2. [Design an array and align it in 3D](Design-and-3D-Alignment).
+3. Add a functional target with [Quick Target or a NIfTI map](Functional-Targeting).
+4. If measured coordinates are available, [calibrate and match digitizer data](Digitizer-and-Five-Point-Calibration).
+5. [Save the project or export CSV, BIDS-NIRS, BrainNet, and AtlasViewer files](Projects-and-Exports).
 
 ## The three work areas
 
@@ -20,16 +20,16 @@ The sidebars can be collapsed from the dividers. This gives the 3D workspace mor
 
 ## Recommended first session
 
-Download the optional `CortexLume-*-examples.zip` from the same release page as the installer. Start with `01-quick-start/quick-start.cortexlume`, then use the other cases for irregular patches, digitizer matching, five-point entry, and NIfTI targeting. Follow the [Example Dataset guide](Example-Dataset.md) for the files, steps, and expected result of every case.
+Download the optional `CortexLume-*-examples.zip` from the same release page as the installer. Start with `01-quick-start/quick-start.cortexlume`, then use the other cases for irregular patches, digitizer matching, five-point entry, and NIfTI targeting. Follow the [Example Dataset guide](Example-Dataset) for the files, steps, and expected result of every case.
 
 ## Guides
 
-- [Working with an AI Agent](Working-with-an-AI-Agent.md)
-- [Installation and First Launch](Installation-and-First-Launch.md)
-- [Example Dataset](Example-Dataset.md)
-- [Design and 3D Alignment](Design-and-3D-Alignment.md)
-- [Functional Targeting](Functional-Targeting.md)
-- [Digitizer and Five-Point Calibration](Digitizer-and-Five-Point-Calibration.md)
-- [Projects and Exports](Projects-and-Exports.md)
+- [Working with an AI Agent](Working-with-an-AI-Agent)
+- [Installation and First Launch](Installation-and-First-Launch)
+- [Example Dataset](Example-Dataset)
+- [Design and 3D Alignment](Design-and-3D-Alignment)
+- [Functional Targeting](Functional-Targeting)
+- [Digitizer and Five-Point Calibration](Digitizer-and-Five-Point-Calibration)
+- [Projects and Exports](Projects-and-Exports)
 
-The human workflow for AI-assisted planning is covered in [Working with an AI Agent](Working-with-an-AI-Agent.md). Client configuration and tool-level operating rules remain in the repository's [Agent Guide](https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md).
+The human workflow for AI-assisted planning is covered in [Working with an AI Agent](Working-with-an-AI-Agent). Client configuration and tool-level operating rules remain in the repository's [Agent Guide](https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md).

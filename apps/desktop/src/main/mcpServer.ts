@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -34,6 +34,13 @@ import {
 } from '@cortexlume/project-io';
 import { withStagedNiftiFile, type ScienceClient } from '@cortexlume/science-client';
 import { MCP_ROOT_CONFIGURATION_ERROR } from './mcpBootstrapConfig';
+import type {
+  McpScreenshotCameraState,
+  McpScreenshotLayerState,
+  McpScreenshotPreset,
+  McpScreenshotRenderRequest,
+  McpScreenshotRenderResult,
+} from '../shared/mcpScreenshot';
 import {
   durableAtomicCreateExclusive,
   isAlreadyExistsError,
@@ -279,6 +286,70 @@ export interface McpRuntimeOptions {
   /** Injectable clock keeps runtime timestamps and cache expiry deterministic. */
   clock?: () => number;
   openGui(projectPath: string): Promise<void> | void;
+  /**
+   * Render a validated project in a real Electron renderer. The callback must
+   * create `temporaryPath` exclusively and return metadata for those bytes.
+   * Keeping Electron out of this module preserves protocol-only stdio output.
+   */
+  captureProjectScreenshot?(request: McpScreenshotRenderRequest): Promise<McpScreenshotRenderResult>;
+}
+
+export const MCP_SCREENSHOT_LIMITS = Object.freeze({
+  minimumLogicalDimension: 256,
+  maximumLogicalDimension: 2_048,
+  minimumDpr: 1,
+  maximumDpr: 1.6,
+  maximumPhysicalDimension: 3_072,
+  maximumPhysicalPixels: 4_194_304,
+  maximumPngBytes: 64 * 1024 * 1024,
+});
+
+const SCREENSHOT_CAMERA_PRESETS: Record<McpScreenshotPreset, Omit<McpScreenshotCameraState, 'source' | 'preset'>> = {
+  'gui-default': { position: [215, 138, -300], target: [0, -12, 3], up: [0, 1, 0], fov: 39, near: 0.1, far: 2_000 },
+  front: { position: [0, -12, -360], target: [0, -12, 3], up: [0, 1, 0], fov: 39, near: 0.1, far: 2_000 },
+  left: { position: [-360, -12, 3], target: [0, -12, 3], up: [0, 1, 0], fov: 39, near: 0.1, far: 2_000 },
+  right: { position: [360, -12, 3], target: [0, -12, 3], up: [0, 1, 0], fov: 39, near: 0.1, far: 2_000 },
+  superior: { position: [0, 360, 3], target: [0, -12, 3], up: [0, 0, 1], fov: 39, near: 0.1, far: 2_000 },
+};
+
+function resolveScreenshotCamera(input: {
+  kind: 'preset'; preset: McpScreenshotPreset;
+} | {
+  kind: 'explicit'; position: Vec3; target: Vec3; up: Vec3; fov: number;
+}): McpScreenshotCameraState {
+  if (input.kind === 'preset') {
+    return { source: 'preset', preset: input.preset, ...SCREENSHOT_CAMERA_PRESETS[input.preset] };
+  }
+  const viewLength = Math.hypot(
+    input.position[0] - input.target[0],
+    input.position[1] - input.target[1],
+    input.position[2] - input.target[2],
+  );
+  const upLength = Math.hypot(...input.up);
+  if (viewLength < 1e-6) throw new Error('Screenshot camera position and target must differ.');
+  if (upLength < 1e-6) throw new Error('Screenshot camera up vector must be non-zero.');
+  return {
+    source: 'explicit', preset: null,
+    position: input.position, target: input.target, up: input.up, fov: input.fov,
+    near: 0.1, far: 2_000,
+  };
+}
+
+function validatePngDimensions(bytes: Uint8Array, expectedWidth: number, expectedHeight: number): void {
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (bytes.byteLength < 24 || signature.some((value, index) => bytes[index] !== value)) {
+    throw new Error('Screenshot worker did not produce a valid PNG.');
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  if (width !== expectedWidth || height !== expectedHeight) {
+    throw new Error(`Screenshot PNG dimensions ${width}x${height} do not match requested ${expectedWidth}x${expectedHeight}.`);
+  }
+  const colorType = bytes[25];
+  if (colorType !== 4 && colorType !== 6) {
+    throw new Error('Screenshot PNG must contain an alpha channel.');
+  }
 }
 
 function canonical(value: unknown): string {
@@ -444,7 +515,7 @@ export class CortexLumeMcpRuntime {
 
   createServer(): McpServer {
     const server = new McpServer({ name: 'CortexLume', version: this.options.applicationVersion }, {
-      instructions: 'Read list_targets before searching or selecting a Quick Target. Use search_targets only to narrow the known catalog, and list_atlas_regions for anatomical targets. plan_project returns functional, robustness, specificity, and Harvard–Oxford anatomical summaries for three candidates without writing files. Broad distributed targets may recommend multiple patches. save_project writes a unique derived .cortexlume archive and never overwrites; release_plan releases an unused cached plan early. open_project starts a separate desktop window for human review.',
+      instructions: 'Read list_targets before searching or selecting a Quick Target. Use search_targets only to narrow the known catalog, and list_atlas_regions for anatomical targets. plan_project returns functional, robustness, specificity, and Harvard–Oxford anatomical summaries for three candidates without writing files. Broad distributed targets may recommend multiple patches. save_project writes a unique derived .cortexlume archive and never overwrites; release_plan releases an unused cached plan early. capture_project_screenshot renders a deterministic preset or explicit camera in a hidden renderer and writes a unique transparent PNG; it is not a current-GUI-view capture. open_project starts a separate desktop window for human review.',
     });
 
     server.registerTool('get_capabilities', {
@@ -468,6 +539,15 @@ export class CortexLumeMcpRuntime {
         defaults: { longChannelRangeMm: [25, 40], surfaceDistanceToleranceMm: 1.5, maximumScalpCortexGapMm: 40, kernelSigmaMm: 12, supportRadiusMm: 24, transmissionDepthMm: 25, candidateCount: 3, overlapThresholdMm: 12 },
         quickTargetDiscovery: { firstTool: 'list_targets', thenTool: 'search_targets', catalogIsOffline: true },
         authorizedRoots: this.roots,
+        screenshots: {
+          tool: 'capture_project_screenshot',
+          transparent: true,
+          cameraSemantics: 'deterministic-preset-or-explicit-state-not-current-gui-view',
+          presets: Object.keys(SCREENSHOT_CAMERA_PRESETS),
+          limits: MCP_SCREENSHOT_LIMITS,
+          defaultDirectory: 'CortexLume_Screenshots beside the input project',
+          uniqueNoOverwrite: true,
+        },
         cache: this.cacheStats(),
         assets: assetState,
       });
@@ -712,6 +792,194 @@ export class CortexLumeMcpRuntime {
       });
     });
 
+    const screenshotVectorSchema = z.tuple([
+      z.number().finite().min(-10_000).max(10_000),
+      z.number().finite().min(-10_000).max(10_000),
+      z.number().finite().min(-10_000).max(10_000),
+    ]);
+    const defaultScreenshotLayers: McpScreenshotLayerState = {
+      scalp: true,
+      grayMatter: true,
+      whiteMatter: false,
+      fivePoint: true,
+      tenTen: true,
+      pointLabels: false,
+      fivePointLabelsIncluded: true,
+      channelLabels: true,
+      surfaceOverlay: 'none',
+      functionalMap: false,
+      patches: true,
+      digitizer: true,
+      anatomicalCoverage: false,
+      groundGrid: false,
+    };
+    server.registerTool('capture_project_screenshot', {
+      title: 'Capture a transparent CortexLume project screenshot',
+      description: 'Render a validated project in a hidden Electron scientific scene and write a unique transparent PNG. Camera state is an explicit preset or exact input; this tool never claims to capture a separate GUI window current view.',
+      inputSchema: {
+        projectPath: z.string().min(1),
+        outputPath: z.string().min(1).optional(),
+        width: z.number().int().min(MCP_SCREENSHOT_LIMITS.minimumLogicalDimension)
+          .max(MCP_SCREENSHOT_LIMITS.maximumLogicalDimension).default(1200),
+        height: z.number().int().min(MCP_SCREENSHOT_LIMITS.minimumLogicalDimension)
+          .max(MCP_SCREENSHOT_LIMITS.maximumLogicalDimension).default(900),
+        dpr: z.number().min(MCP_SCREENSHOT_LIMITS.minimumDpr)
+          .max(MCP_SCREENSHOT_LIMITS.maximumDpr).default(1),
+        camera: z.discriminatedUnion('kind', [
+          z.object({
+            kind: z.literal('preset'),
+            preset: z.enum(['gui-default', 'front', 'left', 'right', 'superior']).default('gui-default'),
+          }),
+          z.object({
+            kind: z.literal('explicit'),
+            position: screenshotVectorSchema,
+            target: screenshotVectorSchema,
+            up: screenshotVectorSchema.default([0, 1, 0]),
+            fov: z.number().finite().min(10).max(90).default(39),
+          }),
+        ]).default({ kind: 'preset', preset: 'gui-default' }),
+        layers: z.object({
+          scalp: z.boolean().default(defaultScreenshotLayers.scalp),
+          grayMatter: z.boolean().default(defaultScreenshotLayers.grayMatter),
+          whiteMatter: z.boolean().default(defaultScreenshotLayers.whiteMatter),
+          fivePoint: z.boolean().default(defaultScreenshotLayers.fivePoint),
+          tenTen: z.boolean().default(defaultScreenshotLayers.tenTen),
+          pointLabels: z.boolean().default(defaultScreenshotLayers.pointLabels),
+          channelLabels: z.boolean().default(defaultScreenshotLayers.channelLabels),
+          patches: z.boolean().default(defaultScreenshotLayers.patches),
+          digitizer: z.boolean().default(defaultScreenshotLayers.digitizer),
+          surfaceOverlay: z.enum([
+            'project', 'none', 'functional-target', 'coverage-mosaic', 'coverage-region',
+          ]).default('project'),
+        }).default({
+          scalp: defaultScreenshotLayers.scalp,
+          grayMatter: defaultScreenshotLayers.grayMatter,
+          whiteMatter: defaultScreenshotLayers.whiteMatter,
+          fivePoint: defaultScreenshotLayers.fivePoint,
+          tenTen: defaultScreenshotLayers.tenTen,
+          pointLabels: defaultScreenshotLayers.pointLabels,
+          channelLabels: defaultScreenshotLayers.channelLabels,
+          patches: defaultScreenshotLayers.patches,
+          digitizer: defaultScreenshotLayers.digitizer,
+          surfaceOverlay: 'project',
+        }),
+      },
+    }, async ({ projectPath, outputPath, width, height, dpr, camera: cameraInput, layers: requestedLayers }) => {
+      if (!this.options.captureProjectScreenshot) {
+        throw new Error('The CortexLume Electron screenshot worker is unavailable in this runtime.');
+      }
+      const physicalWidth = Math.round(width * dpr);
+      const physicalHeight = Math.round(height * dpr);
+      if (physicalWidth > MCP_SCREENSHOT_LIMITS.maximumPhysicalDimension
+        || physicalHeight > MCP_SCREENSHOT_LIMITS.maximumPhysicalDimension
+        || physicalWidth * physicalHeight > MCP_SCREENSHOT_LIMITS.maximumPhysicalPixels) {
+        throw new Error(`Screenshot exceeds the ${MCP_SCREENSHOT_LIMITS.maximumPhysicalPixels}-pixel rendering budget.`);
+      }
+      const resolvedProjectPath = await this.authorizedPath(projectPath, true);
+      const detailed = await this.readAuthorizedProject(resolvedProjectPath);
+      const camera = resolveScreenshotCamera(cameraInput as Parameters<typeof resolveScreenshotCamera>[0]);
+      const surfaceOverlay = requestedLayers.surfaceOverlay === 'project'
+        ? detailed.project.surfaceOverlay
+        : requestedLayers.surfaceOverlay;
+      if (surfaceOverlay === 'functional-target' && !detailed.project.functionalTarget) {
+        throw new Error('Functional-target overlay was requested but the project has no functional target map.');
+      }
+      const layers: McpScreenshotLayerState = {
+        scalp: requestedLayers.scalp,
+        grayMatter: requestedLayers.grayMatter,
+        whiteMatter: requestedLayers.whiteMatter,
+        fivePoint: requestedLayers.fivePoint,
+        tenTen: requestedLayers.tenTen,
+        pointLabels: requestedLayers.pointLabels,
+        fivePointLabelsIncluded: requestedLayers.fivePoint,
+        channelLabels: requestedLayers.channelLabels,
+        patches: requestedLayers.patches,
+        digitizer: requestedLayers.digitizer,
+        surfaceOverlay,
+        functionalMap: surfaceOverlay === 'functional-target',
+        anatomicalCoverage: surfaceOverlay === 'coverage-mosaic' || surfaceOverlay === 'coverage-region',
+        groundGrid: false,
+      };
+      const projectBaseName = path.basename(resolvedProjectPath, path.extname(resolvedProjectPath));
+      const defaultDestination = path.join(
+        path.dirname(resolvedProjectPath),
+        'CortexLume_Screenshots',
+        `${projectBaseName} - ${camera.preset ?? 'explicit'}.png`,
+      );
+      const requestedDestination = outputPath ?? defaultDestination;
+      const extensionPath = requestedDestination.toLowerCase().endsWith('.png')
+        ? requestedDestination
+        : `${requestedDestination}.png`;
+      const resolvedDestination = await this.authorizedPath(extensionPath, false);
+      const outputParent = await this.authorizedPath(path.dirname(resolvedDestination), false);
+      await mkdir(outputParent, { recursive: true });
+      await this.authorizedPath(outputParent, true);
+      const temporaryPath = await this.authorizedPath(
+        path.join(outputParent, `.${path.basename(resolvedDestination)}.${randomUUID()}.capture.png`),
+        false,
+      );
+      let renderResult: McpScreenshotRenderResult;
+      let pngBytes: Uint8Array;
+      try {
+        renderResult = await this.options.captureProjectScreenshot({
+          project: {
+            ...detailed.project,
+            surfaceOverlay,
+            instances: layers.patches
+              ? detailed.project.instances
+              : detailed.project.instances.map((instance) => ({ ...instance, visible: false })),
+            digitizerSessions: layers.digitizer
+              ? detailed.project.digitizerSessions
+              : detailed.project.digitizerSessions.map((session) => ({ ...session, visible: false })),
+          },
+          projectPath: resolvedProjectPath,
+          sourceProjectSha256: detailed.archiveProjectSha256,
+          temporaryPath,
+          logicalWidth: width,
+          logicalHeight: height,
+          dpr,
+          camera,
+          layers,
+        });
+        const verifiedTemporaryPath = await this.authorizedPath(temporaryPath, true);
+        pngBytes = await stableReadRegularFile(
+          verifiedTemporaryPath,
+          MCP_SCREENSHOT_LIMITS.maximumPngBytes,
+          { label: 'Screenshot PNG' },
+        );
+        validatePngDimensions(pngBytes, physicalWidth, physicalHeight);
+        if (renderResult.width !== physicalWidth || renderResult.height !== physicalHeight) {
+          throw new Error('Screenshot worker metadata dimensions do not match the requested physical resolution.');
+        }
+        if (canonical(renderResult.camera) !== canonical(camera) || canonical(renderResult.layers) !== canonical(layers)) {
+          throw new Error('Screenshot worker metadata does not match the resolved camera and layer request.');
+        }
+      } finally {
+        await rm(temporaryPath, { force: true }).catch(() => undefined);
+      }
+      const destination = await this.writeUniqueAuthorizedPng(resolvedDestination, pngBytes);
+      return toolResult({
+        path: destination,
+        width: renderResult.width,
+        height: renderResult.height,
+        logicalWidth: width,
+        logicalHeight: height,
+        dpr,
+        transparent: true,
+        encoding: 'rgba8-lossless-png',
+        quantized: false,
+        lossless: true,
+        backgroundIncluded: false,
+        camera: renderResult.camera,
+        layers: renderResult.layers,
+        project: {
+          path: resolvedProjectPath,
+          id: detailed.project.id,
+          archiveProjectSha256: detailed.archiveProjectSha256,
+        },
+      });
+    });
+
     server.registerTool('open_project', {
       title: 'Open a CortexLume project',
       description: 'Validate an authorized project archive and launch it in a new independent CortexLume GUI process for human review.',
@@ -852,5 +1120,31 @@ export class CortexLumeMcpRuntime {
       }
     }
     throw new Error('Could not allocate a unique project filename.');
+  }
+
+  private async writeUniqueAuthorizedPng(requested: string, data: Uint8Array): Promise<string> {
+    const extensionPath = requested.toLowerCase().endsWith('.png') ? requested : `${requested}.png`;
+    const resolved = await this.authorizedPath(extensionPath, false);
+    const parent = await this.authorizedPath(path.dirname(resolved), false);
+    await mkdir(parent, { recursive: true });
+    await this.authorizedPath(parent, true);
+    const extension = path.extname(resolved);
+    const base = resolved.slice(0, -extension.length);
+    for (let suffix = 0; suffix < 10_000; suffix += 1) {
+      const candidate = suffix === 0 ? resolved : `${base} (${suffix + 1})${extension}`;
+      await this.authorizedPath(candidate, false);
+      try {
+        let verifiedPath: string | undefined;
+        await durableAtomicCreateExclusive(candidate, data, {
+          ensureParent: false,
+          afterPublish: async () => { verifiedPath = await this.authorizedPath(candidate, true); },
+        });
+        if (!verifiedPath) throw new Error('Published screenshot path could not be verified.');
+        return verifiedPath;
+      } catch (error) {
+        if (!isAlreadyExistsError(error)) throw error;
+      }
+    }
+    throw new Error('Could not allocate a unique screenshot filename.');
   }
 }

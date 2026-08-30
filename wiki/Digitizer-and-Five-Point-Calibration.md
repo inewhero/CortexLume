@@ -41,4 +41,4 @@ On confirmation, CortexLume creates a new derived patch, stores it in **Patch Li
 
 The optional examples include both `03-digitizer-five-point` and `04-digitizer-polhemus` workflows.
 
-Next: [Projects and Exports](Projects-and-Exports.md).
+Next: [Projects and Exports](Projects-and-Exports).

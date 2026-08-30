@@ -43,9 +43,10 @@ import {
   buildBidsGeometryExportAsync,
   buildBrainNetExportAsync,
   buildCsvExportAsync,
-  type ExportBundle,
   type ExportRunOptions,
 } from './projectExport';
+import { buildAtlasViewerExportAsync } from './atlasViewerExport';
+import { createUniqueExportDirectory, writeExportBundle } from './exportBundleWriter';
 import { DIGITIZER_MAX_FILE_BYTES, parseDigitizerFile } from './digitizerImport';
 import { annotateProjectAtlas } from './projectAnnotation';
 import { fitPlacementWireRequest } from './fitPlacementWire';
@@ -53,11 +54,20 @@ import { createTrustedIpcHandler } from './ipcSecurity';
 import { ProjectOperationManager, type ProjectOperation } from './projectOperation';
 import { checkGithubUpdate } from './startupLifecycle';
 import { durableAtomicReplace, stableReadRegularFile } from './durableFile';
+import { decodeScientificScreenshotBase64, saveScientificScreenshot } from './screenshotWriter';
 import type { UpdateCheckResult } from '../shared/startup';
+import type { McpScreenshotWorkerCompletion, McpScreenshotWorkerRequest } from '../shared/mcpScreenshot';
+import { completeMcpCaptureWorker, loadMcpCaptureWorkerRequest } from './mcpCaptureWorker';
+import { requireConfiguredRoots } from './mcpBootstrapConfig';
 
 let mainWindow: BrowserWindow | null = null;
 const headlessSmokeTest = process.env.CORTEXLUME_HEADLESS_TEST === '1';
 const mcpMode = process.argv.includes('--mcp-stdio');
+const mcpCaptureWorkerPath = process.argv.find((argument) => argument.startsWith('--mcp-capture-worker='))
+  ?.slice('--mcp-capture-worker='.length) ?? null;
+const mcpCaptureProjectSha256 = process.argv.find((argument) => argument.startsWith('--mcp-capture-project-sha256='))
+  ?.slice('--mcp-capture-project-sha256='.length) ?? null;
+const mcpCaptureMode = mcpCaptureWorkerPath !== null;
 const squirrelFirstRun = process.argv.includes('--squirrel-firstrun');
 const squirrelUninstall = process.argv.includes('--squirrel-uninstall');
 const uninstallMode = process.argv.includes('--uninstall-cortexlume');
@@ -95,6 +105,8 @@ let closeApproved = false;
 let closeRequestPending = false;
 const authorizedProjectPaths = new Set<string>();
 const destinationWrites = new Map<string, Promise<void>>();
+let mcpCaptureRequest: McpScreenshotWorkerRequest | null = null;
+let mcpCaptureAuthorizedRoots: string[] = [];
 
 function emitProjectProgress(
   operation: ProjectOperation,
@@ -175,20 +187,21 @@ async function createWindow(): Promise<void> {
   closeApproved = false;
   closeRequestPending = false;
   mainWindow = new BrowserWindow({
-    width: 1500,
-    height: 940,
-    minWidth: 1120,
-    minHeight: 720,
+    width: mcpCaptureRequest?.logicalWidth ?? 1500,
+    height: mcpCaptureRequest?.logicalHeight ?? 940,
+    minWidth: mcpCaptureRequest?.logicalWidth ?? 1120,
+    minHeight: mcpCaptureRequest?.logicalHeight ?? 720,
     backgroundColor: '#0a0d12',
     ...(app.isPackaged ? {} : { icon: path.join(app.getAppPath(), 'assets', 'icon.png') }),
     frame: false,
-    show: !app.isPackaged && !headlessSmokeTest,
+    show: !app.isPackaged && !headlessSmokeTest && !mcpCaptureMode,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: !mcpCaptureMode,
     },
   });
 
@@ -202,7 +215,7 @@ async function createWindow(): Promise<void> {
   });
 
   mainWindow.once('ready-to-show', () => {
-    if (!headlessSmokeTest) mainWindow?.show();
+    if (!headlessSmokeTest && !mcpCaptureMode) mainWindow?.show();
   });
   mainWindow.on('close', (event) => {
     if (closeApproved) return;
@@ -224,7 +237,7 @@ async function createWindow(): Promise<void> {
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
   }
-  if (!headlessSmokeTest && !mainWindow.isVisible()) mainWindow.show();
+  if (!headlessSmokeTest && !mcpCaptureMode && !mainWindow.isVisible()) mainWindow.show();
 }
 
 interface WriteGuard {
@@ -265,6 +278,7 @@ async function atomicWrite(
 const IPC_RENDERER_ERROR = 'IPC request failed.';
 const IPC_DEFAULT_MAX_PAYLOAD_BYTES = CROSS_PROCESS_LIMITS.scienceRequestBytes;
 const IPC_SMALL_MAX_PAYLOAD_BYTES = 64 * 1024;
+const IPC_SCREENSHOT_MAX_PAYLOAD_BYTES = 25 * 1024 * 1024;
 
 interface TrustedHandleOptions {
   maxPayloadBytes?: number;
@@ -349,29 +363,6 @@ async function readBoundedFile(filePath: string, maximumBytes: number, label: st
 
 async function readProjectFile(projectPath: string): Promise<Uint8Array> {
   return readBoundedFile(projectPath, PROJECT_ARCHIVE_LIMITS.compressedBytes, 'Project archive');
-}
-
-async function writeExportBundle(
-  directory: string,
-  bundle: ExportBundle,
-  options: Pick<ExportRunOptions, 'signal' | 'deadline' | 'onProgress'> = {},
-): Promise<string[]> {
-  const files = Object.entries(bundle.files);
-  const exportRoot = path.resolve(directory);
-  checkWriteGuard(options);
-  for (const [index, [filename, content]] of files.entries()) {
-    checkWriteGuard(options);
-    const destination = path.resolve(exportRoot, filename);
-    if (destination !== exportRoot && !destination.startsWith(`${exportRoot}${path.sep}`)) {
-      throw new Error(`Invalid export path: ${filename}`);
-    }
-    await mkdir(path.dirname(destination), { recursive: true });
-    checkWriteGuard(options);
-    await atomicWrite(destination, content, options);
-    checkWriteGuard(options);
-    options.onProgress?.(index + 1, Math.max(1, files.length), 'export-write');
-  }
-  return files.map(([filename]) => filename);
 }
 
 interface BrainNetLaunchStatus {
@@ -536,6 +527,10 @@ function registerIpc(): void {
   }, { maxPayloadBytes: IPC_SMALL_MAX_PAYLOAD_BYTES });
 
   trustedHandle('project:startup', z.tuple([]), async () => {
+    if (mcpCaptureRequest) {
+      authorizedProjectPaths.add(mcpCaptureRequest.projectPath);
+      return { project: mcpCaptureRequest.project, path: mcpCaptureRequest.projectPath };
+    }
     if (!startupProjectPath) return null;
     const selectedPath = path.resolve(startupProjectPath);
     const project = readProjectArchive(await readProjectFile(selectedPath));
@@ -595,6 +590,80 @@ function registerIpc(): void {
     },
     { maxPayloadBytes: IPC_DEFAULT_MAX_PAYLOAD_BYTES },
   );
+
+  trustedHandle('project:reveal', z.tuple([
+    z.string().trim().min(1).max(32_768),
+  ]), async (_event, [projectPath]) => {
+    const resolvedPath = path.resolve(projectPath);
+    if (!authorizedProjectPaths.has(resolvedPath)) {
+      throw new Error('The renderer is not authorized to reveal that project path.');
+    }
+    if (!existsSync(resolvedPath)) {
+      throw new Error('The saved project file no longer exists.');
+    }
+    shell.showItemInFolder(resolvedPath);
+    return true;
+  }, { maxPayloadBytes: IPC_SMALL_MAX_PAYLOAD_BYTES });
+
+  trustedHandle('screenshot:save', z.tuple([
+    z.string().trim().min(1).max(32_768),
+    z.string().min(1).max(24 * 1024 * 1024),
+    z.number().int().min(1).max(3072),
+    z.number().int().min(1).max(3072),
+  ]), async (_event, [projectPath, pngBase64, width, height]) => {
+    const resolvedProjectPath = path.resolve(projectPath);
+    if (!authorizedProjectPaths.has(resolvedProjectPath)) {
+      throw new Error('The renderer is not authorized to save screenshots beside that project.');
+    }
+    return saveScientificScreenshot(
+      resolvedProjectPath,
+      decodeScientificScreenshotBase64(pngBase64),
+      width,
+      height,
+    );
+  }, { maxPayloadBytes: IPC_SCREENSHOT_MAX_PAYLOAD_BYTES });
+
+  if (mcpCaptureRequest) {
+    trustedHandle('screenshot:mcp-worker-request', z.tuple([]), async () => ({
+      logicalWidth: mcpCaptureRequest!.logicalWidth,
+      logicalHeight: mcpCaptureRequest!.logicalHeight,
+      dpr: mcpCaptureRequest!.dpr,
+      camera: mcpCaptureRequest!.camera,
+      layers: mcpCaptureRequest!.layers,
+    }), { maxPayloadBytes: IPC_SMALL_MAX_PAYLOAD_BYTES });
+    const workerCameraSchema = z.object({
+      source: z.enum(['preset', 'explicit']),
+      preset: z.enum(['gui-default', 'front', 'left', 'right', 'superior']).nullable(),
+      position: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+      target: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+      up: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+      fov: z.number().finite(), near: z.number().finite(), far: z.number().finite(),
+    }).strict();
+    const workerLayersSchema = z.object({
+      scalp: z.boolean(), grayMatter: z.boolean(), whiteMatter: z.boolean(),
+      fivePoint: z.boolean(), tenTen: z.boolean(), pointLabels: z.boolean(),
+      fivePointLabelsIncluded: z.boolean(), channelLabels: z.boolean(),
+      surfaceOverlay: z.enum(['none', 'functional-target', 'coverage-mosaic', 'coverage-region']),
+      functionalMap: z.boolean(), patches: z.boolean(), digitizer: z.boolean(),
+      anatomicalCoverage: z.boolean(), groundGrid: z.literal(false),
+    }).strict();
+    trustedHandle('screenshot:mcp-worker-complete', z.tuple([z.object({
+      pngBase64: z.string().min(1).max(24 * 1024 * 1024),
+      width: z.number().int().min(1).max(3072),
+      height: z.number().int().min(1).max(3072),
+      camera: workerCameraSchema,
+      layers: workerLayersSchema,
+    }).strict()]), async (_event, [completion]: [McpScreenshotWorkerCompletion]) => {
+      await completeMcpCaptureWorker(mcpCaptureRequest!, completion, mcpCaptureAuthorizedRoots);
+      setImmediate(() => app.exit(0));
+      return { accepted: true };
+    }, { maxPayloadBytes: IPC_SCREENSHOT_MAX_PAYLOAD_BYTES });
+    trustedHandle('screenshot:mcp-worker-fail', z.tuple([z.string().min(1).max(1000)]), async (_event, [message]) => {
+      console.error(`MCP screenshot renderer failed: ${message}`);
+      setImmediate(() => app.exit(1));
+      return { accepted: true };
+    }, { maxPayloadBytes: IPC_SMALL_MAX_PAYLOAD_BYTES });
+  }
 
   trustedHandle('input:digitizer', z.tuple([]), async () => {
     const selection = await dialog.showOpenDialog(mainWindow!, {
@@ -663,18 +732,27 @@ function registerIpc(): void {
       if (!directory) return null;
       checkProjectOperation(operation);
       await mkdir(directory, { recursive: true });
-      const legacyAndGenerated = [
+      const legacyFiles = [
         'cortexlume_brainnet.edge',
         'cortexlume_brainnet_display.node',
-        ...[
-          '01_left', '02_right', '03_anterior', '04_posterior', '05_dorsal',
-          '06_ventral', '06_left_oblique', '07_left_oblique', '07_right_oblique',
-          '08_right_oblique', '08_posterior_dorsal', '09_optimized', '10_mosaic',
-        ].map((name) => `cortexlume_brainnet_${name}.png`),
       ];
-      for (const filename of legacyAndGenerated) {
+      const generatedPngFiles = [
+        '01_left', '02_right', '03_anterior', '04_posterior', '05_dorsal',
+        '06_ventral', '06_left_oblique', '07_left_oblique', '07_right_oblique',
+        '08_right_oblique', '08_posterior_dorsal', '09_optimized', '10_mosaic',
+      ].map((name) => `cortexlume_brainnet_${name}.png`);
+      for (const filename of legacyFiles) {
         checkProjectOperation(operation);
         await rm(path.join(directory, filename), { force: true });
+      }
+      // Remove only CortexLume-owned image names. This cleans legacy root-level
+      // output and stale files from the dedicated image directory without
+      // touching unrelated user content in either location.
+      for (const imageDirectory of [directory, path.join(directory, 'CortexLume_brainnet')]) {
+        for (const filename of generatedPngFiles) {
+          checkProjectOperation(operation);
+          await rm(path.join(imageDirectory, filename), { force: true });
+        }
       }
       const runOptions: ExportRunOptions = {
         signal: operation.controller.signal,
@@ -721,6 +799,26 @@ function registerIpc(): void {
         onProgress: (completed, total, phase) => emitProjectProgress(operation, phase, completed, total),
       };
       const bundle = await buildBidsGeometryExportAsync(project, runOptions);
+      const files = await writeExportBundle(directory, bundle, runOptions);
+      return { directory, files, warnings: bundle.warnings };
+    }), { maxPayloadBytes: IPC_DEFAULT_MAX_PAYLOAD_BYTES });
+
+  trustedHandle('export:atlasviewer', projectOperationArgsSchema, async (_event, [project, rawOptions]) =>
+    withProjectOperation('export', rawOptions, async (operation) => {
+      const selectedDirectory = await chooseExportDirectory('Export AtlasViewer SD probe geometry');
+      if (!selectedDirectory) return null;
+      checkProjectOperation(operation);
+      const runOptions: ExportRunOptions = {
+        signal: operation.controller.signal,
+        deadline: operation.deadline,
+        onProgress: (completed, total, phase) => emitProjectProgress(operation, phase, completed, total),
+      };
+      const bundle = await buildAtlasViewerExportAsync(project, runOptions);
+      checkProjectOperation(operation);
+      const directory = await createUniqueExportDirectory(
+        selectedDirectory,
+        'CortexLume_AtlasViewer_Export',
+      );
       const files = await writeExportBundle(directory, bundle, runOptions);
       return { directory, files, warnings: bundle.warnings };
     }), { maxPayloadBytes: IPC_DEFAULT_MAX_PAYLOAD_BYTES });
@@ -897,6 +995,26 @@ if (!squirrelStartupHandled) app.whenReady().then(async () => {
   }
   if (mcpMode) {
     startMcpStdioChild();
+    return;
+  }
+  if (mcpCaptureMode) {
+    try {
+      if (!mcpCaptureWorkerPath || !mcpCaptureProjectSha256) {
+        throw new Error('MCP screenshot worker arguments are incomplete.');
+      }
+      mcpCaptureAuthorizedRoots = requireConfiguredRoots();
+      mcpCaptureRequest = await loadMcpCaptureWorkerRequest(
+        mcpCaptureWorkerPath,
+        mcpCaptureAuthorizedRoots,
+        mcpCaptureProjectSha256,
+      );
+      registerIpc();
+      void startScienceSidecar().catch((error) => console.error('Science sidecar unavailable:', error));
+      await createWindow();
+    } catch (error) {
+      console.error(`MCP screenshot worker failed: ${error instanceof Error ? error.message : String(error)}`);
+      app.exit(1);
+    }
     return;
   }
   registerIpc();

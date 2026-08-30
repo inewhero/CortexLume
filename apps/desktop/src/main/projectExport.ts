@@ -18,6 +18,28 @@ export interface ExportRunOptions {
   onProgress?: (completed: number, total: number, phase: string) => void;
 }
 
+const BIDS_OPTODES_EXTENSION_METADATA = {
+  display_x: { Description: 'Collision-safe CortexLume cortical display sphere centre, right axis', Units: 'mm' },
+  display_y: { Description: 'Collision-safe CortexLume cortical display sphere centre, anterior axis', Units: 'mm' },
+  display_z: { Description: 'Collision-safe CortexLume cortical display sphere centre, superior axis', Units: 'mm' },
+  cortical_contact_x: { Description: 'First gray-matter contact, right axis', Units: 'mm' },
+  cortical_contact_y: { Description: 'First gray-matter contact, anterior axis', Units: 'mm' },
+  cortical_contact_z: { Description: 'First gray-matter contact, superior axis', Units: 'mm' },
+  cortical_region_1: { Description: 'Highest-probability cortical atlas label' },
+  cortical_region_1_percent: { Description: 'Atlas probability in percent', Units: '%' },
+  cortical_region_2: { Description: 'Second-highest cortical atlas label' },
+  cortical_region_2_percent: { Description: 'Atlas probability in percent', Units: '%' },
+  cortical_region_3: { Description: 'Third-highest cortical atlas label' },
+  cortical_region_3_percent: { Description: 'Atlas probability in percent', Units: '%' },
+} as const;
+
+const BIDS_CHANNELS_EXTENSION_METADATA = {
+  short_channel: { Description: 'Whether the source-detector pair is designated as short separation' },
+  nominal_distance_mm: { Description: 'Distance in the 2D optode design', Units: 'mm' },
+  actual_scalp_spacing_mm: { Description: 'Projected source-detector distance on the scalp', Units: 'mm' },
+  actual_cortical_contact_spacing_mm: { Description: 'Source-detector distance at cortical contact', Units: 'mm' },
+} as const;
+
 /** Let Electron service the operations:cancel IPC between bounded build steps. */
 function yieldExportTurn(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
@@ -28,6 +50,14 @@ function checkExportBudget(options: ExportRunOptions): void {
   if (options.deadline != null && Date.now() >= options.deadline) {
     throw new Error('Project export exceeded its overall time budget');
   }
+}
+
+function requireBidsSamplingFrequency(project: CortexLumeProject): number {
+  const samplingFrequency = project.deviceProfile.samplingFrequencyHz;
+  if (samplingFrequency == null || !Number.isFinite(samplingFrequency) || samplingFrequency <= 0) {
+    throw new Error('BIDS export requires a finite positive sampling frequency.');
+  }
+  return samplingFrequency;
 }
 
 function cell(value: unknown, delimiter: ',' | '\t'): string {
@@ -401,11 +431,18 @@ export async function buildCsvExportAsync(
   return { files, warnings };
 }
 
+const BRAINNET_IMAGE_DIRECTORY = 'CortexLume_brainnet';
+
 function brainNetMatlabScript(): string {
   return `${[
     "% CortexLume BrainNet Viewer bridge",
     "% Opens the validated cortical-MNI node file with CortexLume S/D styling.",
     "root = fileparts(mfilename('fullpath'));",
+    `imageRoot = fullfile(root, '${BRAINNET_IMAGE_DIRECTORY}');`,
+    "if exist(imageRoot, 'dir') ~= 7",
+    "    [created, message] = mkdir(imageRoot);",
+    "    assert(created, 'CortexLume:BrainNetImageDirectory', 'Could not create the BrainNet image directory: %s', message);",
+    "end",
     "nodePath = fullfile(root, 'cortexlume_brainnet.node');",
     "assert(isfile(nodePath), 'CortexLume:MissingNodeFile', 'Missing cortexlume_brainnet.node');",
     "brainNetMap = which('BrainNet_MapCfg');",
@@ -451,20 +488,20 @@ function brainNetMatlabScript(): string {
     "    BrainNet('NV_m_nm_Callback', H);",
     "    delete(findall(H, 'Type', 'ColorBar'));",
     "    delete(findall(H, 'Tag', 'Colorbar'));",
-    "    viewPaths{index} = fullfile(root, ['cortexlume_brainnet_' viewNames{index} '.png']);",
+    "    viewPaths{index} = fullfile(imageRoot, ['cortexlume_brainnet_' viewNames{index} '.png']);",
     "    print(H, viewPaths{index}, '-dpng', '-r120');",
     "    viewImages{index} = imread(viewPaths{index});",
     "end",
     "% fNIRS-oriented layout: lateral/dorsal/lateral, oblique/optimized/oblique, anterior/posterior-dorsal/posterior.",
     "mosaic = [viewImages{1} viewImages{5} viewImages{2}; viewImages{6} viewImages{9} viewImages{7}; viewImages{3} viewImages{8} viewImages{4}];",
-    "imwrite(mosaic, fullfile(root, 'cortexlume_brainnet_10_mosaic.png'));",
+    "imwrite(mosaic, fullfile(imageRoot, 'cortexlume_brainnet_10_mosaic.png'));",
     "% Leave the interactive viewer on the optimized ninth view without a colorbar.",
     "EC.lot.view_az = optimizedAz;",
     "EC.lot.view_el = optimizedEl;",
     "BrainNet('NV_m_nm_Callback', H);",
     "delete(findall(H, 'Type', 'ColorBar'));",
     "delete(findall(H, 'Tag', 'Colorbar'));",
-    "fprintf('CortexLume: wrote 8 standard views, 1 optimized view, and 1 mosaic (red source, blue detector).\\n');",
+    "fprintf('CortexLume: wrote 8 standard views, 1 optimized view, and 1 mosaic to %s (red source, blue detector).\\n', imageRoot);",
   ].join('\r\n')}\r\n`;
 }
 
@@ -515,7 +552,7 @@ export function buildBrainNetExport(project: CortexLumeProject, options: ExportR
       'Node labels are stored in column 6 but hidden by default in BrainNet Viewer.',
       'BrainNet receives the exported cortical MNI coordinates unchanged; no snapping, offset, or display-space correction is applied.',
       'No edge file is generated: CortexLume exports optode locations only.',
-      'The MATLAB script writes eight fNIRS-relevant PNG views, one array-facing optimized PNG, and one logically arranged 3x3 mosaic without colorbars or a ventral view.',
+      `The MATLAB script writes eight fNIRS-relevant PNG views, one array-facing optimized PNG, and one logically arranged 3x3 mosaic inside ${BRAINNET_IMAGE_DIRECTORY}/ without colorbars or a ventral view.`,
     ].join('\r\n')}\r\n`,
   };
   return { files, warnings };
@@ -577,7 +614,7 @@ export async function buildBrainNetExportAsync(
       'Node labels are stored in column 6 but hidden by default in BrainNet Viewer.',
       'BrainNet receives the exported cortical MNI coordinates unchanged; no snapping, offset, or display-space correction is applied.',
       'No edge file is generated: CortexLume exports optode locations only.',
-      'The MATLAB script writes eight fNIRS-relevant PNG views, one array-facing optimized PNG, and one logically arranged 3x3 mosaic without colorbars or a ventral view.',
+      `The MATLAB script writes eight fNIRS-relevant PNG views, one array-facing optimized PNG, and one logically arranged 3x3 mosaic inside ${BRAINNET_IMAGE_DIRECTORY}/ without colorbars or a ventral view.`,
     ].join('\r\n')}\r\n`,
   };
   checkExportBudget(options);
@@ -586,6 +623,7 @@ export async function buildBrainNetExportAsync(
 
 export function buildBidsGeometryExport(project: CortexLumeProject, options: ExportRunOptions = {}): ExportBundle {
   checkExportBudget(options);
+  const samplingFrequency = requireBidsSamplingFrequency(project);
   assertProjectionResultsReady(project, options);
   const warnings = [
     'Add the matching SNIRF recording to complete the BIDS NIRS dataset.',
@@ -689,10 +727,6 @@ export function buildBidsGeometryExport(project: CortexLumeProject, options: Exp
   if (missingCoordinates > 0) {
     warnings.push(`${missingCoordinates} optodes do not have computed scalp coordinates.`);
   }
-  if (project.deviceProfile.samplingFrequencyHz == null) {
-    warnings.push('Set the sampling frequency from the recording before BIDS validation.');
-  }
-
   const nirsSidecar: Record<string, unknown> = {
     TaskName: settings.taskLabel,
     Manufacturer: project.deviceProfile.manufacturer,
@@ -705,10 +739,8 @@ export function buildBidsGeometryExport(project: CortexLumeProject, options: Exp
     NIRSDetectorOptodeCount: detectorCount,
     ShortChannelCount: shortChannelCount,
     NIRSPlacementScheme: 'n/a',
+    SamplingFrequency: samplingFrequency,
   };
-  if (project.deviceProfile.samplingFrequencyHz != null) {
-    nirsSidecar.SamplingFrequency = project.deviceProfile.samplingFrequencyHz;
-  }
 
   const files: Record<string, string> = {
     'dataset_description.json': `${JSON.stringify({
@@ -718,20 +750,8 @@ export function buildBidsGeometryExport(project: CortexLumeProject, options: Exp
       GeneratedBy: [{ Name: 'CortexLume' }],
     }, null, 2)}\n`,
     [`${nirsDirectory}/${sharedPrefix}_optodes.tsv`]: table(optodeRows, '\t'),
-    [`${nirsDirectory}/${sharedPrefix}_optodes.json`]: `${JSON.stringify({
-      display_x: { Description: 'Collision-safe CortexLume cortical display sphere centre, right axis', Units: 'mm' },
-      display_y: { Description: 'Collision-safe CortexLume cortical display sphere centre, anterior axis', Units: 'mm' },
-      display_z: { Description: 'Collision-safe CortexLume cortical display sphere centre, superior axis', Units: 'mm' },
-      cortex_x: { Description: 'First gray-matter contact, right axis', Units: 'mm' },
-      cortex_y: { Description: 'First gray-matter contact, anterior axis', Units: 'mm' },
-      cortex_z: { Description: 'First gray-matter contact, superior axis', Units: 'mm' },
-      cortical_region_1: { Description: 'Highest-probability cortical atlas label' },
-      cortical_region_1_percent: { Description: 'Atlas probability in percent', Units: '%' },
-      cortical_region_2: { Description: 'Second-highest cortical atlas label' },
-      cortical_region_2_percent: { Description: 'Atlas probability in percent', Units: '%' },
-      cortical_region_3: { Description: 'Third-highest cortical atlas label' },
-      cortical_region_3_percent: { Description: 'Atlas probability in percent', Units: '%' },
-    }, null, 2)}\n`,
+    [`${nirsDirectory}/${sharedPrefix}_optodes.json`]:
+      `${JSON.stringify(BIDS_OPTODES_EXTENSION_METADATA, null, 2)}\n`,
     [`${nirsDirectory}/${sharedPrefix}_coordsystem.json`]: `${JSON.stringify({
       NIRSCoordinateSystem: project.template.id,
       NIRSCoordinateUnits: project.template.units,
@@ -740,12 +760,8 @@ export function buildBidsGeometryExport(project: CortexLumeProject, options: Exp
         `Scalp optode sphere centres in MNI RAS+ space from CortexLume template ${project.template.assetVersion}.`,
     }, null, 2)}\n`,
     [`${nirsDirectory}/${recordingPrefix}_channels.tsv`]: table(channelRows, '\t'),
-    [`${nirsDirectory}/${recordingPrefix}_channels.json`]: `${JSON.stringify({
-      short_channel: { Description: 'Whether the source-detector pair is designated as short separation' },
-      nominal_distance_mm: { Description: 'Distance in the 2D optode design', Units: 'mm' },
-      actual_scalp_spacing_mm: { Description: 'Projected source-detector distance on the scalp', Units: 'mm' },
-      actual_cortical_contact_spacing_mm: { Description: 'Source-detector distance at cortical contact', Units: 'mm' },
-    }, null, 2)}\n`,
+    [`${nirsDirectory}/${recordingPrefix}_channels.json`]:
+      `${JSON.stringify(BIDS_CHANNELS_EXTENSION_METADATA, null, 2)}\n`,
     [`${nirsDirectory}/${recordingPrefix}_nirs.json`]: `${JSON.stringify(nirsSidecar, null, 2)}\n`,
     'sourcedata/cortexlume_export.json':
       `${JSON.stringify(exportMetadata(project, 'bids-nirs', warnings, options), null, 2)}\n`,
@@ -766,6 +782,7 @@ export async function buildBidsGeometryExportAsync(
   options: ExportRunOptions = {},
 ): Promise<ExportBundle> {
   checkExportBudget(options);
+  const samplingFrequency = requireBidsSamplingFrequency(project);
   assertProjectionResultsReady(project, options);
   const warnings = [
     'Add the matching SNIRF recording to complete the BIDS NIRS dataset.',
@@ -884,10 +901,6 @@ export async function buildBidsGeometryExportAsync(
   checkExportBudget(options);
   if (project.instances.length === 0) warnings.push('No 3D patch instances exist.');
   if (missingCoordinates > 0) warnings.push(`${missingCoordinates} optodes do not have computed scalp coordinates.`);
-  if (project.deviceProfile.samplingFrequencyHz == null) {
-    warnings.push('Set the sampling frequency from the recording before BIDS validation.');
-  }
-
   const nirsSidecar: Record<string, unknown> = {
     TaskName: settings.taskLabel,
     Manufacturer: project.deviceProfile.manufacturer,
@@ -900,10 +913,8 @@ export async function buildBidsGeometryExportAsync(
     NIRSDetectorOptodeCount: detectorCount,
     ShortChannelCount: shortChannelCount,
     NIRSPlacementScheme: 'n/a',
+    SamplingFrequency: samplingFrequency,
   };
-  if (project.deviceProfile.samplingFrequencyHz != null) {
-    nirsSidecar.SamplingFrequency = project.deviceProfile.samplingFrequencyHz;
-  }
 
   await yieldExportTurn();
   checkExportBudget(options);
@@ -915,20 +926,8 @@ export async function buildBidsGeometryExportAsync(
       GeneratedBy: [{ Name: 'CortexLume' }],
     }, null, 2)}\n`,
     [`${nirsDirectory}/${sharedPrefix}_optodes.tsv`]: table(optodeRows, '\t'),
-    [`${nirsDirectory}/${sharedPrefix}_optodes.json`]: `${JSON.stringify({
-      display_x: { Description: 'Collision-safe CortexLume cortical display sphere centre, right axis', Units: 'mm' },
-      display_y: { Description: 'Collision-safe CortexLume cortical display sphere centre, anterior axis', Units: 'mm' },
-      display_z: { Description: 'Collision-safe CortexLume cortical display sphere centre, superior axis', Units: 'mm' },
-      cortex_x: { Description: 'First gray-matter contact, right axis', Units: 'mm' },
-      cortex_y: { Description: 'First gray-matter contact, anterior axis', Units: 'mm' },
-      cortex_z: { Description: 'First gray-matter contact, superior axis', Units: 'mm' },
-      cortical_region_1: { Description: 'Highest-probability cortical atlas label' },
-      cortical_region_1_percent: { Description: 'Atlas probability in percent', Units: '%' },
-      cortical_region_2: { Description: 'Second-highest cortical atlas label' },
-      cortical_region_2_percent: { Description: 'Atlas probability in percent', Units: '%' },
-      cortical_region_3: { Description: 'Third-highest cortical atlas label' },
-      cortical_region_3_percent: { Description: 'Atlas probability in percent', Units: '%' },
-    }, null, 2)}\n`,
+    [`${nirsDirectory}/${sharedPrefix}_optodes.json`]:
+      `${JSON.stringify(BIDS_OPTODES_EXTENSION_METADATA, null, 2)}\n`,
     [`${nirsDirectory}/${sharedPrefix}_coordsystem.json`]: `${JSON.stringify({
       NIRSCoordinateSystem: project.template.id,
       NIRSCoordinateUnits: project.template.units,
@@ -937,12 +936,8 @@ export async function buildBidsGeometryExportAsync(
         `Scalp optode sphere centres in MNI RAS+ space from CortexLume template ${project.template.assetVersion}.`,
     }, null, 2)}\n`,
     [`${nirsDirectory}/${recordingPrefix}_channels.tsv`]: table(channelRows, '\t'),
-    [`${nirsDirectory}/${recordingPrefix}_channels.json`]: `${JSON.stringify({
-      short_channel: { Description: 'Whether the source-detector pair is designated as short separation' },
-      nominal_distance_mm: { Description: 'Distance in the 2D optode design', Units: 'mm' },
-      actual_scalp_spacing_mm: { Description: 'Projected source-detector distance on the scalp', Units: 'mm' },
-      actual_cortical_contact_spacing_mm: { Description: 'Source-detector distance at cortical contact', Units: 'mm' },
-    }, null, 2)}\n`,
+    [`${nirsDirectory}/${recordingPrefix}_channels.json`]:
+      `${JSON.stringify(BIDS_CHANNELS_EXTENSION_METADATA, null, 2)}\n`,
     [`${nirsDirectory}/${recordingPrefix}_nirs.json`]: `${JSON.stringify(nirsSidecar, null, 2)}\n`,
     'sourcedata/cortexlume_export.json':
       `${JSON.stringify(exportMetadata(project, 'bids-nirs', warnings, options), null, 2)}\n`,

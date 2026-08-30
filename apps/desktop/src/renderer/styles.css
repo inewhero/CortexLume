@@ -267,6 +267,24 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
 .patch-tab .patch-remove:hover { background: #a53c34; }
 .patch-tabs > span { padding: 5px 7px; color: #99a5a7; border: 1px solid #4d595c; background: #20282acc; font: var(--text-meta) var(--font-mono); }
 .top-right { top: 15px; right: 16px; }
+.scientific-screenshot-button {
+  z-index: 2147483000;
+  top: 15px;
+  right: 16px;
+  width: 31px;
+  min-height: 29px;
+  padding: 6px;
+  display: grid;
+  place-items: center;
+  color: #c8d0ce;
+  border-color: #596669;
+  background: #222a2dcc;
+  box-shadow: 0 5px 16px #0004;
+  pointer-events: auto;
+}
+.scientific-screenshot-button svg { width: 16px; height: 16px; fill: currentColor; }
+.scientific-screenshot-button:hover:not(:disabled) { color: #171b1d; border-color: var(--accent); background: var(--accent); }
+.scientific-screenshot-button:disabled { opacity: .52; }
 .viewport-controls { display: flex; align-items: center; gap: 6px; }
 .segmented { display: flex; border: 1px solid #909997; background: #e7e9e6; }
 .segmented button { min-height: var(--control-height); border: 0; border-right: 1px solid #aeb5b3; background: transparent; }
@@ -298,15 +316,15 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
 .overlap-warning { top: 15px; left: 50%; display: grid; gap: 3px; padding: 7px 10px; color: #1b1812; background: #e8bd4d; border: 1px solid #8a6512; transform: translateX(-50%); box-shadow: 0 8px 24px #0005; }
 .overlap-warning strong { font-size: 9px; letter-spacing: .09em; }
 .overlap-warning span { font: var(--text-meta) var(--font-mono); }
-.bottom-left { bottom: 15px; left: 17px; }
+.bottom-left-stack { z-index: 2147483000; bottom: 15px; left: 17px; width: min(620px, calc(100% - 238px)); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .legend { z-index: 2147483000; display: flex; align-items: center; gap: 12px; padding: 7px 9px; color: #c4cdcb; border: 1px solid #505c5f; background: #1c2326e8; font: var(--text-meta) var(--font-mono); letter-spacing: .045em; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
-.target-map-legend { z-index: 2147482999; bottom: 51px; left: 17px; width: 210px; display: grid; gap: 5px; padding: 10px 11px; color: #d9e0de; border: 1px solid #596669; background: #1c2326ed; box-shadow: 0 8px 22px #0005; }
+.target-map-legend { width: 210px; max-width: 100%; box-sizing: border-box; display: grid; gap: 5px; padding: 10px 11px; color: #d9e0de; border: 1px solid #596669; background: #1c2326ed; box-shadow: 0 8px 22px #0005; }
 .target-map-legend strong { overflow: hidden; color: #f3f5f3; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .target-map-legend span, .target-map-legend small { color: #bdc7c5; font: 9px/1.35 "Cascadia Mono", Consolas, monospace; letter-spacing: .055em; }
 .target-map-legend i { height: 8px; margin-top: 3px; background: linear-gradient(90deg, #431a7a, #eb4038 56%, #ffd633); border: 1px solid #6b7475; }
 .target-map-range { display: flex; align-items: center; justify-content: space-between; }
-.coverage-map-legend { z-index: 2147482999; bottom: 51px; left: 17px; width: clamp(260px, 32%, 360px); max-width: calc(100% - 290px); box-sizing: border-box; display: grid; gap: 7px; padding: 11px 12px; color: #d9e0de; text-align: left; border: 1px solid #596669; background: #1c2326ed; box-shadow: 0 8px 22px #0005; }
+.coverage-map-legend { width: clamp(260px, 52%, 360px); max-width: 100%; box-sizing: border-box; display: grid; gap: 7px; padding: 11px 12px; color: #d9e0de; text-align: left; border: 1px solid #596669; background: #1c2326ed; box-shadow: 0 8px 22px #0005; }
 .coverage-map-legend > strong { color: #f3f5f3; font-size: 12px; letter-spacing: .04em; }
 .coverage-map-legend > span { overflow: hidden; color: #bdc7c5; font: 10px/1.4 "Cascadia Mono", Consolas, monospace; letter-spacing: .035em; text-overflow: ellipsis; white-space: nowrap; }
 .coverage-legend-row { min-width: 0; display: grid; grid-template-columns: 9px minmax(0, 1fr) max-content; align-items: center; gap: 8px; text-align: left; transition: opacity 140ms ease; }
@@ -330,17 +348,39 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
 .inspector-content { padding-bottom: 3px; }
 .project-name-field input { width: 100%; font-family: Arial, sans-serif; font-weight: 700; }
 .project-file-path {
+  width: 100%;
   display: block;
   margin-top: 5px;
   overflow: hidden;
   color: var(--muted);
-  font-size: var(--text-meta);
-  line-height: 1.4;
+  font: var(--text-meta)/1.4 var(--font-mono);
+  letter-spacing: .035em;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.project-file-path.is-clickable {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+.project-file-path.is-clickable:hover:not(:disabled),
+.project-file-path.is-clickable:focus-visible {
+  color: var(--ink);
+  background: transparent;
+  border-color: transparent;
+}
+.project-file-path.is-clickable:focus-visible {
+  outline-width: 1px;
+  outline-offset: 2px;
+}
 .project-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
 .project-actions.two { grid-template-columns: repeat(2, 1fr); }
+.project-actions.export-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .workflow-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 7px; margin-top: 7px; }
 .workflow-row > span { color: var(--muted); font-size: var(--text-meta); font-weight: 800; letter-spacing: .07em; }
 .workflow-row .project-actions { margin-top: 0; }
@@ -456,9 +496,7 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
 
 .toast {
   z-index: 2147483000;
-  left: 17px;
-  bottom: 52px;
-  max-width: min(620px, calc(100% - 34px));
+  max-width: 100%;
   display: flex;
   align-items: center;
   gap: 18px;
@@ -469,7 +507,6 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
   box-shadow: 0 10px 28px #0006;
   animation: toast-lifetime 5s cubic-bezier(.22, .72, .18, 1) forwards;
 }
-.head-viewport.has-target-map .toast { bottom: 118px; }
 .toast span { overflow: hidden; font-size: 10px; line-height: 1.4; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .toast b { color: var(--accent); font-size: 14px; }
 @keyframes toast-lifetime {

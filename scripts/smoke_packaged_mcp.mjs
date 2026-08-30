@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -104,7 +104,7 @@ try {
   const tools = await client.listTools();
   const expectedTools = [
     'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'plan_project',
-    'save_project', 'release_plan', 'inspect_project', 'open_project',
+    'save_project', 'release_plan', 'inspect_project', 'capture_project_screenshot', 'open_project',
   ];
   if (tools.tools.map((tool) => tool.name).join(',') !== expectedTools.join(',')) {
     throw new Error(`Unexpected packaged MCP tools: ${tools.tools.map((tool) => tool.name).join(', ')}`);
@@ -147,6 +147,29 @@ try {
   if (inspection.formatVersion !== 3 || inspection.functionalTarget?.target?.id !== target.id) {
     throw new Error('Packaged project inspection did not preserve the v2 target.');
   }
+  process.stderr.write('packaged smoke: capture transparent project screenshot\n');
+  const screenshot = structured(await client.callTool({
+    name: 'capture_project_screenshot',
+    arguments: {
+      projectPath: saved.path,
+      width: 320,
+      height: 256,
+      dpr: 1,
+      camera: { kind: 'preset', preset: 'front' },
+      layers: { surfaceOverlay: 'project', grid: true },
+    },
+  }, { timeout: 120_000 }));
+  const screenshotPng = await readFile(screenshot.path);
+  const screenshotView = new DataView(screenshotPng.buffer, screenshotPng.byteOffset, screenshotPng.byteLength);
+  if (screenshotView.getUint32(16) !== 320 || screenshotView.getUint32(20) !== 256
+    || screenshotPng[25] !== 6
+    || path.basename(path.dirname(screenshot.path)) !== 'CortexLume_Screenshots'
+    || screenshot.camera?.preset !== 'front'
+    || screenshot.layers?.groundGrid !== false
+    || screenshot.backgroundIncluded !== false
+    || screenshot.encoding !== 'rgba8-lossless-png') {
+    throw new Error(`Packaged screenshot validation failed: ${JSON.stringify(screenshot)}`);
+  }
   process.stderr.write('packaged smoke: launch project\n');
   await client.close();
   await runGui(saved.path);
@@ -159,6 +182,7 @@ try {
     formatVersion: inspection.formatVersion,
     stdoutProtocolOnly: 'passed',
     guiProjectLaunch: 'passed',
+    screenshotCapture: 'passed',
   }, null, 2)}\n`);
 } catch (error) {
   await client.close().catch(() => {});

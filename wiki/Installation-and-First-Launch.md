@@ -33,4 +33,4 @@ Open a `.cortexlume` file with **Info Panel → Workflow → Project → Open**.
 
 The release also provides `CortexLume-<version>-win-x64-portable.zip`. Extract the entire archive before starting `CortexLume.exe`; do not run it from inside the ZIP. The portable build does not provide the installed-app entry or installer-managed shortcuts.
 
-Next: [Design and 3D Alignment](Design-and-3D-Alignment.md).
+Next: [Design and 3D Alignment](Design-and-3D-Alignment).

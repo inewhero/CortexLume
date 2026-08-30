@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useProjectStore } from '../renderer/store/projectStore';
 import { materializeProjectionSnapshot } from '../renderer/lib/projectionSnapshot';
-import { buildBidsGeometryExport, buildBrainNetExport, buildCsvExport } from './projectExport';
+import {
+  buildBidsGeometryExport,
+  buildBidsGeometryExportAsync,
+  buildBrainNetExport,
+  buildCsvExport,
+} from './projectExport';
 import { clearSurfaceProjectors } from '../renderer/lib/geometry';
 import { registerVerifiedTestSurfaceProjectors } from '../renderer/lib/testSurfaceProjectors';
 
@@ -67,6 +72,7 @@ describe('project data exports', () => {
     state.updatePairChannelNumber(first.id, second.channelNumber!);
     useProjectStore.getState().placeLayout(layout.id);
     const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+    project.deviceProfile.samplingFrequencyHz = 36;
 
     const bids = buildBidsGeometryExport(project);
     const tableText = bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']!;
@@ -178,6 +184,79 @@ describe('project data exports', () => {
     expect(sidecar.NIRSChannelCount).toBe(88);
   });
 
+  it('keeps BIDS 1.11.1 required fields and custom-column metadata aligned', async () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+    project.deviceProfile.samplingFrequencyHz = 36;
+
+    const syncBids = buildBidsGeometryExport(project);
+    const asyncBids = await buildBidsGeometryExportAsync(project);
+    const normalizeExportedAt = (bids: typeof syncBids) => {
+      const technicalPath = 'sourcedata/cortexlume_export.json';
+      const technical = JSON.parse(bids.files[technicalPath]!);
+      return {
+        ...bids,
+        files: {
+          ...bids.files,
+          [technicalPath]: JSON.stringify({ ...technical, exportedAt: '<normalized>' }),
+        },
+      };
+    };
+    expect(normalizeExportedAt(asyncBids)).toEqual(normalizeExportedAt(syncBids));
+
+    for (const bids of [syncBids, asyncBids]) {
+      expect(JSON.parse(bids.files['dataset_description.json']!)).toMatchObject({
+        BIDSVersion: '1.11.1',
+        DatasetType: 'raw',
+      });
+
+      const optodesTsv = bids.files['sub-01/nirs/sub-01_optodes.tsv']!;
+      const optodesJson = JSON.parse(bids.files['sub-01/nirs/sub-01_optodes.json']!);
+      const optodeColumns = optodesTsv.split(/\r?\n/, 1)[0]!.split('\t');
+      expect(optodeColumns.slice(0, 5)).toEqual(['name', 'type', 'x', 'y', 'z']);
+      expect(Object.keys(optodesJson).sort()).toEqual(optodeColumns.slice(5).sort());
+
+      const channelsTsv = bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']!;
+      const channelsJson = JSON.parse(bids.files['sub-01/nirs/sub-01_task-layout_channels.json']!);
+      const channelColumns = channelsTsv.split(/\r?\n/, 1)[0]!.split('\t');
+      expect(channelColumns.slice(0, 6)).toEqual([
+        'name', 'type', 'source', 'detector', 'wavelength_nominal', 'units',
+      ]);
+      const standardOptionalColumns = new Set(['short_channel', 'status', 'status_description']);
+      const customChannelColumns = channelColumns.slice(6)
+        .filter((column) => !standardOptionalColumns.has(column));
+      expect(Object.keys(channelsJson)).toEqual(expect.arrayContaining(customChannelColumns));
+
+      const nirsJson = JSON.parse(bids.files['sub-01/nirs/sub-01_task-layout_nirs.json']!);
+      expect(nirsJson).toMatchObject({
+        TaskName: 'layout',
+        SamplingFrequency: 36,
+        NIRSChannelCount: channelsTsv.trim().split(/\r?\n/).length - 1,
+        NIRSSourceOptodeCount: expect.any(Number),
+        NIRSDetectorOptodeCount: expect.any(Number),
+      });
+      expect(nirsJson.NIRSSourceOptodeCount).toBeGreaterThan(0);
+      expect(nirsJson.NIRSDetectorOptodeCount).toBeGreaterThan(0);
+
+      expect(JSON.parse(bids.files['sub-01/nirs/sub-01_coordsystem.json']!)).toMatchObject({
+        NIRSCoordinateSystem: 'MNI152NLin6Asym',
+        NIRSCoordinateUnits: 'mm',
+      });
+    }
+  });
+
+  it('rejects a missing sampling frequency in both BIDS builders', async () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = materializeProjectionSnapshot(structuredClone(useProjectStore.getState().project));
+    expect(project.deviceProfile.samplingFrequencyHz).toBeNull();
+
+    expect(() => buildBidsGeometryExport(project)).toThrow(/finite positive sampling frequency/);
+    await expect(buildBidsGeometryExportAsync(project)).rejects
+      .toThrow(/finite positive sampling frequency/);
+  });
+
   it('keeps CSV concise and moves technical details into JSON', () => {
     useProjectStore.getState().newProject();
     const layoutId = useProjectStore.getState().activeLayoutId;
@@ -224,6 +303,7 @@ describe('project data exports', () => {
       status: expect.stringMatching(/pass|check|fail/),
     });
 
+    project.deviceProfile.samplingFrequencyHz = 36;
     const bids = buildBidsGeometryExport(project);
     const bidsChannel = dataRow(bids.files['sub-01/nirs/sub-01_task-layout_channels.tsv']!, '\t');
     expect(bidsChannel.type).toBe('NIRSCWAMPLITUDE');
@@ -286,13 +366,18 @@ describe('project data exports', () => {
     expect(script).not.toContain('ventral');
     expect(script).toContain('for index = 1:9');
     expect(script).toContain("delete(findall(H, 'Type', 'ColorBar'));");
-    expect(script).toContain("imwrite(mosaic, fullfile(root, 'cortexlume_brainnet_10_mosaic.png'));");
+    expect(script).toContain("imageRoot = fullfile(root, 'CortexLume_brainnet');");
+    expect(script).toContain("if exist(imageRoot, 'dir') ~= 7");
+    expect(script).toContain("viewPaths{index} = fullfile(imageRoot, ['cortexlume_brainnet_' viewNames{index} '.png']);");
+    expect(script).toContain("imwrite(mosaic, fullfile(imageRoot, 'cortexlume_brainnet_10_mosaic.png'));");
+    expect(script).not.toContain("fullfile(root, ['cortexlume_brainnet_' viewNames{index} '.png'])");
     expect(script).toContain('mosaic = [viewImages{1} viewImages{5} viewImages{2}; viewImages{6} viewImages{9} viewImages{7}; viewImages{3} viewImages{8} viewImages{4}];');
     expect(script).not.toContain('edgePath');
     expect(script).not.toContain('readtable');
     expect(bundle.files['README_BRAINNET.txt']).toContain('No edge file is generated');
     expect(bundle.files['README_BRAINNET.txt']).toContain('hidden by default');
     expect(bundle.files['README_BRAINNET.txt']).toContain('eight fNIRS-relevant PNG views');
+    expect(bundle.files['README_BRAINNET.txt']).toContain('inside CortexLume_brainnet/');
     expect(bundle.files['README_BRAINNET.txt']).toContain('coordinates unchanged');
     expect(bundle.files['README_BRAINNET.txt']).toContain('without colorbars or a ventral view');
   });
@@ -334,6 +419,7 @@ describe('project data exports', () => {
       acquisitionLabel: 'labnirs',
       runIndex: 2,
     };
+    rawProject.deviceProfile.samplingFrequencyHz = 36;
     const bids = buildBidsGeometryExport(materializeProjectionSnapshot(rawProject));
     const prefix = 'sub-007/ses-baseline/nirs';
     expect(bids.files[`${prefix}/sub-007_ses-baseline_acq-labnirs_optodes.tsv`]).toBeDefined();
@@ -357,6 +443,7 @@ describe('project data exports', () => {
     const detector = project.verifiedResults.find((item) => item.instanceId === instance.id && item.subjectId === pair.detectorId)!;
     detector.scalpRasMm = source.scalpRasMm;
     detector.corticalRasMm = source.corticalRasMm;
+    project.deviceProfile.samplingFrequencyHz = 36;
 
     const csv = buildCsvExport(project);
     expect(csv.files['cortexlume_optodes.csv']).toContain("'=HYPERLINK");

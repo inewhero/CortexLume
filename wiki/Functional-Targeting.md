@@ -34,4 +34,4 @@ Anatomical Coverage and the Functional Map are mutually exclusive display modes.
 
 For a ready-made input, use the optional example dataset's `05-nifti-functional-target` case.
 
-Next: [Digitizer and Five-Point Calibration](Digitizer-and-Five-Point-Calibration.md).
+Next: [Digitizer and Five-Point Calibration](Digitizer-and-Five-Point-Calibration).
