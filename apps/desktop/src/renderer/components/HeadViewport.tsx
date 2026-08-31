@@ -56,7 +56,7 @@ export function ProjectOperationBubble({ progress, onCancel }: {
   const percentage = Math.max(0, Math.min(100, (completed / progress.total) * 100));
   const operationLabel = progress.operation === 'annotation' ? 'PREPARING SCIENTIFIC EXPORT' : 'EXPORTING PROJECT';
   return (
-    <div className="viewport-overlay project-operation-bubble" role="status" aria-live="polite">
+    <div className="project-operation-bubble" role="status" aria-live="polite">
       <div className="project-operation-copy">
         <strong>{operationLabel}</strong>
         <span>{progress.phase.replaceAll('-', ' ').toUpperCase()} · {completed}/{progress.total}</span>
@@ -64,6 +64,35 @@ export function ProjectOperationBubble({ progress, onCancel }: {
       </div>
       <button type="button" onClick={onCancel}>CANCEL</button>
     </div>
+  );
+}
+
+export function MessageToast({ message }: { message: string }) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  useEffect(() => setCopyState('idle'), [message]);
+
+  const copyMessage = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable');
+      await navigator.clipboard.writeText(message);
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="toast"
+      onClick={() => void copyMessage()}
+      title="Click to copy this message"
+      aria-label={`Copy message: ${message}`}
+    >
+      <span>{message}</span>
+      <b aria-hidden="true">{copyState === 'copied' ? 'COPIED' : copyState === 'failed' ? 'FAILED' : 'COPY'}</b>
+    </button>
   );
 }
 
@@ -1277,19 +1306,8 @@ export function HeadViewport() {
         </div>
       )}
 
-      {projectOperation && (
-        <ProjectOperationBubble
-          progress={projectOperation}
-          onCancel={() => { void window.cortexlume.operations.cancel(projectOperation.operationId); }}
-        />
-      )}
-
       <div className="viewport-overlay bottom-left-stack">
-        {toast && (
-          <button key={toast} className="toast" onClick={() => setToast(null)}>
-            <span>{toast}</span><b>×</b>
-          </button>
-        )}
+        {toast && <MessageToast key={toast} message={toast} />}
         {displayedFunctionalTarget && (
           <div className="target-map-legend">
             <strong>{displayedFunctionalTarget.target.label}</strong>
@@ -1316,6 +1334,12 @@ export function HeadViewport() {
               </div>
             ))}
           </div>
+        )}
+        {projectOperation && (
+          <ProjectOperationBubble
+            progress={projectOperation}
+            onCancel={() => { void window.cortexlume.operations.cancel(projectOperation.operationId); }}
+          />
         )}
         <div className="legend">
           <span><i className="source-dot" /> SOURCE</span><span><i className="detector-dot" /> DETECTOR</span>

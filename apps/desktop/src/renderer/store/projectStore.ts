@@ -16,10 +16,83 @@ import type {
   Vec2,
   Vec3,
 } from '@cortexlume/contracts';
+import {
+  BUILTIN_PATCH_PRESETS,
+  instantiateBuiltinPatchLayout,
+  type BuiltinPatchPresetId,
+} from '@cortexlume/core';
 import type { BidsField } from '../lib/bidsValidation';
 
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
+
+export type PatchLibraryEntry =
+  | {
+    source: 'builtin-rule';
+    presetId: BuiltinPatchPresetId;
+    group: null;
+    version: number;
+    layout: LayoutDefinition;
+  }
+  | {
+    source: 'project';
+    presetId: null;
+    group: null;
+    version: number;
+    layout: LayoutDefinition;
+  };
+
+const builtinRuleEntries: PatchLibraryEntry[] = BUILTIN_PATCH_PRESETS.map((preset) => ({
+  source: 'builtin-rule',
+  presetId: preset.id,
+  group: null,
+  version: preset.version,
+  layout: preset.layout,
+}));
+
+const projectEntry = (layout: LayoutDefinition): PatchLibraryEntry => ({
+  source: 'project', presetId: null, group: null, version: layout.version, layout,
+});
+
+function withBuiltinPatchOverlay(projectLibrary: LayoutDefinition[]): PatchLibraryEntry[] {
+  // Built-ins and project layouts intentionally occupy separate identities. A
+  // legacy project is allowed to contain the same layout UUID as a built-in.
+  return [...builtinRuleEntries, ...projectLibrary.map(projectEntry)];
+}
+
+export function patchLibraryEntryKey(entry: PatchLibraryEntry): string {
+  if (entry.source === 'project') return `project:${entry.layout.id}`;
+  return `${entry.source}:${entry.group ?? 'ungrouped'}:${entry.presetId}:v${entry.version}`;
+}
+
+function resolveLibraryEntry(entries: PatchLibraryEntry[], keyOrProjectLayoutId: string): PatchLibraryEntry | undefined {
+  return entries.find((entry) => patchLibraryEntryKey(entry) === keyOrProjectLayoutId)
+    ?? entries.find((entry) => entry.source === 'project' && entry.layout.id === keyOrProjectLayoutId);
+}
+
+function cloneLayoutGraph(source: LayoutDefinition, name: string): LayoutDefinition {
+  const timestamp = now();
+  const optodeIdBySourceId = new Map<string, string>();
+  const optodes = source.optodes.map((optode) => {
+    const optodeId = id();
+    optodeIdBySourceId.set(optode.id, optodeId);
+    return { ...structuredClone(optode), id: optodeId };
+  });
+  return {
+    ...structuredClone(source),
+    id: id(),
+    name,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    optodes,
+    pairs: source.pairs.map((pair) => ({
+      ...structuredClone(pair),
+      id: id(),
+      sourceId: optodeIdBySourceId.get(pair.sourceId)!,
+      detectorId: optodeIdBySourceId.get(pair.detectorId)!,
+    })),
+  };
+}
 
 function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -160,7 +233,7 @@ interface ProjectStore {
   projectPath: string | null;
   persistedProjectSnapshot: string;
   activeLayoutId: string;
-  library: LayoutDefinition[];
+  library: PatchLibraryEntry[];
   editorTool: EditorTool;
   selectedOptodeId: string | null;
   selectedInstanceId: string | null;
@@ -224,7 +297,9 @@ interface ProjectStore {
   undoLayout(): void;
   redoLayout(): void;
   saveLayoutToLibrary(): void;
-  placeLayout(layoutId: string, anchorRasMm?: Vec3): string | null;
+  removeLibraryEntry(entryKey: string): void;
+  copyLayoutToEditor(entryKey: string): string | null;
+  placeLayout(entryKeyOrProjectLayoutId: string, anchorRasMm?: Vec3): string | null;
   selectInstance(instanceId: string | null, optodeId?: string | null): void;
   selectChannel(instanceId: string, pairId: string): void;
   setInstanceEditMode(mode: InstanceEditMode): void;
@@ -310,7 +385,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     projectPath: null,
     persistedProjectSnapshot: snapshot(initialProject),
     activeLayoutId: initialProject.layouts[0]!.id,
-    library: [structuredClone(initialProject.layouts[0]!)],
+    library: withBuiltinPatchOverlay([structuredClone(initialProject.layouts[0]!)]),
     editorTool: 'select',
     selectedOptodeId: null,
     selectedInstanceId: null,
@@ -480,7 +555,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
           ],
           verifiedResults: state.project.verifiedResults.filter((result) => !result.instanceId || !affected.has(result.instanceId)),
         },
-        library: [...state.library, ...clones.map((clone) => structuredClone(clone.layout))],
+        library: [...state.library, ...clones.map((clone) => projectEntry(structuredClone(clone.layout)))],
         selectedInstanceId: clones[0]?.instance.id ?? state.selectedInstanceId,
         activeDigitizerSessionId: session.id,
         digitizerPreview: null,
@@ -515,7 +590,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
           layouts: [...state.project.layouts, ...clones.map((clone) => clone.layout)],
           instances: [...state.project.instances.map((instance) => affected.has(instance.id) ? { ...instance, visible: false } : instance), ...clones.map((clone) => clone.instance)],
         },
-        library: [...state.library, ...clones.map((clone) => structuredClone(clone.layout))],
+        library: [...state.library, ...clones.map((clone) => projectEntry(structuredClone(clone.layout)))],
         selectedInstanceId: clones[0]?.instance.id ?? state.selectedInstanceId,
         activeDigitizerSessionId: session.id,
         projectRevision: state.projectRevision + 1,
@@ -537,7 +612,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         instances: state.project.instances.filter((instance) => !derivedIds.has(instance.id)).map((instance) => originalIds.has(instance.id) ? { ...instance, visible: true } : { ...instance, digitizerPositions: (instance.digitizerPositions ?? []).filter((position) => !pointIds.has(position.digitizerPointId)) }),
         verifiedResults: state.project.verifiedResults.filter((result) => !result.instanceId || !derivedIds.has(result.instanceId)),
       },
-      library: state.library.filter((layout) => !derivedLayoutIds.has(layout.id)),
+      library: state.library.filter((entry) => entry.source !== 'project'
+        || !derivedLayoutIds.has(entry.layout.id)),
       activeDigitizerSessionId: state.activeDigitizerSessionId === sessionId
         ? state.project.digitizerSessions.find((session) => session.id !== sessionId)?.id ?? null
         : state.activeDigitizerSessionId,
@@ -559,7 +635,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         projectPath: null,
         persistedProjectSnapshot: snapshot(project),
         activeLayoutId: project.layouts[0]!.id,
-        library: [structuredClone(project.layouts[0]!)],
+        library: withBuiltinPatchOverlay([structuredClone(project.layouts[0]!)]),
         selectedOptodeId: null,
         selectedInstanceId: null,
         selectedHeadOptodeId: null,
@@ -594,13 +670,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         instance.digitizerSessionId ? [instance.definitionId] : []));
       const reusableLayouts = hydrated.layouts.filter((layout) =>
         !referencedLayoutIds.has(layout.id) || calibratedLayoutIds.has(layout.id));
-      const library = (reusableLayouts.length > 0 ? reusableLayouts : hydrated.layouts)
+      const projectLibrary = (reusableLayouts.length > 0 ? reusableLayouts : hydrated.layouts)
         .map((layout) => structuredClone(layout));
       return {
         project: hydrated,
         persistedProjectSnapshot: snapshot(hydrated),
-        activeLayoutId: library[0]?.id ?? hydrated.layouts[0]?.id ?? '',
-        library,
+        activeLayoutId: projectLibrary[0]?.id ?? hydrated.layouts[0]?.id ?? '',
+        library: withBuiltinPatchOverlay(projectLibrary),
         selectedOptodeId: null,
         selectedInstanceId: hydrated.instances[0]?.id ?? null,
         selectedHeadOptodeId: null,
@@ -661,9 +737,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
             updatedAt: now(),
             layouts: state.project.layouts.map((layout) => layout.id === current.id ? renamed : layout),
           },
-          library: state.library.map((layout) => layout.id === current.id
-            ? structuredClone(renamed)
-            : layout),
+          library: state.library.map((entry) => entry.source === 'project' && entry.layout.id === current.id
+            ? projectEntry(structuredClone(renamed))
+            : entry),
           pastLayouts: [...state.pastLayouts.slice(-49), current],
           futureLayouts: [],
           projectRevision: state.projectRevision + 1,
@@ -684,7 +760,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       const optodeId = id();
       mutateActiveLayout((value) => ({
         ...value,
-        optodes: [...value.optodes, { id: optodeId, label: `${type === 'source' ? 'S' : 'D'}${count}`, type, uvMm }],
+        optodes: [...value.optodes, {
+          id: optodeId, label: `${type === 'source' ? 'S' : 'D'}${count}`, type, uvMm,
+        }],
       }));
       set({ selectedOptodeId: optodeId, editorTool: 'select' });
     },
@@ -848,22 +926,65 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       if (!layout) return;
       const snapshot = structuredClone({ ...layout, updatedAt: now() });
       set((value) => ({
-        library: [...value.library.filter((item) => item.id !== snapshot.id), snapshot],
+        library: [
+          ...value.library.filter((entry) => entry.source !== 'project' || entry.layout.id !== snapshot.id),
+          projectEntry(snapshot),
+        ],
         toast: `Saved “${snapshot.name}” to the layout library.`,
       }));
     },
-    placeLayout: (layoutId, anchorRasMm = [-55, -8, 70]) => {
+    removeLibraryEntry: (entryKey) => set((state) => {
+      const entry = resolveLibraryEntry(state.library, entryKey);
+      if (!entry) return state;
+      const resolvedKey = patchLibraryEntryKey(entry);
+      return {
+        library: state.library.filter((candidate) => patchLibraryEntryKey(candidate) !== resolvedKey),
+        toast: `Removed “${entry.layout.name}” from this library view.`,
+      };
+    }),
+    copyLayoutToEditor: (entryKey) => {
       const state = get();
-      const source = state.library.find((layout) => layout.id === layoutId)
-        ?? state.project.layouts.find((layout) => layout.id === layoutId);
+      const entry = resolveLibraryEntry(state.library, entryKey);
+      if (!entry) return null;
+      const source = entry.layout;
+      const timestamp = now();
+      const copy = entry.source === 'builtin-rule'
+        ? instantiateBuiltinPatchLayout(
+          entry.presetId,
+          `cortexlume:project-layout:${id()}`,
+          timestamp,
+          { name: source.name },
+        )
+        : cloneLayoutGraph(source, `${source.name} copy`);
+      set((value) => ({
+        project: {
+          ...value.project,
+          updatedAt: timestamp,
+          layouts: [...value.project.layouts, copy],
+        },
+        activeLayoutId: copy.id,
+        library: [...value.library, projectEntry(structuredClone(copy))],
+        selectedOptodeId: null,
+        editorTool: 'select',
+        pastLayouts: [],
+        futureLayouts: [],
+        projectRevision: value.projectRevision + 1,
+        toast: `Copied “${source.name}” to the layout editor.`,
+      }));
+      return copy.id;
+    },
+    placeLayout: (entryKeyOrProjectLayoutId, anchorRasMm = [-55, -8, 70]) => {
+      const state = get();
+      const entry = resolveLibraryEntry(state.library, entryKeyOrProjectLayoutId);
+      const source = entry?.layout ?? state.project.layouts.find((layout) => layout.id === entryKeyOrProjectLayoutId);
       if (!source) return null;
       const instanceId = id();
-      const instanceLayout = structuredClone({
-        ...source,
-        id: id(),
-        name: `${source.name} P${String(state.project.instances.length + 1).padStart(2, '0')}`,
-        updatedAt: now(),
-      });
+      const timestamp = now();
+      const placedName = `${source.name} P${String(state.project.instances.length + 1).padStart(2, '0')}`;
+      const namespace = `cortexlume:project-instance-layout:${id()}`;
+      const instanceLayout = entry?.source === 'builtin-rule'
+        ? instantiateBuiltinPatchLayout(entry.presetId, namespace, timestamp, { name: placedName })
+        : structuredClone({ ...source, id: id(), name: placedName, updatedAt: timestamp });
       const instance: LayoutInstance = {
         id: instanceId,
         definitionId: instanceLayout.id,

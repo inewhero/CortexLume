@@ -30,13 +30,19 @@ describe('3D screenshot action layout', () => {
     expect(viteConfig).toContain("type: 'full-reload'");
   });
 
-  it('stacks screenshot feedback above the anatomical coverage legend', () => {
+  it('stacks viewport feedback and operation progress above the base legend', () => {
     const source = readFileSync(fileURLToPath(new URL('./HeadViewport.tsx', import.meta.url)), 'utf8');
     const css = readFileSync(fileURLToPath(new URL('../styles.css', import.meta.url)), 'utf8');
     expect(source).toContain('className="viewport-overlay bottom-left-stack"');
+    expect(source.indexOf('{projectOperation && (')).toBeGreaterThan(source.indexOf('className="viewport-overlay bottom-left-stack"'));
+    expect(source.indexOf('{projectOperation && (')).toBeLessThan(source.indexOf('<div className="legend">'));
     expect(source.indexOf('className="toast"')).toBeLessThan(source.indexOf('className="coverage-map-legend"'));
     expect(source.indexOf('className="coverage-map-legend"')).toBeLessThan(source.indexOf('className="legend"'));
     expect(css).toContain('.bottom-left-stack');
+    expect(css).toContain('position: static;');
+    expect(css).toContain('align-self: flex-start;');
+    expect(css).toContain('width: min(430px, 100%);');
+    expect(css).toContain('transform: none;');
     expect(css).toContain('flex-direction: column');
   });
 });

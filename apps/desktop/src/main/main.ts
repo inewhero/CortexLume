@@ -820,7 +820,23 @@ function registerIpc(): void {
         'CortexLume_AtlasViewer_Export',
       );
       const files = await writeExportBundle(directory, bundle, runOptions);
-      return { directory, files, warnings: bundle.warnings };
+      checkProjectOperation(operation);
+      const bridgePath = path.join(directory, 'cortexlume_open_atlasviewer.m');
+      const openError = await shell.openPath(bridgePath);
+      const atlasViewer = openError
+        ? {
+            scriptOpened: false,
+            detail: `Open ${bridgePath} manually in MATLAB. ${openError}`.trim().slice(-500),
+          }
+        : {
+            scriptOpened: true,
+            detail: 'The AtlasViewer MATLAB bridge was opened for manual review and execution.',
+          };
+      const warnings = [
+        ...bundle.warnings,
+        ...(atlasViewer.scriptOpened ? [] : [atlasViewer.detail]),
+      ];
+      return { directory, files, warnings, atlasViewer };
     }), { maxPayloadBytes: IPC_DEFAULT_MAX_PAYLOAD_BYTES });
   trustedHandle('science:health', z.tuple([]), async () => {
     try {

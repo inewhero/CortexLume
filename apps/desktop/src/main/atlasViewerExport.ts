@@ -44,6 +44,24 @@ interface AtlasViewerGeometry {
 
 const ATLAS_VIEWER_SD_FILE = 'cortexlume_atlasviewer.SD';
 
+function atlasViewerMatlabScript(): string {
+  return `${[
+    '% CortexLume AtlasViewer bridge',
+    '%',
+    '% Open this file in MATLAB; CortexLume does not execute it automatically.',
+    "% First run AtlasViewer's setpaths.m in a compatible MATLAB session, then run this script.",
+    "root = fileparts(mfilename('fullpath'));",
+    `sdPath = fullfile(root, '${ATLAS_VIEWER_SD_FILE}');`,
+    "assert(isfile(sdPath), 'CortexLume:AtlasViewerSdMissing', 'CortexLume AtlasViewer SD file was not found: %s', sdPath);",
+    "atlasViewerEntry = which('AtlasViewerGUI');",
+    "assert(~isempty(atlasViewerEntry), 'CortexLume:AtlasViewerNotFound', 'AtlasViewerGUI is not on the MATLAB path. Run AtlasViewer setpaths.m, then run this bridge again.');",
+    "probeLoader = which('getProbe');",
+    "assert(~isempty(probeLoader), 'CortexLume:AtlasViewerProbeLoaderNotFound', 'AtlasViewer probe modules are not on the MATLAB path. Run AtlasViewer setpaths.m, then run this bridge again.');",
+    '% AtlasViewerGUI loads the sole .SD file in its subject directory through getProbe().',
+    'AtlasViewerGUI(root);',
+  ].join('\r\n')}\r\n`;
+}
+
 /** Let Electron service operations:cancel between bounded geometry steps. */
 function yieldExportTurn(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
@@ -199,7 +217,9 @@ function atlasViewerReadme(hasLandmarks: boolean): string {
   return `${[
     'CortexLume AtlasViewer SD export',
     '',
-    `Load ${ATLAS_VIEWER_SD_FILE} with AtlasViewer's probe import workflow.`,
+    'CortexLume opens cortexlume_open_atlasviewer.m after export but never executes AtlasViewer automatically.',
+    "In an AtlasViewer-compatible MATLAB session, run AtlasViewer's setpaths.m and then run the bridge script.",
+    `Alternatively, load ${ATLAS_VIEWER_SD_FILE} with AtlasViewer's probe import workflow.`,
     'The file is an uncompressed little-endian MATLAB Level-5 file containing one variable named SD.',
     'SrcPos3D and DetPos3D are verified CortexLume scalp optode sphere-centre coordinates in MNI152NLin6Asym RAS+ millimetres.',
     'SrcPos and DetPos intentionally mirror those same Nx3 coordinates because AtlasViewer requires the base fields for optode counts; they are not a separate 2D projection.',
@@ -315,6 +335,7 @@ function finishBundle(
   return {
     files: {
       [ATLAS_VIEWER_SD_FILE]: sdBytes,
+      'cortexlume_open_atlasviewer.m': atlasViewerMatlabScript(),
       'cortexlume_atlasviewer.json': `${JSON.stringify(sidecar, null, 2)}\n`,
       'README_ATLASVIEWER.txt': atlasViewerReadme(geometry.landmarks != null),
     },

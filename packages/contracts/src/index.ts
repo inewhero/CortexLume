@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import sharedCrossProcessLimits from '../../../config/cross-process-limits.json';
+import sharedCrossProcessLimits from './data/cross-process-limits.json';
 
 const FiniteNumberSchema = z.number().finite();
 const BoundedNameSchema = z.string().min(1).max(256);
@@ -1147,6 +1147,10 @@ export interface DesktopApi {
       directory: string;
       files: string[];
       warnings: string[];
+      atlasViewer: {
+        scriptOpened: boolean;
+        detail: string;
+      };
     } | null>;
   };
   science: {

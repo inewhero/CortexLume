@@ -23,9 +23,13 @@ describe('Workflow export actions', () => {
     expect(bidsHandler).toContain('export.bidsGeometry(annotated, options)');
 
     const atlasViewerHandler = inspector.slice(atlasViewerStart, atlasViewerEnd);
+    expect(atlasViewerHandler).toContain('if (!hasExportableInstance)');
+    expect(atlasViewerHandler).toContain('AtlasViewer export requires a patch in 3D Align.');
     expect(atlasViewerHandler).toContain('materializeProjectionSnapshot(project)');
     expect(atlasViewerHandler).not.toContain('annotateProject');
     expect(atlasViewerHandler).toContain('export.atlasViewer(snapshot, options)');
+    expect(atlasViewerHandler).toContain('result.atlasViewer.scriptOpened');
+    expect(atlasViewerHandler).toContain('opened the AtlasViewer MATLAB bridge');
     expect(atlasViewerHandler).toContain("setProjectOperation({ operationId: options.operationId!, operation: 'export'");
     expect(atlasViewerHandler).toContain('setProjectOperation((current) =>');
   });

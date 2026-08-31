@@ -266,13 +266,22 @@ export function Inspector() {
   };
 
   const exportAtlasViewer = async () => {
+    const supersededInstanceIds = new Set(project.instances.flatMap((instance) =>
+      instance.derivedFromInstanceId ? [instance.derivedFromInstanceId] : []));
+    const hasExportableInstance = project.instances.some((instance) => !supersededInstanceIds.has(instance.id));
+    if (!hasExportableInstance) {
+      setToast('AtlasViewer export requires a patch in 3D Align. Load a patch to 3D before exporting.');
+      return;
+    }
     const options: ProjectOperationOptions = { operationId: crypto.randomUUID() };
     setProjectOperation({ operationId: options.operationId!, operation: 'export', phase: 'starting', completed: 0, total: 1 });
     try {
       const snapshot = materializeProjectionSnapshot(project);
       const result = await window.cortexlume.export.atlasViewer(snapshot, options);
       if (result) {
-        setToast(`Exported ${result.files.length} AtlasViewer files to ${result.directory}${result.warnings.length ? ` · ${result.warnings.length} warning(s)` : ''}.`);
+        setToast(result.atlasViewer.scriptOpened
+          ? `Exported ${result.files.length} files and opened the AtlasViewer MATLAB bridge. Review and run it in MATLAB.`
+          : `AtlasViewer files exported, but the MATLAB bridge could not be opened automatically: ${result.atlasViewer.detail}`);
       }
     } catch (error) {
       setToast(`AtlasViewer export error: ${error instanceof Error ? error.message : String(error)}`);

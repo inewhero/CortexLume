@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectionResult } from '@cortexlume/contracts';
+import { BUILTIN_PATCH_LAYOUTS, BUILTIN_PATCH_PRESETS } from '@cortexlume/core';
 import { getMissingBidsFields } from '../lib/bidsValidation';
-import { useProjectStore } from './projectStore';
+import { patchLibraryEntryKey, useProjectStore } from './projectStore';
 
 describe('default optode matrix', () => {
   it('tracks persisted dirty state from project content without revision bookkeeping', () => {
@@ -118,7 +119,7 @@ describe('default optode matrix', () => {
     const state = useProjectStore.getState();
     expect(state.project.layouts.find((layout) => layout.id === original.id)?.name)
       .toBe('Frontal language array');
-    expect(state.library.find((layout) => layout.id === original.id)?.name)
+    expect(state.library.find((entry) => entry.source === 'project' && entry.layout.id === original.id)?.layout.name)
       .toBe('Frontal language array');
   });
 
@@ -134,6 +135,96 @@ describe('default optode matrix', () => {
 
     useProjectStore.getState().loadProject(structuredClone(useProjectStore.getState().project));
     expect(useProjectStore.getState().project.layouts).toHaveLength(expectedLayouts);
+  });
+
+  it('overlays five built-in presets without persisting them or changing dirty state', () => {
+    useProjectStore.getState().newProject();
+    const state = useProjectStore.getState();
+    const projectLayoutIds = new Set(state.project.layouts.map((layout) => layout.id));
+
+    expect(BUILTIN_PATCH_LAYOUTS).toHaveLength(5);
+    expect(state.library.slice(0, 5).map((entry) => entry.layout.id))
+      .toEqual(BUILTIN_PATCH_LAYOUTS.map((layout) => layout.id));
+    expect(BUILTIN_PATCH_LAYOUTS.every((layout) => !projectLayoutIds.has(layout.id))).toBe(true);
+    expect(projectLayoutIds.has(state.activeLayoutId)).toBe(true);
+    expect(state.isProjectDirty()).toBe(false);
+  });
+
+  it('keeps a legacy project layout when its UUID collides with a built-in layout UUID', () => {
+    useProjectStore.getState().newProject();
+    const colliding = structuredClone(useProjectStore.getState().project);
+    colliding.layouts[0]!.id = BUILTIN_PATCH_LAYOUTS[0]!.id;
+    colliding.layouts[0]!.name = 'Legacy project collision';
+
+    useProjectStore.getState().loadProject(colliding);
+
+    const state = useProjectStore.getState();
+    const matches = state.library.filter((entry) => entry.layout.id === BUILTIN_PATCH_LAYOUTS[0]!.id);
+    expect(matches).toHaveLength(2);
+    expect(matches.map((entry) => entry.source)).toEqual(['builtin-rule', 'project']);
+    expect(state.project.layouts[0]!.name).toBe('Legacy project collision');
+    expect(state.activeLayoutId).toBe(colliding.layouts[0]!.id);
+    expect(state.isProjectDirty()).toBe(false);
+
+    const builtin = matches.find((entry) => entry.source === 'builtin-rule')!;
+    state.copyLayoutToEditor(patchLibraryEntryKey(builtin));
+    expect(useProjectStore.getState().project.layouts.some((layout) => layout.name === '1S4D cross 30 mm'))
+      .toBe(true);
+    expect(useProjectStore.getState().project.layouts.some((layout) => layout.name === 'Legacy project collision'))
+      .toBe(true);
+  });
+
+  it('loads an older project without injecting built-ins into its graph or marking it dirty', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const archived = structuredClone(useProjectStore.getState().project);
+    const archivedGraph = JSON.stringify(archived);
+
+    useProjectStore.getState().loadProject(archived);
+
+    const state = useProjectStore.getState();
+    expect(JSON.stringify(state.project)).toBe(archivedGraph);
+    expect(state.isProjectDirty()).toBe(false);
+    expect(state.project.layouts.some((layout) => BUILTIN_PATCH_LAYOUTS
+      .some((builtin) => builtin.id === layout.id))).toBe(false);
+    expect(state.project.layouts.some((layout) => layout.id === state.activeLayoutId)).toBe(true);
+  });
+
+  it('copies a built-in into an editable project layout without mutating the preset', () => {
+    useProjectStore.getState().newProject();
+    const preset = BUILTIN_PATCH_PRESETS[2]!;
+    const frozenGraph = JSON.stringify(preset.layout);
+    const entry = useProjectStore.getState().library.find((candidate) => candidate.source === 'builtin-rule'
+      && candidate.presetId === preset.id)!;
+    const copyId = useProjectStore.getState().copyLayoutToEditor(patchLibraryEntryKey(entry))!;
+
+    expect(copyId).not.toBe(preset.layout.id);
+    expect(useProjectStore.getState().activeLayoutId).toBe(copyId);
+    expect(useProjectStore.getState().project.layouts.some((layout) => layout.id === copyId)).toBe(true);
+
+    useProjectStore.getState().renameActiveLayout('Editable motor patch');
+    const copiedOptode = useProjectStore.getState().project.layouts
+      .find((layout) => layout.id === copyId)!.optodes[0]!;
+    useProjectStore.getState().moveOptode(copiedOptode.id, [7, 11]);
+
+    expect(useProjectStore.getState().project.layouts.find((layout) => layout.id === copyId))
+      .toMatchObject({ name: 'Editable motor patch' });
+    expect(JSON.stringify(preset.layout)).toBe(frozenGraph);
+    expect(Object.isFrozen(preset.layout)).toBe(true);
+    expect(useProjectStore.getState().isProjectDirty()).toBe(true);
+  });
+
+  it('keeps the 3x5 preset mapped as three rows by five columns', () => {
+    const preset = BUILTIN_PATCH_PRESETS.find((candidate) => candidate.id === 'grid-3x5-30mm')!;
+    const xs = new Set(preset.layout.optodes.map((optode) => optode.uvMm[0]));
+    const ys = new Set(preset.layout.optodes.map((optode) => optode.uvMm[1]));
+
+    expect(preset).toMatchObject({ rows: 3, columns: 5, pitchMm: 30 });
+    expect(xs.size).toBe(5);
+    expect(ys.size).toBe(3);
+    expect(preset.layout).toMatchObject({ optodes: expect.any(Array), pairs: expect.any(Array) });
+    expect(preset.layout.optodes).toHaveLength(15);
+    expect(preset.layout.pairs).toHaveLength(22);
   });
 
   it('uses an ASCII-safe name for placed patch layouts', () => {
@@ -187,7 +278,8 @@ describe('default optode matrix', () => {
     const derived = mappedState.project.instances.find((candidate) => candidate.derivedFromInstanceId === instance.id)!;
     expect(mappedState.project.instances.find((candidate) => candidate.id === instance.id)?.visible).toBe(false);
     expect(derived.digitizerPositions[0]).toMatchObject({ optodeId: optode.id, scalpRasMm: [-50, 20, 80] });
-    expect(mappedState.library.find((candidate) => candidate.id === derived.definitionId)?.name).toBe(`${layout.name}D`);
+    expect(mappedState.library.find((entry) => entry.source === 'project'
+      && entry.layout.id === derived.definitionId)?.layout.name).toBe(`${layout.name}D`);
     useProjectStore.getState().commitPlacement({
       ...derived,
       // The science wire DTO does not carry these desktop-only fields.
@@ -223,7 +315,8 @@ describe('default optode matrix', () => {
     const derived = calibrated.project.instances.find((candidate) => candidate.derivedFromInstanceId === original.id)!;
     expect(calibrated.project.instances.find((candidate) => candidate.id === original.id)?.visible).toBe(false);
     expect(derived).toMatchObject({ visible: true, digitizerSessionId: sessionId, digitizerPositions: [] });
-    expect(calibrated.library.some((layout) => layout.id === derived.definitionId)).toBe(true);
+    expect(calibrated.library.some((entry) => entry.source === 'project'
+      && entry.layout.id === derived.definitionId)).toBe(true);
   });
 
   it('invalidates only the edited instance when resetting a local offset', () => {

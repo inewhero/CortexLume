@@ -5,8 +5,15 @@ import path from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AnatomicalCoverageRequest, FunctionalTargetMap } from '@cortexlume/contracts';
+import type {
+  AnatomicalCoverageRequest,
+  CortexLumeProject,
+  FunctionalTargetMap,
+  ProjectionResult,
+  Vec3,
+} from '@cortexlume/contracts';
 import type { PlannerCandidate } from '@cortexlume/core/node';
+import { createProjectArchive, readProjectArchiveDetailed } from '@cortexlume/project-io';
 import type { ScienceClient } from '@cortexlume/science-client';
 import {
   BoundedTtlCache,
@@ -79,6 +86,57 @@ function transparentPng(width: number, height: number): Buffer {
     pngChunk('IDAT', deflateSync(scanlines)),
     pngChunk('IEND', Buffer.alloc(0)),
   ]);
+}
+
+async function writeVerifiedExportProject(destination: string): Promise<CortexLumeProject> {
+  const fixturePath = path.resolve(process.cwd(), '../../examples/cases/01-quick-start/quick-start.cortexlume');
+  const source = readProjectArchiveDetailed(await readFile(fixturePath)).project;
+  let coordinateIndex = 0;
+  const result = (
+    instanceId: string,
+    subjectKind: ProjectionResult['subjectKind'],
+    subjectId: string,
+    coordinate: Vec3,
+  ): ProjectionResult => ({
+    instanceId,
+    subjectKind,
+    subjectId,
+    scalpRasMm: coordinate,
+    displayRasMm: [coordinate[0], coordinate[1], coordinate[2] - 2],
+    corticalRasMm: [coordinate[0], coordinate[1], coordinate[2] - 15],
+    depthTargetRasMm: [coordinate[0], coordinate[1], coordinate[2] - 25],
+    underlyingCorticalRegions: [],
+    deepTargetStructures: [],
+    tissueAtTarget: null,
+    claimLevel: 'geometric',
+    status: 'verified',
+    qcFlags: ['surface_model_verified', 'atlas_lookup_pending'],
+  });
+  const verifiedResults = source.instances.flatMap((instance) => {
+    const layout = source.layouts.find((candidate) => candidate.id === instance.definitionId);
+    if (!layout) return [];
+    const optodeCoordinates = new Map(layout.optodes.map((optode) => {
+      coordinateIndex += 1;
+      return [optode.id, [optode.uvMm[0], optode.uvMm[1], 90 + coordinateIndex / 100] as Vec3];
+    }));
+    return [
+      ...layout.optodes.map((optode) => result(
+        instance.id, 'optode', optode.id, optodeCoordinates.get(optode.id)!,
+      )),
+      ...layout.pairs.map((pair) => {
+        const sourceCoordinate = optodeCoordinates.get(pair.sourceId)!;
+        const detectorCoordinate = optodeCoordinates.get(pair.detectorId)!;
+        return result(instance.id, 'pair', pair.id, [
+          (sourceCoordinate[0] + detectorCoordinate[0]) / 2,
+          (sourceCoordinate[1] + detectorCoordinate[1]) / 2,
+          (sourceCoordinate[2] + detectorCoordinate[2]) / 2,
+        ]);
+      }),
+    ];
+  });
+  const project = { ...source, verifiedResults };
+  await writeFile(destination, createProjectArchive(project, 'test'), { flag: 'wx' });
+  return project;
 }
 
 function fixtureCoverage(request: AnatomicalCoverageRequest) {
@@ -342,7 +400,7 @@ describe('CortexLume MCP runtime', () => {
   it('captures bounded transparent PNGs with deterministic metadata and unique authorized paths', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-screenshot-'));
     const projectPath = path.join(root, 'fixture.cortexlume');
-    await copyFile(path.resolve(process.cwd(), '../../Mentalizing-5x3.cortexlume'), projectPath);
+    await copyFile(path.resolve(process.cwd(), '../../examples/cases/05-nifti-functional-target/nifti-visual-target.cortexlume'), projectPath);
     const captureProjectScreenshot = vi.fn(async (request) => {
       const physicalWidth = Math.round(request.logicalWidth * request.dpr);
       const physicalHeight = Math.round(request.logicalHeight * request.dpr);
@@ -408,6 +466,88 @@ describe('CortexLume MCP runtime', () => {
     expect(outside.isError).toBe(true);
     expect(JSON.stringify(outside.content)).toMatch(/outside MCP authorized roots/);
     expect(captureProjectScreenshot).toHaveBeenCalledTimes(2);
+  });
+
+  it('writes headless BrainNet and AtlasViewer bundles to unique authorized directories', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-exports-'));
+    const projectPath = path.join(root, 'fixture.cortexlume');
+    await writeVerifiedExportProject(projectPath);
+    const openGui = vi.fn();
+    const runtime = new CortexLumeMcpRuntime({
+      templateRoot: TEMPLATE_ROOT,
+      science: { stop: vi.fn(), request: vi.fn() } as unknown as ScienceClient,
+      applicationVersion: 'test',
+      authorizedRoots: [root],
+      openGui,
+    });
+    const server = runtime.createServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = new Client({ name: 'cortexlume-export-test', version: '1.0.0' });
+    clients.push(client);
+    await client.connect(clientTransport);
+
+    const listed = await client.listTools();
+    expect(listed.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+      'export_brainnet', 'export_atlasviewer',
+    ]));
+    for (const toolName of ['export_brainnet', 'export_atlasviewer']) {
+      const tool = listed.tools.find((item) => item.name === toolName)!;
+      expect(tool.inputSchema.required).toEqual(expect.arrayContaining(['projectPath', 'outputDirectory']));
+    }
+
+    const firstBrainNet = structured(await client.callTool({
+      name: 'export_brainnet',
+      arguments: { projectPath, outputDirectory: root, directoryName: 'Review Export' },
+    }));
+    const secondBrainNet = structured(await client.callTool({
+      name: 'export_brainnet',
+      arguments: { projectPath, outputDirectory: root, directoryName: 'Review Export' },
+    }));
+    const atlasViewer = structured(await client.callTool({
+      name: 'export_atlasviewer',
+      arguments: { projectPath, outputDirectory: root },
+    }));
+
+    expect(firstBrainNet).toMatchObject({ exportKind: 'brainnet', headless: true });
+    expect(firstBrainNet.directory).toBe(path.join(root, 'Review Export'));
+    expect(secondBrainNet.directory).toBe(path.join(root, 'Review Export-2'));
+    expect(atlasViewer).toMatchObject({ exportKind: 'atlasviewer', headless: true });
+    expect(atlasViewer.directory).toBe(path.join(root, 'CortexLume_AtlasViewer'));
+    const brainNetFiles = firstBrainNet.files as Array<{ name: string; path: string }>;
+    const atlasViewerFiles = atlasViewer.files as Array<{ name: string; path: string }>;
+    expect(brainNetFiles.map(({ name }) => name)).toContain('cortexlume_brainnet.node');
+    expect(atlasViewerFiles.map(({ name }) => name)).toContain('cortexlume_atlasviewer.SD');
+    expect(atlasViewerFiles.map(({ name }) => name)).toContain('cortexlume_open_atlasviewer.m');
+    for (const file of [...brainNetFiles, ...atlasViewerFiles]) {
+      expect(file.path.startsWith(root)).toBe(true);
+      expect(await readFile(file.path)).not.toHaveLength(0);
+    }
+    expect(openGui).not.toHaveBeenCalled();
+
+    const unverifiedProjectPath = path.join(root, 'unverified.cortexlume');
+    await copyFile(
+      path.resolve(process.cwd(), '../../examples/cases/01-quick-start/quick-start.cortexlume'),
+      unverifiedProjectPath,
+    );
+    const unverified = await client.callTool({
+      name: 'export_brainnet',
+      arguments: {
+        projectPath: unverifiedProjectPath,
+        outputDirectory: root,
+        directoryName: 'Rejected Export',
+      },
+    });
+    expect(unverified.isError).toBe(true);
+    expect(JSON.stringify(unverified.content)).toMatch(/missing or unverified/);
+    expect(existsSync(path.join(root, 'Rejected Export'))).toBe(false);
+
+    const outside = await client.callTool({
+      name: 'export_atlasviewer',
+      arguments: { projectPath, outputDirectory: path.dirname(root) },
+    });
+    expect(outside.isError).toBe(true);
+    expect(JSON.stringify(outside.content)).toContain('outside MCP authorized roots');
   });
 
   it('rejects over-limit patches before loading assets or running science', async () => {
@@ -529,8 +669,9 @@ describe('CortexLume MCP runtime', () => {
 
     const listed = await client.listTools();
     expect(listed.tools.map((tool) => tool.name)).toEqual([
-      'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'plan_project',
-      'save_project', 'release_plan', 'inspect_project', 'capture_project_screenshot', 'open_project',
+      'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'list_patch_library',
+      'plan_project', 'save_project', 'release_plan', 'inspect_project', 'export_brainnet', 'export_atlasviewer',
+      'capture_project_screenshot', 'open_project',
     ]);
     expect(listed.tools.find((tool) => tool.name === 'plan_project')?.inputSchema.required).toContain('target');
     expect((listed.tools.find((tool) => tool.name === 'save_project')?.inputSchema.properties as Record<string, { default?: unknown }>).consumePlan?.default).toBe(true);
@@ -538,6 +679,11 @@ describe('CortexLume MCP runtime', () => {
     const capabilities = structured(await client.callTool({ name: 'get_capabilities', arguments: {} }));
     expect(capabilities.projectFormatVersion).toBe(3);
     expect((capabilities.assets as { ready: boolean }).ready).toBe(true);
+    expect((capabilities.patchLibrary as { rulePresetIds: string[] }).rulePresetIds).toContain('grid-3x5-30mm');
+    expect(capabilities.exports).toMatchObject({
+      brainnet: { tool: 'export_brainnet', headless: true, launchesExternalApplication: false, uniqueNoOverwrite: true },
+      atlasviewer: { tool: 'export_atlasviewer', headless: true, launchesExternalApplication: false, uniqueNoOverwrite: true },
+    });
     expect(capabilities.cache).toEqual({
       plans: {
         size: 0,
@@ -560,6 +706,15 @@ describe('CortexLume MCP runtime', () => {
     });
     const catalog = structured(await client.callTool({ name: 'list_targets', arguments: {} }));
     expect(catalog.count).toBe(1);
+    const patchLibrary = structured(await client.callTool({ name: 'list_patch_library', arguments: {} }));
+    expect((patchLibrary.ruleCatalog as { version: number }).version).toBe(1);
+    expect(((patchLibrary.ruleCatalog as { presets: unknown[] }).presets as Array<{ id: string; rows: number | null; columns: number | null; layout: { optodes: unknown[]; pairs: unknown[] } }>))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: 'grid-3x5-30mm', rows: 3, columns: 5,
+          layout: expect.objectContaining({ optodes: expect.any(Array), pairs: expect.any(Array) }),
+        }),
+      ]));
 
     failNextTargetProfile = true;
     const failedPlans = await Promise.all([
@@ -585,9 +740,10 @@ describe('CortexLume MCP runtime', () => {
     const plans: Record<string, unknown>[] = [];
     for (const target of targetRequests) {
       const targetProfileCountBefore = targetProfileRequests.length;
+      const patches = target.kind === 'quick-target' ? [{ presetId: 'grid-3x5-30mm' }] : undefined;
       const result = await client.callTool({
         name: 'plan_project',
-        arguments: { target, seed: 'mcp-e2e' },
+        arguments: { target, seed: 'mcp-e2e', ...(patches ? { patches } : {}) },
       });
       if (result.isError) throw new Error(`plan_project failed for ${target.kind}: ${JSON.stringify(result.content)}`);
       const plan = structured(result);
@@ -601,7 +757,7 @@ describe('CortexLume MCP runtime', () => {
         now += 1234;
         const repeatedPlan = structured(await client.callTool({
           name: 'plan_project',
-          arguments: { target, seed: 'mcp-e2e' },
+          arguments: { target, seed: 'mcp-e2e', patches },
         }));
         expect(repeatedPlan.planId).toBe(plan.planId);
         expect(targetProfileRequests).toHaveLength(targetProfileCountBefore + 1);

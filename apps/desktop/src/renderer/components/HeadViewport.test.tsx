@@ -1,14 +1,26 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../store/projectStore';
 import { registerSurfaceProjectors, type SurfaceModelStatus } from '../lib/geometry';
-import { ProjectedPatches, ProjectOperationBubble, ScientificScreenshotButton } from './HeadViewport';
+import { MessageToast, ProjectedPatches, ProjectOperationBubble, ScientificScreenshotButton } from './HeadViewport';
 
 afterEach(cleanup);
 
 describe('HeadViewport surface readiness', () => {
+  it('copies the complete toast message when the toast is clicked', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const message = 'AtlasViewer export requires a patch in 3D Align.';
+
+    render(<MessageToast message={message} />);
+    fireEvent.click(screen.getByRole('button', { name: `Copy message: ${message}` }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(message));
+    expect(screen.getByRole('button')).toHaveTextContent('COPIED');
+  });
+
   it('renders a minimal accessible screenshot action and prevents duplicate capture while pending', () => {
     const onClick = vi.fn();
     const { rerender } = render(<ScientificScreenshotButton pending={false} onClick={onClick} />);
@@ -27,6 +39,8 @@ describe('HeadViewport surface readiness', () => {
       operationId: 'export-1', operation: 'annotation', phase: 'atlas-paths', completed: 7, total: 20,
     }} onCancel={onCancel} />);
 
+    expect(screen.getByRole('status')).toHaveClass('project-operation-bubble');
+    expect(screen.getByRole('status')).not.toHaveClass('viewport-overlay');
     expect(screen.getByRole('status')).toHaveTextContent('PREPARING SCIENTIFIC EXPORT');
     expect(screen.getByRole('status')).toHaveTextContent('ATLAS PATHS · 7/20');
     fireEvent.click(screen.getByRole('button', { name: 'CANCEL' }));

@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
+
+const coreSourceEntry = fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url));
 
 export default defineConfig({
   plugins: [
@@ -30,6 +33,13 @@ export default defineConfig({
     },
   ],
   base: './',
+  resolve: {
+    // Resolve the workspace package as application source instead of through
+    // its node_modules junction. Vite assigns immutable dependency URLs to
+    // junction paths; after core adds a named export, Electron can otherwise
+    // reuse the previous transform and fail before React mounts.
+    alias: { '@cortexlume/core': coreSourceEntry },
+  },
   // Workspace science/geometry code must stay source-linked in development.
   // Prebundling it leaves Vite serving an old optimized copy after core edits,
   // which makes the GUI disagree with the MCP and unit-test implementations.

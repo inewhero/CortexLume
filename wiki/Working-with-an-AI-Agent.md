@@ -17,7 +17,7 @@ https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md
 
 The Agent Guide contains the client-specific MCP instructions. During setup, choose a dedicated project folder that CortexLume may read and write. The Agent should configure that folder as an authorized MCP root rather than requesting broad filesystem access.
 
-CortexLume MCP runs locally through stdio. It does not start an HTTP service or bind the workflow to a particular model provider. Planning and inspection tools do not open a window. The screenshot tool starts one isolated hidden Electron renderer for the requested capture, closes it when the PNG is complete, and never writes renderer diagnostics to MCP stdout.
+CortexLume MCP runs locally through stdio. It does not start an HTTP service or bind the workflow to a particular model provider. Planning, inspection, and downstream export tools do not open a window. The screenshot tool starts one isolated hidden Electron renderer for the requested capture, closes it when the PNG is complete, and never writes renderer diagnostics to MCP stdout.
 
 ## Ask for a layout
 
@@ -78,6 +78,26 @@ projection, and planning record, then create a new derived project for the same
 target with two explicitly separate patches. Keep the original file unchanged.
 ```
 
+### BrainNet export example
+
+```text
+Inspect D:\CortexLume-Projects\pilot.cortexlume, then call export_brainnet with
+D:\CortexLume-Projects\exports as the output directory. Return the unique bundle
+directory, every generated file, and all warnings. Do not launch MATLAB.
+```
+
+The project and existing output directory must be inside authorized MCP roots. The tool creates a new, uniquely named folder without overwriting an earlier export. It writes the BrainNet node data, concise tables, metadata, README, and MATLAB launcher, but headless MCP mode does not start MATLAB or BrainNet Viewer.
+
+### AtlasViewer export example
+
+```text
+Inspect D:\CortexLume-Projects\pilot.cortexlume, then call export_atlasviewer
+with D:\CortexLume-Projects\exports as the output directory. Return the unique
+bundle directory, .SD file, MATLAB bridge, metadata, README, and all warnings.
+```
+
+The project and existing output directory must be inside authorized MCP roots. The tool writes a uniquely named MATLAB v5 `.SD` probe bundle from verified scalp geometry. It does not execute or open `cortexlume_open_atlasviewer.m`; ask the researcher to open that bridge in their compatible MATLAB/AtlasViewer setup. This avoids assuming that the MCP host has AtlasViewer's expected MATLAB release or configured paths.
+
 ## Review the candidates
 
 The Agent receives three deterministic candidates rather than one unexplained placement. Ask it to compare:
@@ -111,6 +131,7 @@ The Agent-generated planning record remains in the project for provenance. Manua
 - Missing, altered, or unavailable scientific assets stop planning instead of falling back to approximate geometry.
 - Project saving creates a unique derived filename and never overwrites an existing project.
 - Screenshot capture validates both the project and output against authorized roots, uses a deterministic camera contract, and creates a unique transparent PNG without overwriting.
+- BrainNet and AtlasViewer export validate both paths, create unique no-overwrite bundle folders, and return generated paths and warnings without launching downstream applications.
 - Layout projection, collision, overlap, coverage, and robustness checks use the shared CortexLume core.
 - Opening an Agent project remains a human review step; CortexLume does not silently approve it on your behalf.
 

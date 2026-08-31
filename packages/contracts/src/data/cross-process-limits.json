@@ -1,0 +1,14 @@
+{
+  "projectJsonBytes": 8388608,
+  "projectionResults": 8192,
+  "atlasBatchPoints": 512,
+  "atlasPathBatchItems": 128,
+  "scienceRequestBytes": 8388608,
+  "scienceResponseBytes": 16777216,
+  "projectOperationTimeoutMs": 120000,
+  "maximumChannels": 128,
+  "maximumPathPointsPerChannel": 129,
+  "maximumTotalPathPoints": 16000,
+  "maximumTotalSegments": 15872,
+  "maximumSerializedRequestBytes": 1048576
+}

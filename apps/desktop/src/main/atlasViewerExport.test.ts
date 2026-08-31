@@ -71,6 +71,14 @@ describe('AtlasViewer SD export', () => {
     project.deviceProfile.wavelengthsNm = [760, 850];
     withSharedFivePointSession(project);
     const bundle = buildAtlasViewerExport(project);
+    const bridge = bundle.files['cortexlume_open_atlasviewer.m'];
+    expect(bridge).toContain("atlasViewerEntry = which('AtlasViewerGUI');");
+    expect(bridge).toContain('CortexLume does not execute it automatically');
+    expect(bridge).toContain("run AtlasViewer's setpaths.m");
+    expect(bridge).not.toContain("getenv('CORTEXLUME_ATLASVIEWER')");
+    expect(bridge).toContain("probeLoader = which('getProbe');");
+    expect(bridge).toContain('AtlasViewerGUI(root);');
+    expect(bridge).toContain('loads the sole .SD file in its subject directory');
     const bytes = bundle.files['cortexlume_atlasviewer.SD'];
     expect(bytes).toBeInstanceOf(Uint8Array);
     if (!(bytes instanceof Uint8Array)) throw new Error('expected binary SD export');

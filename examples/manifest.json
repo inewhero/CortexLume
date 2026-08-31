@@ -11,8 +11,8 @@
     },
     {
       "path": "cases/01-quick-start/quick-start.cortexlume",
-      "bytes": 3275,
-      "sha256": "a3f4586c1adf88abe73c6804d0b28b03d94756bd83f983e5af5cd8f2675db6e9"
+      "bytes": 3321,
+      "sha256": "dcaa6e368f3c5464b89df8254ba4b3ddfa187287553c2e50b8ce0304521e795f"
     },
     {
       "path": "cases/01-quick-start/README.md",

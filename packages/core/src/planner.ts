@@ -10,12 +10,17 @@ import type {
 import { channelSensitivityPath, distance3 } from './geometry.js';
 import { HeadModel } from './headModel.js';
 import { createGridLayout, deterministicUuid, type GridPatchSpec } from './layout.js';
+import {
+  instantiateBuiltinPatchLayout,
+  type BuiltinPatchPresetId,
+} from './patchCatalog.js';
 
 const SURFACE_DISTANCE_TOLERANCE_MM = 1.5;
 const NOMINAL_COVERAGE_TIE_TOLERANCE = 0.005;
 const MAX_SCALP_CORTEX_GAP_MM = 40;
 
 export interface PlannerPatchSpec extends GridPatchSpec {
+  presetId?: BuiltinPatchPresetId;
   shortChannelCount?: number;
 }
 
@@ -33,11 +38,13 @@ export interface PlannerRequest {
 const LAYOUT_VALIDATION_TIMESTAMP = '2000-01-01T00:00:00.000Z';
 
 function buildPlannerLayouts(patches: readonly PlannerPatchSpec[], namespace: string): LayoutDefinition[] {
-  return patches.map((spec, patchIndex) => createGridLayout(
-    { ...spec, name: spec.name ?? `Agent patch ${patchIndex + 1}` },
-    `${namespace}:patch:${patchIndex}`,
-    LAYOUT_VALIDATION_TIMESTAMP,
-  ));
+  return patches.map((spec, patchIndex) => {
+    const patchNamespace = `${namespace}:patch:${patchIndex}`;
+    const name = spec.name ?? `Agent patch ${patchIndex + 1}`;
+    return spec.presetId
+      ? instantiateBuiltinPatchLayout(spec.presetId, patchNamespace, LAYOUT_VALIDATION_TIMESTAMP, { name })
+      : createGridLayout({ ...spec, name }, patchNamespace, LAYOUT_VALIDATION_TIMESTAMP);
+  });
 }
 
 /**

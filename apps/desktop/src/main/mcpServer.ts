@@ -18,6 +18,9 @@ import {
   type Vec3,
 } from '@cortexlume/contracts';
 import {
+  BUILTIN_PATCH_CATALOG_VERSION,
+  BUILTIN_PATCH_PRESET_IDS,
+  BUILTIN_PATCH_PRESETS,
   channelSensitivityPath,
   deterministicUuid,
   distance3,
@@ -34,6 +37,9 @@ import {
 } from '@cortexlume/project-io';
 import { withStagedNiftiFile, type ScienceClient } from '@cortexlume/science-client';
 import { MCP_ROOT_CONFIGURATION_ERROR } from './mcpBootstrapConfig';
+import { buildAtlasViewerExportAsync } from './atlasViewerExport';
+import { createUniqueExportDirectory, writeExportBundle, type WritableExportBundle } from './exportBundleWriter';
+import { buildBrainNetExportAsync } from './projectExport';
 import type {
   McpScreenshotCameraState,
   McpScreenshotLayerState,
@@ -515,7 +521,7 @@ export class CortexLumeMcpRuntime {
 
   createServer(): McpServer {
     const server = new McpServer({ name: 'CortexLume', version: this.options.applicationVersion }, {
-      instructions: 'Read list_targets before searching or selecting a Quick Target. Use search_targets only to narrow the known catalog, and list_atlas_regions for anatomical targets. plan_project returns functional, robustness, specificity, and Harvard–Oxford anatomical summaries for three candidates without writing files. Broad distributed targets may recommend multiple patches. save_project writes a unique derived .cortexlume archive and never overwrites; release_plan releases an unused cached plan early. capture_project_screenshot renders a deterministic preset or explicit camera in a hidden renderer and writes a unique transparent PNG; it is not a current-GUI-view capture. open_project starts a separate desktop window for human review.',
+      instructions: 'Read list_targets before searching or selecting a Quick Target. Use list_patch_library to inspect the nominal 30 mm presets accepted by plan_project. Use search_targets only to narrow the known catalog, and list_atlas_regions for anatomical targets. plan_project returns functional, robustness, specificity, and Harvard–Oxford anatomical summaries for three candidates without writing files. Broad distributed targets may recommend multiple patches. save_project writes a unique derived .cortexlume archive and never overwrites; release_plan releases an unused cached plan early. export_brainnet and export_atlasviewer validate an authorized project and write a unique headless export bundle under an authorized existing output directory; they never launch MATLAB or another application. capture_project_screenshot renders a deterministic preset or explicit camera in a hidden renderer and writes a unique transparent PNG; it is not a current-GUI-view capture. open_project starts a separate desktop window for human review.',
     });
 
     server.registerTool('get_capabilities', {
@@ -535,7 +541,12 @@ export class CortexLumeMcpRuntime {
         projectFormatVersion: 3,
         template: { id: 'MNI152NLin6Asym', surface: 'Cedalion-ICBM152-25k', coordinateConvention: 'RAS+', units: 'mm' },
         targetSources: ['quick-target', 'harvard-oxford-region', 'mni-point', 'nifti'],
-        defaultPatch: { columns: 5, rows: 3, pitchMm: 30, topLeft: 'source', pattern: 'checkerboard', optodes: 15, channels: 22 },
+        defaultPatch: { presetId: 'grid-3x5-30mm', columns: 5, rows: 3, pitchMm: 30, topLeft: 'source', pattern: 'checkerboard', optodes: 15, channels: 22 },
+        patchLibrary: {
+          tool: 'list_patch_library',
+          ruleCatalogVersion: BUILTIN_PATCH_CATALOG_VERSION,
+          rulePresetIds: BUILTIN_PATCH_PRESET_IDS,
+        },
         defaults: { longChannelRangeMm: [25, 40], surfaceDistanceToleranceMm: 1.5, maximumScalpCortexGapMm: 40, kernelSigmaMm: 12, supportRadiusMm: 24, transmissionDepthMm: 25, candidateCount: 3, overlapThresholdMm: 12 },
         quickTargetDiscovery: { firstTool: 'list_targets', thenTool: 'search_targets', catalogIsOffline: true },
         authorizedRoots: this.roots,
@@ -547,6 +558,21 @@ export class CortexLumeMcpRuntime {
           limits: MCP_SCREENSHOT_LIMITS,
           defaultDirectory: 'CortexLume_Screenshots beside the input project',
           uniqueNoOverwrite: true,
+        },
+        exports: {
+          brainnet: {
+            tool: 'export_brainnet',
+            headless: true,
+            launchesExternalApplication: false,
+            uniqueNoOverwrite: true,
+          },
+          atlasviewer: {
+            tool: 'export_atlasviewer',
+            headless: true,
+            launchesExternalApplication: false,
+            uniqueNoOverwrite: true,
+            bridgeScript: 'cortexlume_open_atlasviewer.m',
+          },
         },
         cache: this.cacheStats(),
         assets: assetState,
@@ -571,10 +597,29 @@ export class CortexLumeMcpRuntime {
       inputSchema: {},
     }, async () => toolResult(await this.scienceRequest<Record<string, unknown>>('/v1/atlas/cortical-regions')));
 
-    const patchSchema = z.object({
+    server.registerTool('list_patch_library', {
+      title: 'List built-in patch library',
+      description: 'Return the versioned nominal 30 mm patch presets accepted by plan_project.',
+      inputSchema: {},
+    }, async () => toolResult({
+      ruleCatalog: {
+        version: BUILTIN_PATCH_CATALOG_VERSION,
+        semantics: 'nominal 30 mm local planar measurement patches accepted by plan_project',
+        presets: BUILTIN_PATCH_PRESETS,
+      },
+    }));
+
+    const gridPatchSchema = z.object({
       name: z.string().min(1).max(80).optional(), columns: z.number().int().min(1).max(12).default(5), rows: z.number().int().min(1).max(12).default(3),
       pitchMm: z.number().min(5).max(80).default(30), activeCells: z.array(z.array(z.boolean())).optional(), reverseSourceDetector: z.boolean().default(false), shortChannelCount: z.number().int().min(0).max(16).default(0),
     });
+    const patchSchema = z.union([
+      z.object({
+        presetId: z.enum(BUILTIN_PATCH_PRESET_IDS),
+        name: z.string().min(1).max(80).optional(),
+      }),
+      gridPatchSchema,
+    ]);
     const targetSchema = z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('quick-target'), id: z.string().min(1) }),
       z.object({ kind: z.literal('harvard-oxford-region'), label: z.string().min(1) }),
@@ -755,7 +800,7 @@ export class CortexLumeMcpRuntime {
       // bounded and can also be released explicitly.
       if (consumePlan) this.plans.delete(planId);
       return toolResult({
-        path: destination, projectId: project.id, formatVersion: 3, selectedCandidateId: candidateId,
+        path: destination, projectId: project.id, formatVersion: project.formatVersion, selectedCandidateId: candidateId,
         expiresAt: consumePlan ? null : entry.expiresAt,
         sha256: archiveSha256,
       });
@@ -791,6 +836,35 @@ export class CortexLumeMcpRuntime {
         archiveProjectSha256: detailed.archiveProjectSha256,
       });
     });
+
+    const exportInputSchema = {
+      projectPath: z.string().min(1),
+      outputDirectory: z.string().min(1),
+      directoryName: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 _-]{0,127}$/).optional(),
+    };
+    server.registerTool('export_brainnet', {
+      title: 'Export a project for BrainNet Viewer',
+      description: 'Validate an authorized CortexLume project and write a unique BrainNet bundle below an authorized existing output directory. This headless tool never launches MATLAB, BrainNet, a file browser, or a GUI.',
+      inputSchema: exportInputSchema,
+    }, async ({ projectPath, outputDirectory, directoryName }) => this.exportProjectBundle({
+      kind: 'brainnet',
+      projectPath,
+      outputDirectory,
+      directoryName: directoryName ?? 'CortexLume_BrainNet',
+      build: buildBrainNetExportAsync,
+    }));
+
+    server.registerTool('export_atlasviewer', {
+      title: 'Export a project for AtlasViewer',
+      description: 'Validate an authorized CortexLume project and write a unique AtlasViewer bundle below an authorized existing output directory. This headless tool only writes the MATLAB bridge and data files; it never opens or executes them.',
+      inputSchema: exportInputSchema,
+    }, async ({ projectPath, outputDirectory, directoryName }) => this.exportProjectBundle({
+      kind: 'atlasviewer',
+      projectPath,
+      outputDirectory,
+      directoryName: directoryName ?? 'CortexLume_AtlasViewer',
+      build: buildAtlasViewerExportAsync,
+    }));
 
     const screenshotVectorSchema = z.tuple([
       z.number().finite().min(-10_000).max(10_000),
@@ -1035,6 +1109,7 @@ export class CortexLumeMcpRuntime {
   private async buildProject(entry: PlanCacheEntry, candidate: PlannerCandidate, projectName?: string): Promise<CortexLumeProject> {
     const assets = await this.head();
     const manifestBytes = await readFile(path.join(this.options.templateRoot, 'manifest.json'));
+    const templateManifest = JSON.parse(manifestBytes.toString('utf8')) as { assetVersion: string };
     const manifestSha256 = sha256Bytes(Buffer.from(manifestBytes.toString('utf8').replace(/\r\n/g, '\n')));
     const timestamp = new Date(this.clock()).toISOString();
     const selectedId = candidate.summary.stableId;
@@ -1063,7 +1138,7 @@ export class CortexLumeMcpRuntime {
       })(),
       createdAt: timestamp, updatedAt: timestamp,
       template: {
-        id: 'MNI152NLin6Asym', assetVersion: 'templateflow-c906e8d_cedalion-icbm152-26.5.1', coordinateConvention: 'RAS+', units: 'mm', verified: true,
+        id: 'MNI152NLin6Asym', assetVersion: templateManifest.assetVersion, coordinateConvention: 'RAS+', units: 'mm', verified: true,
         manifestSha256, scalpMeshSha256: assets.assetHashes.scalpGlb, cortexMeshSha256: assets.assetHashes.brainScientificGlb, atlasSha256: assets.assetHashes.harvardOxfordIndex,
       },
       layouts: candidate.layouts, instances: candidate.instances,
@@ -1083,6 +1158,41 @@ export class CortexLumeMcpRuntime {
       { label: 'Project archive' },
     );
     return readProjectArchiveDetailed(bytes);
+  }
+
+  private async exportProjectBundle(options: {
+    kind: 'brainnet' | 'atlasviewer';
+    projectPath: string;
+    outputDirectory: string;
+    directoryName: string;
+    build: (project: CortexLumeProject) => Promise<WritableExportBundle>;
+  }) {
+    const resolvedProjectPath = await this.authorizedPath(options.projectPath, true);
+    const detailed = await this.readAuthorizedProject(resolvedProjectPath);
+    const resolvedOutputRoot = await this.authorizedPath(options.outputDirectory, true);
+    // Build first so an invalid or incompletely projected project cannot leave
+    // an empty output directory behind. Both builders enforce the same
+    // verified HeadModel projection invariants used by desktop exports.
+    const bundle = await options.build(detailed.project);
+    const directory = await createUniqueExportDirectory(resolvedOutputRoot, options.directoryName);
+    const authorizedDirectory = await this.authorizedPath(directory, true);
+    const fileNames = await writeExportBundle(authorizedDirectory, bundle);
+    const files = await Promise.all(fileNames.map(async (name) => ({
+      name,
+      path: await this.authorizedPath(path.join(authorizedDirectory, name), true),
+    })));
+    return toolResult({
+      exportKind: options.kind,
+      directory: authorizedDirectory,
+      files,
+      warnings: bundle.warnings,
+      headless: true,
+      project: {
+        path: resolvedProjectPath,
+        id: detailed.project.id,
+        archiveProjectSha256: detailed.archiveProjectSha256,
+      },
+    });
   }
 
   private async authorizedPath(candidate: string, mustExist: boolean): Promise<string> {

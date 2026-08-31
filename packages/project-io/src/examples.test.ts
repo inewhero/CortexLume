@@ -19,7 +19,7 @@ function walk(directory: string): string[] {
 }
 
 describe('optional example dataset', () => {
-  it('ships five self-contained legacy v2 cases that migrate to v3', () => {
+  it('ships five self-contained v2/v3 cases that open as v3', () => {
     const caseDirectories = readdirSync(cases, { withFileTypes: true }).filter((entry) => entry.isDirectory());
     expect(caseDirectories.map((entry) => entry.name)).toEqual([
       '01-quick-start',
@@ -36,8 +36,8 @@ describe('optional example dataset', () => {
       expect(projectFiles.length).toBeGreaterThan(0);
       for (const projectFile of projectFiles) {
         const archive = readProjectArchiveDetailed(readFileSync(projectFile));
-        expect(archive.sourceFormatVersion).toBe(2);
-        expect(archive.migrated).toBe(true);
+        expect([2, 3]).toContain(archive.sourceFormatVersion);
+        expect(archive.migrated).toBe(archive.sourceFormatVersion < 3);
         expect(archive.project.formatVersion).toBe(3);
         expect(archive.project.template.verified).toBe(true);
       }
@@ -73,7 +73,9 @@ describe('optional example dataset', () => {
       files: Array<{ path: string; bytes: number; sha256: string }>;
     };
     const actual = walk(examples)
-      .filter((file) => path.basename(file) !== 'manifest.json')
+      // Runtime screenshots live beside examples but are intentionally ignored
+      // release artifacts, not part of the reproducible dataset manifest.
+      .filter((file) => path.basename(file) !== 'manifest.json' && !file.includes(`${path.sep}CortexLume_Screenshots${path.sep}`))
       .map((file) => ({
         path: path.relative(examples, file).replaceAll('\\', '/'),
         bytes: statSync(file).size,

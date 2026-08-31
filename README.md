@@ -74,6 +74,8 @@ The optional [example dataset](./examples/README.md) includes a placed starter p
 - BrainNet export creates node data and a MATLAB launcher for anatomical visualization.
 - AtlasViewer export creates a MATLAB v5 `.SD` probe file from verified scalp geometry for AtlasViewer registration and photon-simulation workflows. It does not claim subject registration.
 
+The desktop buttons serve the human review workflow. MCP-capable Agents can also export a saved, authorized `.cortexlume` project to BrainNet or AtlasViewer bundles without opening the GUI; see the [Agent Guide](./AGENT_README.md#export-for-downstream-tools).
+
 ## Scientific foundation
 
 CortexLume uses pinned MNI152NLin6Asym, Cedalion ICBM152, Cedalion 25k surface-correspondence, and Harvard–Oxford probability-atlas assets. The same correspondence-backed geometry drives targeting, projection, atlas lookup, coverage, desktop interaction, and Agent planning.

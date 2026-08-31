@@ -17,6 +17,12 @@ describe('AtlasViewer main-process IPC wiring', () => {
     expect(handler).toContain("createUniqueExportDirectory(");
     expect(handler).toContain("'CortexLume_AtlasViewer_Export'");
     expect(handler).toContain('writeExportBundle(directory, bundle, runOptions)');
+    expect(handler).toContain("path.join(directory, 'cortexlume_open_atlasviewer.m')");
+    expect(handler).toContain('await shell.openPath(bridgePath)');
+    expect(handler).toContain('scriptOpened: true');
+    expect(handler).not.toContain('inspectAtlasViewer(');
+    expect(handler).not.toContain('launchAtlasViewer(');
+    expect(handler).toContain('return { directory, files, warnings, atlasViewer }');
     expect(handler).toContain('maxPayloadBytes: IPC_DEFAULT_MAX_PAYLOAD_BYTES');
   });
 });

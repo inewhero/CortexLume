@@ -42,10 +42,11 @@ No edge file is generated. Node labels are present but hidden by default. If MAT
 The Export controls are arranged in two rows: **CSV**, **BIDS**, then **BrainNet**, **AtlasViewer**. Choose **Export → AtlasViewer** to write:
 
 - `cortexlume_atlasviewer.SD`: an uncompressed MATLAB v5 file containing the AtlasViewer/Homer `SD` structure;
+- `cortexlume_open_atlasviewer.m`: a bridge to open the exported subject directory after AtlasViewer's paths are configured;
 - `cortexlume_atlasviewer.json`: the source/detector/channel index mapping, coordinate semantics, calibration provenance, and warnings;
 - `README_ATLASVIEWER.txt`: concise import and registration guidance.
 
-Import the `.SD` file with AtlasViewer's probe import workflow. `SrcPos3D` and `DetPos3D` contain CortexLume's verified scalp optode sphere-centre coordinates in MNI152NLin6Asym RAS+ millimetres. `MeasList` carries the source-detector channels and configured wavelength indices, so the probe can continue into AtlasViewer registration and photon-simulation workflows.
+CortexLume opens the bridge for manual review but does not execute it. In an AtlasViewer-compatible MATLAB session, run AtlasViewer's `setpaths.m` and then run the bridge; alternatively import the `.SD` through AtlasViewer's probe workflow. `SrcPos3D` and `DetPos3D` contain CortexLume's verified scalp optode sphere-centre coordinates in MNI152NLin6Asym RAS+ millimetres. `MeasList` carries the source-detector channels and configured wavelength indices, so the probe can continue into AtlasViewer registration and photon-simulation workflows.
 
 When every exported patch shares one complete five-point calibration, CortexLume includes those template-space landmarks in `Landmarks3D`. Otherwise the file still contains the verified probe geometry, but `Landmarks3D` is empty and registration must be completed in AtlasViewer. In both cases, inspect and approve the AtlasViewer alignment before analysis: the export does not claim subject-specific registration and does not embed CortexLume cortical-contact coordinates, depth targets, or atlas labels as unofficial SD fields.
 
@@ -58,5 +59,11 @@ When every exported patch shares one complete five-point calibration, CortexLume
 - Save the `.cortexlume` project before or after export so the exact design remains editable.
 
 Long annotation or export operations show a progress bubble in **3D Align** and provide **Cancel**. Output is written only after the requested operation completes.
+
+## Export with an AI Agent
+
+The desktop controls above are the human-facing workflow. A connected local Agent can instead call `export_brainnet` or `export_atlasviewer` for an existing `.cortexlume` project, provided that both the project and chosen output directory are inside MCP-authorized roots.
+
+Each tool creates a uniquely named folder without overwriting previous output and returns the created directory, files, and warnings. Headless export does not launch MATLAB or BrainNet Viewer, and it does not execute or open the AtlasViewer MATLAB bridge. See [Working with an AI Agent](Working-with-an-AI-Agent#brainnet-export-example) for example requests and the repository [Agent Guide](https://github.com/inewhero/CortexLume/blob/main/AGENT_README.md#export-for-downstream-tools) for the machine-facing contract.
 
 Return to the [User Guide home](Home).
