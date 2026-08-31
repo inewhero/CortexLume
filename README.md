@@ -76,6 +76,17 @@ The optional [example dataset](./examples/README.md) includes a placed starter p
 
 The desktop buttons serve the human review workflow. MCP-capable Agents can also export a saved, authorized `.cortexlume` project to BrainNet or AtlasViewer bundles without opening the GUI; see the [Agent Guide](./AGENT_README.md#export-for-downstream-tools).
 
+## Related projects
+
+CortexLume focuses on pre-acquisition layout design, anatomy-aware placement, and geometry QC. It complements rather than replaces the wider fNIRS and neuroimaging toolchain:
+
+- [Cedalion](https://github.com/ibs-lab/cedalion) is a Python framework for fNIRS/DOT analysis and the upstream source of CortexLume's pinned ICBM152 surface-correspondence assets.
+- [AtlasViewer](https://github.com/BUNPC/AtlasViewer) and [Homer3](https://github.com/BUNPC/Homer3) provide MATLAB workflows for probe registration, head modelling, photon simulation, and fNIRS analysis. CortexLume exports verified probe geometry as an AtlasViewer-compatible `.SD` bundle.
+- [BrainNet Viewer](https://www.nitrc.org/projects/bnv/) visualizes brain surfaces, nodes, and networks. CortexLume exports cortical MNI optode coordinates as BrainNet node data.
+- [MNE-NIRS](https://mne.tools/mne-nirs/stable/index.html) provides Python preprocessing, quality control, GLM analysis, and visualization for acquired fNIRS data; CortexLume's BIDS geometry can accompany the recording dataset used downstream.
+- [Neurosynth Compose](https://neurostuff.github.io/compose-docs/) and [NiMARE](https://nimare.readthedocs.io/) support reproducible neuroimaging meta-analysis. Their statistical NIfTI outputs can be imported as CortexLume functional targets, while Quick Target provides a curated Neurosynth-derived starting point.
+- [NIRS-BIDS](https://bids-specification.readthedocs.io/en/stable/modality-specific-files/near-infrared-spectroscopy.html) and [SNIRF](https://github.com/fNIRS/snirf) are community interoperability standards. CortexLume exports geometry and coordinate-system metadata but does not invent measurement time series.
+
 ## Scientific foundation
 
 CortexLume uses pinned MNI152NLin6Asym, Cedalion ICBM152, Cedalion 25k surface-correspondence, and Harvard–Oxford probability-atlas assets. The same correspondence-backed geometry drives targeting, projection, atlas lookup, coverage, desktop interaction, and Agent planning.
