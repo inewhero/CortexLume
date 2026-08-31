@@ -23,7 +23,7 @@ describe('MCP capture worker request boundary', () => {
   it('derives output paths and render-only project changes from the authorized archive', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-worker-'));
     const projectPath = path.join(root, 'project.cortexlume');
-    await copyFile(path.resolve(process.cwd(), '../../Mentalizing-5x3.cortexlume'), projectPath);
+    await copyFile(path.resolve(process.cwd(), '../../examples/cases/05-nifti-functional-target/nifti-visual-target.cortexlume'), projectPath);
     const detailed = readProjectArchiveDetailed(await readFile(projectPath));
     const temporaryPath = path.join(root, '.capture.png');
     const requestPath = `${temporaryPath}.request.json`;
@@ -70,7 +70,7 @@ describe('MCP capture worker request boundary', () => {
   it('rejects request-controlled output paths and mismatched archive identity', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-worker-path-'));
     const projectPath = path.join(root, 'project.cortexlume');
-    await copyFile(path.resolve(process.cwd(), '../../Mentalizing-5x3.cortexlume'), projectPath);
+    await copyFile(path.resolve(process.cwd(), '../../examples/cases/05-nifti-functional-target/nifti-visual-target.cortexlume'), projectPath);
     const detailed = readProjectArchiveDetailed(await readFile(projectPath));
     const temporaryPath = path.join(root, '.capture.png');
     const requestPath = `${temporaryPath}.request.json`;

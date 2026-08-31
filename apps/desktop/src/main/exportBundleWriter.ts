@@ -88,9 +88,10 @@ export async function createUniqueExportDirectory(
     mustExist: true,
     label: 'selected export directory',
   });
-  if (comparable(exportRoot) !== comparable(requestedRoot)) {
-    throw new Error('Selected export directory must not be a symbolic link or reparse point.');
-  }
+  // `resolveAuthorizedPath` already rejects a symbolic-link/reparse root via
+  // lstat before canonicalizing it. Do not require the returned spelling to
+  // match the input spelling: Windows may legitimately expand an 8.3 path
+  // such as RUNNER~1 to its long form.
   for (let suffix = 1; suffix <= 10_000; suffix += 1) {
     const directoryName = suffix === 1 ? baseName : `${baseName}-${suffix}`;
     const candidate = path.join(exportRoot, directoryName);
@@ -168,9 +169,6 @@ async function writeValidatedExportBundle(
     mustExist: true,
     label: 'selected export directory',
   });
-  if (comparable(exportRoot) !== comparable(requestedRoot)) {
-    throw new Error('Selected export directory must not be a symbolic link or reparse point.');
-  }
 
   // Resolve every name before publishing any entry. A malicious or malformed
   // late entry must fail the entire bundle without leaving an earlier prefix.

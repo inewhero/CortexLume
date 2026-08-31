@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -23,7 +23,7 @@ describe('scientific screenshot writer', () => {
     const now = new Date('2026-08-30T12:34:56.789Z');
     const first = await saveScientificScreenshot(projectPath, png, 1, 1, { now });
     const second = await saveScientificScreenshot(projectPath, png, 1, 1, { now });
-    expect(first.directory).toBe(path.join(path.dirname(projectPath), SCIENTIFIC_SCREENSHOT_DIRECTORY));
+    expect(first.directory).toBe(await realpath(path.join(path.dirname(projectPath), SCIENTIFIC_SCREENSHOT_DIRECTORY)));
     expect(second.fileName).not.toBe(first.fileName);
     expect(await readFile(first.path)).toEqual(Buffer.from(png));
     expect(await readFile(second.path)).toEqual(Buffer.from(png));

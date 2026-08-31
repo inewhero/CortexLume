@@ -53,7 +53,7 @@ describe('MCP capture process bridge', () => {
   it('isolates worker stdout and passes exact roots/hash through non-Node Electron args', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-process-'));
     const projectPath = path.join(root, 'project.cortexlume');
-    await copyFile(path.resolve(process.cwd(), '../../Mentalizing-5x3.cortexlume'), projectPath);
+    await copyFile(path.resolve(process.cwd(), '../../examples/cases/05-nifti-functional-target/nifti-visual-target.cortexlume'), projectPath);
     const detailed = readProjectArchiveDetailed(await readFile(projectPath));
     const camera = {
       source: 'preset' as const, preset: 'front' as const,

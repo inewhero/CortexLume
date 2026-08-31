@@ -454,7 +454,7 @@ describe('CortexLume MCP runtime', () => {
         groundGrid: false,
       },
     });
-    expect(path.dirname(first.path as string)).toBe(path.join(root, 'CortexLume_Screenshots'));
+    expect(path.dirname(first.path as string)).toBe(await realpath(path.join(root, 'CortexLume_Screenshots')));
     expect(second.path).not.toBe(first.path);
     expect(await readFile(first.path as string)).toEqual(transparentPng(480, 384));
     expect(captureProjectScreenshot).toHaveBeenCalledTimes(2);
@@ -510,17 +510,18 @@ describe('CortexLume MCP runtime', () => {
     }));
 
     expect(firstBrainNet).toMatchObject({ exportKind: 'brainnet', headless: true });
-    expect(firstBrainNet.directory).toBe(path.join(root, 'Review Export'));
-    expect(secondBrainNet.directory).toBe(path.join(root, 'Review Export-2'));
+    expect(firstBrainNet.directory).toBe(await realpath(path.join(root, 'Review Export')));
+    expect(secondBrainNet.directory).toBe(await realpath(path.join(root, 'Review Export-2')));
     expect(atlasViewer).toMatchObject({ exportKind: 'atlasviewer', headless: true });
-    expect(atlasViewer.directory).toBe(path.join(root, 'CortexLume_AtlasViewer'));
+    expect(atlasViewer.directory).toBe(await realpath(path.join(root, 'CortexLume_AtlasViewer')));
     const brainNetFiles = firstBrainNet.files as Array<{ name: string; path: string }>;
     const atlasViewerFiles = atlasViewer.files as Array<{ name: string; path: string }>;
     expect(brainNetFiles.map(({ name }) => name)).toContain('cortexlume_brainnet.node');
     expect(atlasViewerFiles.map(({ name }) => name)).toContain('cortexlume_atlasviewer.SD');
     expect(atlasViewerFiles.map(({ name }) => name)).toContain('cortexlume_open_atlasviewer.m');
+    const canonicalRoot = await realpath(root);
     for (const file of [...brainNetFiles, ...atlasViewerFiles]) {
-      expect(file.path.startsWith(root)).toBe(true);
+      expect(file.path.startsWith(canonicalRoot)).toBe(true);
       expect(await readFile(file.path)).not.toHaveLength(0);
     }
     expect(openGui).not.toHaveBeenCalled();
