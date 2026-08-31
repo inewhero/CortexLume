@@ -1,4 +1,4 @@
-import { copyFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -44,11 +44,12 @@ describe('MCP capture worker request boundary', () => {
       layers,
     }));
     const request = await loadMcpCaptureWorkerRequest(requestPath, [root], detailed.archiveProjectSha256);
+    const canonicalRoot = await realpath(root);
     expect(request.project.layouts[0]!.name).toBe(detailed.project.layouts[0]!.name);
     expect(request.project.instances.every((instance) => instance.visible === false)).toBe(true);
     expect(request.project.digitizerSessions.every((session) => session.visible === false)).toBe(true);
-    expect(request.temporaryPath).toBe(temporaryPath);
-    expect(request.resultPath).toBe(`${temporaryPath}.result.json`);
+    expect(request.temporaryPath).toBe(path.join(canonicalRoot, '.capture.png'));
+    expect(request.resultPath).toBe(path.join(canonicalRoot, '.capture.png.result.json'));
     const png = encodeRgbaPng(960, 480, new Uint8Array(960 * 480 * 4));
     await completeMcpCaptureWorker(request, {
       pngBase64: Buffer.from(png).toString('base64'),

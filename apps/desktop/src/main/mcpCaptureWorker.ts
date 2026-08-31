@@ -88,6 +88,7 @@ export async function loadMcpCaptureWorkerRequest(
   expectedProjectSha256: string,
 ): Promise<McpScreenshotWorkerRequest> {
   if (!rawRequestPath.endsWith('.request.json')) throw new Error('Screenshot worker request path suffix is invalid.');
+  const rawResolvedRequestPath = path.resolve(rawRequestPath);
   const requestPath = await resolveAuthorizedPath(rawRequestPath, authorizedRoots, {
     mustExist: true,
     label: 'MCP screenshot authorized roots',
@@ -106,11 +107,17 @@ export async function loadMcpCaptureWorkerRequest(
     'logicalWidth', 'logicalHeight', 'dpr', 'camera', 'layers',
   ], 'Screenshot worker request');
   if (raw.version !== 1) throw new Error('Screenshot worker request version is invalid.');
+  // Validate the request-controlled spellings against the spelling supplied by
+  // the trusted parent process. On Windows, authorization canonicalizes an 8.3
+  // temp path (RUNNER~1) to its long form (runneradmin); output files do not yet
+  // exist and therefore cannot be realpathed for a spelling comparison.
+  const rawExpectedTemporaryPath = rawResolvedRequestPath.slice(0, -'.request.json'.length);
+  const rawExpectedResultPath = `${rawExpectedTemporaryPath}.result.json`;
   const expectedTemporaryPath = requestPath.slice(0, -'.request.json'.length);
   const expectedResultPath = `${expectedTemporaryPath}.result.json`;
   if (typeof raw.temporaryPath !== 'string' || typeof raw.resultPath !== 'string'
-    || normalized(raw.temporaryPath) !== normalized(expectedTemporaryPath)
-    || normalized(raw.resultPath) !== normalized(expectedResultPath)) {
+    || normalized(raw.temporaryPath) !== normalized(rawExpectedTemporaryPath)
+    || normalized(raw.resultPath) !== normalized(rawExpectedResultPath)) {
     throw new Error('Screenshot worker output paths do not derive exactly from the authorized request path.');
   }
   const temporaryPath = await resolveAuthorizedPath(expectedTemporaryPath, authorizedRoots, {
