@@ -39,8 +39,10 @@ system with working unprivileged user namespaces or correctly configured
 Electron sandbox support. Ubuntu 24.04 can restrict unprivileged user namespaces
 through AppArmor: a sandbox failure is an environment prerequisite failure, not
 a reason to add `--no-sandbox`, disable AppArmor, or change system-wide sysctls.
-The CI intentionally leaves these protections enabled and will fail visibly if
-the runner cannot provide the required sandbox.
+The Ubuntu 24.04 CI runner installs an AppArmor profile granting `userns` only
+to the extracted CortexLume executable, following the
+[Ubuntu release guidance](https://discourse.ubuntu.com/t/ubuntu-24-04-lts-noble-numbat-release-notes/39890).
+Chromium's sandbox and system-wide AppArmor restrictions remain enabled.
 
 ## Verify and package
 

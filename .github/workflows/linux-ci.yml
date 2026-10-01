@@ -89,6 +89,20 @@ jobs:
             echo 'Portable archive contains a broken symbolic link' >&2
             exit 1
           fi
+      - name: Allow the packaged Chromium sandbox on Ubuntu 24.04
+        if: matrix.os == 'ubuntu-24.04'
+        # Ubuntu restricts unprivileged user namespaces. Grant them only to
+        # this extracted executable, keeping AppArmor and Chromium enabled.
+        # https://discourse.ubuntu.com/t/ubuntu-24-04-lts-noble-numbat-release-notes/39890
+        run: |
+          executable="$PWD/.tmp/linux-portable/CortexLume-linux-x64/CortexLume"
+          sudo tee /etc/apparmor.d/cortexlume-ci >/dev/null <<EOF
+          abi <abi/4.0>,
+          profile cortexlume-ci "$executable" flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/cortexlume-ci
       - name: Smoke test planning, exports, screenshots and GUI
         # Keep Chromium's sandbox enabled. In particular, do not work around
         # Ubuntu 24.04 AppArmor failures with --no-sandbox or sysctl changes.
