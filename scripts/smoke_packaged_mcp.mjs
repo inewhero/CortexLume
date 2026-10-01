@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { packagedExecutable } from './packaged-path.mjs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import process from 'node:process';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
-const executable = path.resolve(process.argv[2] ?? 'apps/desktop/out/CortexLume-win32-x64/CortexLume.exe');
+const executable = path.resolve(process.argv[2] ?? packagedExecutable());
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-packaged-mcp-'));
 const inheritedEnvironment = Object.fromEntries(
   Object.entries(process.env).filter((entry) => typeof entry[1] === 'string'),
@@ -103,8 +104,8 @@ try {
   process.stderr.write('packaged smoke: list tools\n');
   const tools = await client.listTools();
   const expectedTools = [
-    'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'plan_project',
-    'save_project', 'release_plan', 'inspect_project', 'capture_project_screenshot', 'open_project',
+    'get_capabilities', 'list_targets', 'search_targets', 'list_atlas_regions', 'list_patch_library', 'plan_project',
+    'save_project', 'release_plan', 'inspect_project', 'export_brainnet', 'export_atlasviewer', 'capture_project_screenshot', 'open_project',
   ];
   if (tools.tools.map((tool) => tool.name).join(',') !== expectedTools.join(',')) {
     throw new Error(`Unexpected packaged MCP tools: ${tools.tools.map((tool) => tool.name).join(', ')}`);
@@ -147,6 +148,18 @@ try {
   if (inspection.formatVersion !== 3 || inspection.functionalTarget?.target?.id !== target.id) {
     throw new Error('Packaged project inspection did not preserve the v2 target.');
   }
+  for (const name of ['export_brainnet', 'export_atlasviewer']) {
+    process.stderr.write(`packaged smoke: ${name}\n`);
+    const exported = structured(await client.callTool({
+      name, arguments: { projectPath: saved.path, outputDirectory: temporaryRoot },
+    }));
+    if (exported.headless !== true || !exported.files?.length) {
+      throw new Error(`Packaged ${name} did not return a headless file bundle.`);
+    }
+    for (const file of exported.files) {
+      if (!(await readFile(file.path)).length) throw new Error(`Empty export: ${file.path}`);
+    }
+  }
   process.stderr.write('packaged smoke: capture transparent project screenshot\n');
   const screenshot = structured(await client.callTool({
     name: 'capture_project_screenshot',
@@ -183,6 +196,7 @@ try {
     stdoutProtocolOnly: 'passed',
     guiProjectLaunch: 'passed',
     screenshotCapture: 'passed',
+    headlessExports: 'passed',
   }, null, 2)}\n`);
 } catch (error) {
   await client.close().catch(() => {});

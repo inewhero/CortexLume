@@ -32,6 +32,11 @@ export interface ParsedGithubRelease {
   portableAvailable: boolean;
 }
 
+export interface ReleaseTarget {
+  platform: string;
+  arch: string;
+}
+
 export function parseStableSemver(value: string): [number, number, number] | null {
   const match = value.trim().match(/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
   if (!match) return null;
@@ -74,7 +79,10 @@ function isTrustedAssetUrl(value: unknown): value is string {
   }
 }
 
-export function parseGithubRelease(value: unknown): ParsedGithubRelease | null {
+export function parseGithubRelease(
+  value: unknown,
+  target: ReleaseTarget = { platform: 'win32', arch: 'x64' },
+): ParsedGithubRelease | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   if (record.draft === true || record.prerelease === true) return null;
@@ -88,10 +96,15 @@ export function parseGithubRelease(value: unknown): ParsedGithubRelease | null {
     return typeof item.name === 'string' && isTrustedAssetUrl(item.browser_download_url);
   });
   const version = parsed.join('.');
+  const windows = target.platform === 'win32' && target.arch === 'x64';
+  const linux = target.platform === 'linux' && (target.arch === 'x64' || target.arch === 'arm64');
+  const portablePattern = windows
+    ? /^CortexLume-.*-win-x64-portable\.zip$/i
+    : linux ? new RegExp(`^CortexLume-.*-linux-${target.arch}-portable\\.zip$`, 'i') : null;
   return {
     version,
     releaseUrl: record.html_url,
-    installerAvailable: trustedAssets.some((asset) => /CortexLume-.*-win-x64-Setup\.exe$/i.test(asset.name)),
-    portableAvailable: trustedAssets.some((asset) => /CortexLume-.*-win-x64-portable\.zip$/i.test(asset.name)),
+    installerAvailable: windows && trustedAssets.some((asset) => /^CortexLume-.*-win-x64-Setup\.exe$/i.test(asset.name)),
+    portableAvailable: portablePattern !== null && trustedAssets.some((asset) => portablePattern.test(asset.name)),
   };
 }

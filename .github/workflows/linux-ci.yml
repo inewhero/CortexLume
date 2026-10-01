@@ -1,0 +1,98 @@
+name: Linux CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    name: Source checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          python -m venv .venv
+          .venv/bin/python -m pip install -e 'services/science[dev]'
+      - name: Check and test
+        run: |
+          pnpm version:check
+          pnpm typecheck
+          pnpm test
+          pnpm build
+      # Build against the older glibc baseline, then test these exact bytes on
+      # BOTH Ubuntu versions. A newer-distribution build is not back-compatible.
+      - name: Build Linux portable package
+        if: matrix.os == 'ubuntu-22.04'
+        run: pnpm package:linux
+      - name: Save baseline Linux package
+        if: matrix.os == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v7
+        with:
+          name: CortexLume-linux-x64-baseline
+          path: apps/desktop/out/make/zip/linux/x64/*-portable.zip
+          if-no-files-found: error
+
+  portable:
+    name: Portable runtime (${{ matrix.os }})
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install smoke-test client dependencies
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: CortexLume-linux-x64-baseline
+          path: .tmp/download
+      - name: Verify extracted portable runtime
+        run: |
+          mkdir -p .tmp/linux-portable
+          unzip -q .tmp/download/*-portable.zip -d .tmp/linux-portable
+          test -x .tmp/linux-portable/CortexLume-linux-x64/CortexLume
+          test -x .tmp/linux-portable/CortexLume-linux-x64/resources/cortexlume-science/cortexlume-science
+          if find .tmp/linux-portable -xtype l -print -quit | grep -q .; then
+            echo 'Portable archive contains a broken symbolic link' >&2
+            exit 1
+          fi
+      - name: Smoke test planning, exports, screenshots and GUI
+        # Keep Chromium's sandbox enabled. In particular, do not work around
+        # Ubuntu 24.04 AppArmor failures with --no-sandbox or sysctl changes.
+        run: |
+          executable="$PWD/.tmp/linux-portable/CortexLume-linux-x64/CortexLume"
+          xvfb-run -a pnpm smoke:packaged:mcp "$executable"
+          xvfb-run -a pnpm smoke:packaged:mcp-screenshot "$executable"

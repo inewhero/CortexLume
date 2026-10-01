@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { chmod, copyFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
@@ -17,7 +18,7 @@ const config: ForgeConfig = {
     executableName: 'CortexLume',
     icon: path.resolve(__dirname, 'assets/icon'),
     // CI and offline release builds can point Forge at an already verified
-    // electron-v*-win32-x64.zip instead of touching the network.
+    // electron-v*-<platform>-<arch>.zip instead of touching the network.
     ...(process.env.ELECTRON_ZIP_DIR
       ? { electronZipDir: process.env.ELECTRON_ZIP_DIR }
       : {}),
@@ -27,6 +28,8 @@ const config: ForgeConfig = {
     extraResource: [
       path.resolve(__dirname, '../../services/science/dist/cortexlume-science'),
       path.resolve(__dirname, '../../assets'),
+      // ELF executables do not embed icons. Keep the Linux window icon outside ASAR.
+      ...(process.platform === 'linux' ? [path.resolve(__dirname, 'assets/icon.png')] : []),
     ],
   },
   rebuildConfig: {},
@@ -40,7 +43,7 @@ const config: ForgeConfig = {
       loadingGif: path.resolve(__dirname, 'assets/install-loading.gif'),
       setupExe: 'CortexLume-Setup.exe',
     }),
-    new MakerZIP({}, ['win32']),
+    new MakerZIP({}, ['win32', 'linux']),
   ],
   plugins: [
     new AutoUnpackNativesPlugin({}),
@@ -63,6 +66,14 @@ const config: ForgeConfig = {
     }),
   ],
   hooks: {
+    postPackage: async (_forgeConfig, result) => {
+      if (result.platform !== 'linux') return;
+      for (const output of result.outputPaths) {
+        const installer = path.join(output, 'install-desktop-entry.sh');
+        await copyFile(path.resolve(__dirname, 'assets/install-desktop-entry.sh'), installer);
+        await chmod(installer, 0o755);
+      }
+    },
     postMake: async (_forgeConfig, makeResults) => {
       if (process.platform !== 'win32') return makeResults;
       await execFileAsync(process.execPath, [

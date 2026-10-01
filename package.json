@@ -10,19 +10,21 @@
     "dev": "pnpm --filter @cortexlume/desktop start",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test && pnpm science:test",
+    "test": "pnpm test:scripts && pnpm -r test && pnpm science:test",
     "version:metadata": "node scripts/generate-version-metadata.mjs",
     "version:check": "node scripts/assert-version-consistency.mjs",
     "release:metadata": "node scripts/generate-release-metadata.mjs",
     "release:verify": "node scripts/verify-release-metadata.mjs",
-    "science:build": "pnpm run version:check && pnpm run version:metadata && .\\.venv\\Scripts\\python.exe -m PyInstaller --noconfirm --clean --distpath services/science/dist --workpath services/science/build services/science/cortexlume-science.spec",
+    "science:build": "node scripts/science.mjs build",
     "package:win": "pnpm science:build && pnpm --dir node_modules/electron-winstaller run install && set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/&& pnpm --filter @cortexlume/desktop make",
-    "science:dev": "pnpm run version:check && pnpm run version:metadata && .\\.venv\\Scripts\\python.exe services/science/run.py",
-    "science:test": ".\\.venv\\Scripts\\python.exe -m pytest services/science/tests",
+    "science:dev": "node scripts/science.mjs dev",
+    "science:test": "node scripts/science.mjs test",
     "smoke:packaged:mcp": "node scripts/smoke_packaged_mcp.mjs",
     "smoke:packaged:mcp-screenshot": "node scripts/smoke_packaged_mcp_screenshot.mjs",
     "examples:build": "vite-node scripts/build-example-dataset.ts",
     "examples:verify": "vite-node scripts/build-example-dataset.ts --verify-only",
-    "examples:package": "vite-node scripts/build-example-dataset.ts --package-only"
+    "examples:package": "vite-node scripts/build-example-dataset.ts --package-only",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "package:linux": "node scripts/package-linux.mjs"
   }
 }

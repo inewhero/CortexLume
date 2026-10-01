@@ -1,6 +1,7 @@
 {
   "name": "@cortexlume/desktop",
   "productName": "CortexLume",
+  "desktopName": "org.cortexlume.CortexLume.desktop",
   "version": "1.3.8",
   "description": "Validated fNIRS layout design and anatomical projection",
   "author": "CortexLume",

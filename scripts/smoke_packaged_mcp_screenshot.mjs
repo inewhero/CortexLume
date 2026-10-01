@@ -1,3 +1,4 @@
+import { packagedExecutable } from './packaged-path.mjs';
 import { copyFile, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,8 +7,8 @@ import { inflateSync } from 'node:zlib';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
-const executable = path.resolve(process.argv[2] ?? 'apps/desktop/out/CortexLume-win32-x64/CortexLume.exe');
-const sourceProject = path.resolve(process.argv[3] ?? 'Mentalizing-5x3.cortexlume');
+const executable = path.resolve(process.argv[2] ?? packagedExecutable());
+const sourceProject = path.resolve(process.argv[3] ?? 'examples/cases/01-quick-start/quick-start.cortexlume');
 const root = await mkdtemp(path.join(os.tmpdir(), 'cortexlume-mcp-screenshot-smoke-'));
 const projectPath = path.join(root, 'worker-smoke.cortexlume');
 await copyFile(sourceProject, projectPath);

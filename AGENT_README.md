@@ -4,6 +4,13 @@ CortexLume gives AI agents a local MCP interface for planning fNIRS layouts, wri
 
 ## Install and connect
 
+The published installation below is for Windows. For the Linux development preview,
+follow [Linux setup and packaging](./docs/LINUX.md), extract the complete portable
+ZIP, and use the absolute `CortexLume` executable path (without `.exe`) with the
+same `--mcp-stdio` and authorized `--mcp-root` arguments. Linux MCP currently
+requires an active display or an `xvfb-run -a` wrapper. Do not claim macOS support
+until a native bundle has been built and validated.
+
 1. Download `CortexLume-*-win-x64-Setup.exe` from the latest stable release at <https://github.com/inewhero/CortexLume/releases/latest>.
 2. Run the installer, complete the per-user Windows installation, and locate the installed `CortexLume.exe` for MCP configuration.
 3. Ask the user which project folders CortexLume may read and write.

@@ -1,6 +1,7 @@
 import {
   compareStableSemver,
   parseGithubRelease,
+  type ReleaseTarget,
   type UpdateCheckResult,
 } from '../shared/startup';
 
@@ -67,6 +68,7 @@ export async function checkGithubUpdate(
   currentVersion: string,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = 4_500,
+  target: ReleaseTarget = { platform: 'win32', arch: 'x64' },
 ): Promise<UpdateCheckResult> {
   if (compareStableSemver(currentVersion, currentVersion) === null) {
     return { status: 'invalid-response', currentVersion, detail: 'The installed version is not a stable semantic version.' };
@@ -94,7 +96,7 @@ export async function checkGithubUpdate(
     } catch {
       return { status: 'invalid-response', currentVersion, detail: 'GitHub Releases returned invalid JSON.' };
     }
-    const release = parseGithubRelease(raw);
+    const release = parseGithubRelease(raw, target);
     if (!release) {
       return { status: 'invalid-response', currentVersion, detail: 'The latest release did not pass repository and version checks.' };
     }

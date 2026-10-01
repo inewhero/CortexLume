@@ -1,32 +1,21 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ScienceClient, type ScienceCommand } from '@cortexlume/science-client';
 import { CortexLumeMcpRuntime } from './mcpServer';
 import { requireConfiguredRoots } from './mcpBootstrapConfig';
 import { createMcpCaptureProcess } from './mcpCaptureProcess';
+import { resolveResourcesRoot, resolveScienceRuntime } from './scienceRuntime';
 
 const appRoot = path.resolve(process.env.CORTEXLUME_APP_ROOT ?? process.cwd());
-const resourcesRoot = path.resolve(
-  process.env.CORTEXLUME_RESOURCES_ROOT ?? path.join(path.dirname(process.execPath), 'resources'),
-);
+const resourcesRoot = resolveResourcesRoot(process.execPath);
 const packaged = process.env.CORTEXLUME_IS_PACKAGED === '1';
-const workspaceRoot = packaged ? null : path.resolve(appRoot, '..', '..');
+const workspaceRoot = path.resolve(appRoot, '..', '..');
 const templateRoot = packaged
   ? path.join(resourcesRoot, 'assets', 'templates', 'MNI152NLin6Asym')
-  : path.join(workspaceRoot!, 'assets', 'templates', 'MNI152NLin6Asym');
+  : path.join(workspaceRoot, 'assets', 'templates', 'MNI152NLin6Asym');
 
 function scienceCommand(): ScienceCommand {
-  if (packaged) {
-    const executable = path.join(resourcesRoot, 'cortexlume-science', 'cortexlume-science.exe');
-    return { command: executable, args: [], cwd: path.dirname(executable), assetRoot: templateRoot };
-  }
-  const script = path.join(workspaceRoot!, 'services', 'science', 'run.py');
-  const configuredPython = process.env.CORTEXLUME_PYTHON;
-  if (configuredPython) return { command: configuredPython, args: [script], cwd: path.dirname(script), assetRoot: templateRoot };
-  const workspacePython = path.join(workspaceRoot!, '.venv', 'Scripts', 'python.exe');
-  if (existsSync(workspacePython)) return { command: workspacePython, args: [script], cwd: path.dirname(script), assetRoot: templateRoot };
-  return { command: 'py', args: ['-3.12', script], cwd: path.dirname(script), assetRoot: templateRoot };
+  return resolveScienceRuntime({ packaged, resourcesRoot, workspaceRoot, assetRoot: templateRoot });
 }
 
 function openGui(projectPath: string): void {

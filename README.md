@@ -8,7 +8,13 @@
 [![User Wiki](https://img.shields.io/badge/Wiki-User_Guide-2f6f8f?logo=github)](https://github.com/inewhero/CortexLume/wiki)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/inewhero/CortexLume)
 
-CortexLume is an offline Windows workstation for designing fNIRS source–detector layouts, placing reusable patches on an anatomical head model, checking cortical targets, and exporting reproducible MNI-space results.
+CortexLume is an offline workstation for designing fNIRS source–detector layouts, placing reusable patches on an anatomical head model, checking cortical targets, and exporting reproducible MNI-space results.
+
+## See CortexLume in action
+
+[![Watch the CortexLume feature film](./media/CortexLume-feature-film-preview.jpg)](./media/CortexLume-feature-film-720p.mp4)
+
+[▶ Watch the feature film](./media/CortexLume-feature-film-720p.mp4) — 81 seconds · 720p · silent.
 
 ## Quick install
 
@@ -17,6 +23,10 @@ CortexLume is an offline Windows workstation for designing fNIRS source–detect
 Download and run **`CortexLume-*-win-x64-Setup.exe`** from the [latest release](https://github.com/inewhero/CortexLume/releases/latest). The installer launches CortexLume and creates Desktop and Start Menu shortcuts. The optional `CortexLume-*-examples.zip` is a separate tutorial dataset; it is not the application installer.
 
 Detailed instructions: [Installation and first launch](./wiki/Installation-and-First-Launch.md).
+
+### Linux (development preview)
+
+The first Linux target is Debian 13 (trixie), x86-64. Build a portable ZIP with `pnpm package:linux`; see [Linux setup, packaging, and verification](./docs/LINUX.md). Published Windows releases remain available above.
 
 ### Install with an AI coding agent
 
@@ -95,7 +105,7 @@ Scientific assets are integrity-checked during build and at runtime. Reproducibl
 
 ## Development
 
-Requirements: Node.js 24, pnpm 10, and Python 3.12.
+Requirements: Node.js 24, pnpm 10.30.0, and Python 3.12. The following setup is for Windows; see [Linux development](./docs/LINUX.md) for POSIX commands. Python development, build, and test scripts select the platform automatically.
 
 ```powershell
 pnpm install

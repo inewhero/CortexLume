@@ -26,6 +26,24 @@ describe('startup lifecycle', () => {
     );
   });
 
+  it('uses the requested runtime target instead of advertising Windows assets on Linux', async () => {
+    await expect(checkGithubUpdate('1.2.0', vi.fn(async () => releaseResponse()) as typeof fetch,
+      4_500, { platform: 'linux', arch: 'x64' }))
+      .resolves.toMatchObject({ status: 'available', installerAvailable: false, portableAvailable: false });
+  });
+
+  it('recognizes a Linux portable asset for the requested architecture', async () => {
+    const fetchImpl = vi.fn(async () => {
+      const release = await releaseResponse().json();
+      release.assets.push({ name: 'CortexLume-1.3.0-linux-arm64-portable.zip',
+        browser_download_url: 'https://github.com/inewhero/CortexLume/releases/download/v1.3.0/linux.zip' });
+      return new Response(JSON.stringify(release));
+    });
+    await expect(checkGithubUpdate('1.2.0', fetchImpl as typeof fetch,
+      4_500, { platform: 'linux', arch: 'arm64' }))
+      .resolves.toMatchObject({ status: 'available', installerAvailable: false, portableAvailable: true });
+  });
+
   it('does not downgrade when the release is older', async () => {
     await expect(checkGithubUpdate('1.4.0', vi.fn(async () => releaseResponse()) as typeof fetch))
       .resolves.toMatchObject({ status: 'up-to-date', latestVersion: '1.3.0' });

@@ -59,6 +59,13 @@ import type { UpdateCheckResult } from '../shared/startup';
 import type { McpScreenshotWorkerCompletion, McpScreenshotWorkerRequest } from '../shared/mcpScreenshot';
 import { completeMcpCaptureWorker, loadMcpCaptureWorkerRequest } from './mcpCaptureWorker';
 import { requireConfiguredRoots } from './mcpBootstrapConfig';
+import { resolveScienceRuntime } from './scienceRuntime';
+import { resolveWindowIcon } from './windowIcon';
+
+// Linux shells match this identity to the optional per-user desktop launcher.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('class', 'CortexLume');
+}
 
 let mainWindow: BrowserWindow | null = null;
 const headlessSmokeTest = process.env.CORTEXLUME_HEADLESS_TEST === '1';
@@ -69,8 +76,8 @@ const mcpCaptureProjectSha256 = process.argv.find((argument) => argument.startsW
   ?.slice('--mcp-capture-project-sha256='.length) ?? null;
 const mcpCaptureMode = mcpCaptureWorkerPath !== null;
 const squirrelFirstRun = process.argv.includes('--squirrel-firstrun');
-const squirrelUninstall = process.argv.includes('--squirrel-uninstall');
-const uninstallMode = process.argv.includes('--uninstall-cortexlume');
+const squirrelUninstall = process.platform === 'win32' && process.argv.includes('--squirrel-uninstall');
+const uninstallMode = process.platform === 'win32' && process.argv.includes('--uninstall-cortexlume');
 const installTestMarker = process.env.CORTEXLUME_INSTALL_TEST_MARKER;
 const startupProjectPath = process.argv.find((argument, index) => (
   index > 0 && !argument.startsWith('--') && argument.toLowerCase().endsWith('.cortexlume')
@@ -146,32 +153,12 @@ function resolveTemplateRoot(): string {
 }
 
 function resolveScienceCommand(): ScienceCommand {
-  if (app.isPackaged) {
-    const executable = path.join(process.resourcesPath, 'cortexlume-science', 'cortexlume-science.exe');
-    return { command: executable, args: [], cwd: path.dirname(executable), assetRoot: resolveTemplateRoot() };
-  }
-
-  const workspaceRoot = path.resolve(app.getAppPath(), '..', '..');
-  const script = path.join(workspaceRoot, 'services', 'science', 'run.py');
-  const configuredPython = process.env.CORTEXLUME_PYTHON;
-  if (configuredPython) {
-    return { command: configuredPython, args: [script], cwd: path.dirname(script), assetRoot: resolveTemplateRoot() };
-  }
-  // Development must execute the checked-out science source. A previously built
-  // sidecar can legitimately lag behind new IPC/API endpoints and is therefore
-  // only a fallback when the workspace virtual environment is unavailable.
-  const workspacePython = path.join(workspaceRoot, '.venv', 'Scripts', 'python.exe');
-  if (existsSync(workspacePython)) {
-    return { command: workspacePython, args: [script], cwd: path.dirname(script), assetRoot: resolveTemplateRoot() };
-  }
-  const builtExecutable = path.resolve(
-    workspaceRoot, 'services', 'science', 'dist',
-    'cortexlume-science', 'cortexlume-science.exe',
-  );
-  if (existsSync(builtExecutable)) {
-    return { command: builtExecutable, args: [], cwd: path.dirname(builtExecutable), assetRoot: resolveTemplateRoot() };
-  }
-  return { command: 'py', args: ['-3.12', script], cwd: path.dirname(script), assetRoot: resolveTemplateRoot() };
+  return resolveScienceRuntime({
+    packaged: app.isPackaged,
+    resourcesRoot: process.resourcesPath,
+    workspaceRoot: path.resolve(app.getAppPath(), '..', '..'),
+    assetRoot: resolveTemplateRoot(),
+  });
 }
 
 const scienceClient = new ScienceClient(resolveScienceCommand, (message) => console.error(message));
@@ -192,7 +179,7 @@ async function createWindow(): Promise<void> {
     minWidth: mcpCaptureRequest?.logicalWidth ?? 1120,
     minHeight: mcpCaptureRequest?.logicalHeight ?? 720,
     backgroundColor: '#0a0d12',
-    ...(app.isPackaged ? {} : { icon: path.join(app.getAppPath(), 'assets', 'icon.png') }),
+    ...resolveWindowIcon(process.platform, app.isPackaged, app.getAppPath(), process.resourcesPath),
     frame: false,
     show: !app.isPackaged && !headlessSmokeTest && !mcpCaptureMode,
     webPreferences: {
@@ -418,7 +405,7 @@ function inspectBrainNet(command: string, signal?: AbortSignal): Promise<BrainNe
         brainNetFound: false,
         launched: false,
         detail: (missingExecutable
-          ? 'MATLAB executable was not found. Set CORTEXLUME_MATLAB to matlab.exe.'
+          ? 'MATLAB executable was not found. Set CORTEXLUME_MATLAB to the full path of your MATLAB executable.'
           : `${stderr || stdout || error?.message || 'BrainNet Viewer was not found on the MATLAB path.'}`.trim()).slice(-500),
       });
     });
@@ -515,7 +502,10 @@ function registerIpc(): void {
 
   trustedHandle('startup:check-update', z.tuple([]), async () => {
     if (!app.isPackaged) return { status: 'development', currentVersion: app.getVersion() } satisfies UpdateCheckResult;
-    const update = await checkGithubUpdate(app.getVersion());
+    const update = await checkGithubUpdate(app.getVersion(), fetch, undefined, {
+      platform: process.platform,
+      arch: process.arch,
+    });
     validatedReleaseUrl = update.status === 'available' ? update.releaseUrl ?? null : null;
     return update;
   }, { maxPayloadBytes: IPC_SMALL_MAX_PAYLOAD_BYTES });
