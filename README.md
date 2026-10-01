@@ -12,12 +12,6 @@ CortexLume is an offline workstation for designing fNIRS source–detector layou
 
 ## See CortexLume in action
 
-![Animated preview of CortexLume](./media/CortexLume-feature-film-preview.gif)
-
-Animated highlights of array design, anatomical targeting, and the CortexLume workspace.
-
-**Full feature film** — 81 seconds · 720p · silent.
-
 https://github.com/user-attachments/assets/b38f99c2-ab55-42ac-8b3a-00dec9d37fdf
 
 ## Quick install
