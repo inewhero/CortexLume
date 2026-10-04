@@ -60,10 +60,32 @@ xvfb-run -a pnpm smoke:packaged:mcp-screenshot
 `apps/desktop/out/make/zip/linux/<arch>/CortexLume-<version>-linux-<arch>-portable.zip`.
 Extract the entire ZIP and run `./CortexLume` from its directory. Keep the
 `resources` directory and sidecar together. No system Python is needed in the
-packaged app. ZIP is the first supported Linux distribution format; no `.deb`,
-AppImage, system install, or file association is claimed yet. ARM64 paths are
+packaged app. Releases also provide an amd64 `.deb` built from this same tested
+portable runtime. Install it with `sudo apt install ./CortexLume-<version>-linux-amd64.deb`;
+launch CortexLume from the application menu or run `cortexlume`. Remove it with
+`sudo apt purge cortexlume`. The package installs under `/opt/CortexLume` and
+registers its system menu entry and icon. On AppArmor 4 systems, its maintainer
+scripts activate a profile allowing user namespaces only for the installed
+executable; Chromium's sandbox and system-wide restrictions stay enabled.
+AppImage and file associations are not provided. ARM64 paths are
 architecture-aware but ARM64 binaries and science dependencies need independent
 validation before claiming support.
+
+### Publish Linux release assets
+
+After Linux CI succeeds for the release tag's commit and the GitHub Release
+exists, dispatch **Publish verified Linux release** with the tag and Linux CI
+run ID. It checks that the successful run matches the tagged commit, wraps its
+portable ZIP as a Debian package, and tests installation, planning, exports,
+screenshots, GUI, and removal on Ubuntu 22.04 and 24.04. Only then does it upload
+both formats and SHA-256 checksums directly from GitHub Actions:
+
+```sh
+gh workflow run publish-linux-release.yml -f tag=v1.3.9 -f run_id=<successful-linux-ci-run-id>
+```
+
+The packaging script can also be run on Linux against an extracted portable app:
+`sh scripts/package-linux-deb.sh <app-directory> <version> <output-directory>`.
 
 ## Window and application-menu icons
 
