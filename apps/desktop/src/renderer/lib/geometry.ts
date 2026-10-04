@@ -1,5 +1,5 @@
 import type { LayoutDefinition, LayoutInstance, Vec2, Vec3 } from '@cortexlume/contracts';
-import { arcSurfaceSeed } from '@cortexlume/core';
+import { arcSurfaceSeed, channelSensitivityPath as buildChannelSensitivityPath } from '@cortexlume/core';
 import * as THREE from 'three';
 
 export const SCALP_RADII: Vec3 = [86, 105, 100];
@@ -120,7 +120,7 @@ export function projectToCorticalSurface(scalpPoint: Vec3, radiusMm = 0): Vec3 {
 }
 
 /**
- * MNI point where the inward projection first reaches the cortical surface.
+ * MNI point on the cortical surface nearest to the scalp contact.
  *
  * This is deliberately distinct from the sphere centre used to render an
  * optode in cortex mode. The latter remains outside gray matter by one optode
@@ -137,38 +137,10 @@ export function channelSensitivityPath(
   transmissionDepthMm = 25,
   sampleCount = 33,
 ): { points: Vec3[]; corticalContact: Vec3; target: Vec3 } {
-  const source = projectToCorticalContact(sourceScalpPoint);
-  const detector = projectToCorticalContact(detectorScalpPoint);
-  const sourceCenter = projectScalpSphereCenter(sourceScalpPoint, optodeRadiusMm);
-  const detectorCenter = projectScalpSphereCenter(detectorScalpPoint, optodeRadiusMm);
-  const scalpMidpoint: Vec3 = [
-    (sourceCenter[0] + detectorCenter[0]) / 2,
-    (sourceCenter[1] + detectorCenter[1]) / 2,
-    (sourceCenter[2] + detectorCenter[2]) / 2,
-  ];
-  const surfaceMidpoint = projectToCorticalContact(scalpMidpoint);
-  const inward = normalize3(scale3(scalpMidpoint, -1));
-  const firstGrayDistance = distance3(scalpMidpoint, surfaceMidpoint);
-  const target = add3(scalpMidpoint, scale3(inward, Math.max(firstGrayDistance, transmissionDepthMm)));
-  // Choose the control point so t=.5 is exactly the requested channel target.
-  const control: Vec3 = [
-    2 * target[0] - (source[0] + detector[0]) / 2,
-    2 * target[1] - (source[1] + detector[1]) / 2,
-    2 * target[2] - (source[2] + detector[2]) / 2,
-  ];
-  const count = Math.max(3, Math.min(129, Math.round(sampleCount)));
-  const points = Array.from({ length: count }, (_, index): Vec3 => {
-    const t = index / (count - 1);
-    const a = (1 - t) ** 2;
-    const b = 2 * (1 - t) * t;
-    const c = t ** 2;
-    return [
-      a * source[0] + b * control[0] + c * detector[0],
-      a * source[1] + b * control[1] + c * detector[1],
-      a * source[2] + b * control[2] + c * detector[2],
-    ];
-  });
-  return { points, corticalContact: surfaceMidpoint, target };
+  return buildChannelSensitivityPath({
+    projectCorticalContact: projectToCorticalContact,
+    projectScalpSphereCenter,
+  }, sourceScalpPoint, detectorScalpPoint, optodeRadiusMm, transmissionDepthMm, sampleCount);
 }
 
 export function add3(a: Vec3, b: Vec3): Vec3 {

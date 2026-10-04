@@ -3,15 +3,13 @@ import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { MeshBVH } from 'three-mesh-bvh';
+import { HeadModel } from '@cortexlume/core';
 import type { Vec3 } from '@cortexlume/contracts';
 import { useProjectStore } from '../renderer/store/projectStore';
 import { calibrateDigitizer, nearestOptodeMappings, type FivePointLabel } from '../renderer/lib/digitizer';
 import {
   fittedOptodePositions,
-  rasFromThree,
   registerSurfaceProjectors,
-  threeFromRas,
 } from '../renderer/lib/geometry';
 import { materializeProjectionSnapshot } from '../renderer/lib/projectionSnapshot';
 import { createProjectArchive, readProjectArchive } from './projectArchive';
@@ -51,59 +49,13 @@ beforeAll(async () => {
     readFile(new URL('../../public/anatomy/scalp.glb', import.meta.url)).then(geometryFromGlb),
     readFile(new URL('../../public/anatomy/brain_scientific.glb', import.meta.url)).then(geometryFromGlb),
   ]);
-  const scalpBvh = new MeshBVH(scalpGeometry);
-  const brainBvh = new MeshBVH(brainGeometry);
-  const scalpCenter = scalpGeometry.boundingSphere!.center.clone();
-  const brainCenter = brainGeometry.boundingSphere!.center.clone();
-  const scalpContact = (rasPoint: Vec3) => {
-    const input = new THREE.Vector3(...threeFromRas(rasPoint));
-    return scalpBvh.closestPointToPoint(input)?.point.clone() ?? input;
-  };
-  const scalpSphereCenter = (rasPoint: Vec3, radiusMm: number) => {
-    const contact = scalpContact(rasPoint);
-    return contact.addScaledVector(contact.clone().sub(scalpCenter).normalize(), radiusMm);
-  };
+  const head = new HeadModel({ scalpGeometry, cortexGeometry: brainGeometry });
   registerSurfaceProjectors({
     verified: true,
     source: 'test anatomical meshes',
-    scalp: (point) => rasFromThree(scalpContact(point)),
-    scalpSphereCenter: (point, radius) => rasFromThree(scalpSphereCenter(point, radius)),
-    cortex: (point, radius) => {
-      const origin = scalpSphereCenter(point, radius);
-      const direction = origin.clone().multiplyScalar(-1).normalize();
-      if (radius <= 0) {
-        const hit = brainBvh.raycastFirst(new THREE.Ray(origin, direction), THREE.DoubleSide, 0.05, 320);
-        if (hit?.point) return rasFromThree(hit.point);
-      } else {
-        const reference = Math.abs(direction.y) < 0.9
-          ? new THREE.Vector3(0, 1, 0)
-          : new THREE.Vector3(1, 0, 0);
-        const u = new THREE.Vector3().crossVectors(direction, reference).normalize();
-        const v = new THREE.Vector3().crossVectors(direction, u).normalize();
-        const samples: Array<{ x: number; y: number }> = [{ x: 0, y: 0 }];
-        for (const fraction of [0.48, 0.82]) {
-          for (let index = 0; index < 8; index += 1) {
-            const angle = index * Math.PI / 4;
-            samples.push({ x: Math.cos(angle) * radius * fraction, y: Math.sin(angle) * radius * fraction });
-          }
-        }
-        let firstCenterDistance = Number.POSITIVE_INFINITY;
-        for (const sample of samples) {
-          const sampleOrigin = origin.clone().addScaledVector(u, sample.x).addScaledVector(v, sample.y);
-          const hit = brainBvh.raycastFirst(new THREE.Ray(sampleOrigin, direction), THREE.DoubleSide, 0.05, 320);
-          if (!hit) continue;
-          const sphereInset = Math.sqrt(Math.max(0, radius ** 2 - sample.x ** 2 - sample.y ** 2));
-          firstCenterDistance = Math.min(firstCenterDistance, hit.distance - sphereInset);
-        }
-        if (Number.isFinite(firstCenterDistance)) {
-          return rasFromThree(origin.addScaledVector(direction, Math.max(0, firstCenterDistance)));
-        }
-      }
-      const nearest = brainBvh.closestPointToPoint(origin);
-      if (!nearest) return point;
-      const outward = nearest.point.clone().sub(brainCenter).normalize();
-      return rasFromThree(nearest.point.clone().addScaledVector(outward, radius));
-    },
+    scalp: (point) => head.projectScalp(point),
+    scalpSphereCenter: (point, radius) => head.projectScalpSphereCenter(point, radius),
+    cortex: (point, radius) => head.projectCortex(point, radius),
   });
 });
 

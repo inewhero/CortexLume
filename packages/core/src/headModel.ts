@@ -19,7 +19,6 @@ export class HeadModel {
   readonly surfaceVerticesRasMm: readonly Vec3[];
   readonly vertexAreasMm2: Float32Array;
   private readonly scalpCenter: THREE.Vector3;
-  private readonly cortexCenter: THREE.Vector3;
   private surfaceGraph: Array<Array<{ vertex: number; distance: number }>> | null = null;
 
   constructor(options: {
@@ -37,7 +36,6 @@ export class HeadModel {
     this.scalpBvh = new MeshBVH(this.scalpGeometry);
     this.cortexBvh = new MeshBVH(this.cortexGeometry);
     this.scalpCenter = this.scalpGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3();
-    this.cortexCenter = this.cortexGeometry.boundingSphere?.center.clone() ?? new THREE.Vector3();
     this.surfaceVerticesRasMm = options.surfaceVerticesRasMm ?? Array.from({ length: cortexCount }, (_, index) => {
       const position = this.cortexGeometry.getAttribute('position');
       return rasFromThree(new THREE.Vector3(position.getX(index), position.getY(index), position.getZ(index)));
@@ -63,33 +61,14 @@ export class HeadModel {
   }
 
   projectCortex(point: Vec3, radiusMm: number): Vec3 {
-    const origin = new THREE.Vector3(...threeFromRas(this.projectScalpSphereCenter(point, radiusMm)));
-    const direction = origin.clone().multiplyScalar(-1).normalize();
-    if (radiusMm <= 0) {
-      const hit = this.cortexBvh.raycastFirst(new THREE.Ray(origin, direction), THREE.DoubleSide, 0.05, 320);
-      if (hit?.point) return rasFromThree(hit.point);
-    } else {
-      const reference = Math.abs(direction.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
-      const u = new THREE.Vector3().crossVectors(direction, reference).normalize();
-      const v = new THREE.Vector3().crossVectors(direction, u).normalize();
-      const samples: Array<{ x: number; y: number }> = [{ x: 0, y: 0 }];
-      for (const fraction of [0.48, 0.82]) for (let index = 0; index < 8; index += 1) {
-        const angle = index * Math.PI / 4;
-        samples.push({ x: Math.cos(angle) * radiusMm * fraction, y: Math.sin(angle) * radiusMm * fraction });
-      }
-      let firstCenterDistance = Number.POSITIVE_INFINITY;
-      for (const sample of samples) {
-        const sampleOrigin = origin.clone().addScaledVector(u, sample.x).addScaledVector(v, sample.y);
-        const hit = this.cortexBvh.raycastFirst(new THREE.Ray(sampleOrigin, direction), THREE.DoubleSide, 0.05, 320);
-        if (!hit) continue;
-        const sphereInset = Math.sqrt(Math.max(0, radiusMm ** 2 - sample.x ** 2 - sample.y ** 2));
-        firstCenterDistance = Math.min(firstCenterDistance, hit.distance - sphereInset);
-      }
-      if (Number.isFinite(firstCenterDistance)) return rasFromThree(origin.addScaledVector(direction, Math.max(0, firstCenterDistance)));
-    }
-    const nearest = this.cortexBvh.closestPointToPoint(origin);
+    const scalp = new THREE.Vector3(...threeFromRas(this.projectScalp(point)));
+    // A ray toward the coordinate origin can pass through the interhemispheric
+    // gap and hit distant cortex. Use the closest point on the correspondence
+    // mesh instead, so contact is local and independent of the MNI origin.
+    const nearest = this.cortexBvh.closestPointToPoint(scalp);
     if (!nearest) throw new Error('Cortex BVH projection failed.');
-    return rasFromThree(nearest.point.clone().addScaledVector(nearest.point.clone().sub(this.cortexCenter).normalize(), Math.max(0, radiusMm)));
+    const outward = scalp.clone().sub(nearest.point).normalize();
+    return rasFromThree(nearest.point.clone().addScaledVector(outward, Math.max(0, radiusMm)));
   }
 
   projectCorticalContact(point: Vec3): Vec3 {

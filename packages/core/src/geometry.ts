@@ -119,7 +119,7 @@ export function channelSensitivityPath(
     (sourceCenter[2] + detectorCenter[2]) / 2,
   ];
   const surfaceMidpoint = head.projectCorticalContact(scalpMidpoint);
-  const inward = normalize3(scale3(scalpMidpoint, -1));
+  const inward = normalize3(add3(surfaceMidpoint, scale3(scalpMidpoint, -1)));
   const target = add3(scalpMidpoint, scale3(inward, Math.max(distance3(scalpMidpoint, surfaceMidpoint), transmissionDepthMm)));
   const control: Vec3 = [
     2 * target[0] - (source[0] + detector[0]) / 2,
