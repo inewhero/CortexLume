@@ -135,14 +135,19 @@ jobs:
           path: release
       - name: Download the verified portable ZIP
         run: gh run download "$CI_RUN_ID" --name CortexLume-linux-x64-baseline --dir release
-      - name: Publish Linux packages and checksums
+      - name: Publish Linux packages and add checksums to release notes
         shell: bash
         run: |
           set -euo pipefail
           version=${RELEASE_TAG#v}
           zip="CortexLume-$version-linux-x64-portable.zip"
           deb="CortexLume-$version-linux-amd64.deb"
-          checksum="CortexLume-$version-linux-x64-SHA256SUMS.txt"
           cd release
-          sha256sum "$zip" "$deb" > "$checksum"
-          gh release upload "$RELEASE_TAG" "$zip" "$deb" "$checksum"
+          gh release upload "$RELEASE_TAG" "$zip" "$deb"
+          gh release view "$RELEASE_TAG" --json body --jq '.body' > ../release-notes.md
+          {
+            printf '\n<details>\n<summary>Linux SHA-256</summary>\n\n```text\n'
+            sha256sum "$zip" "$deb"
+            printf '```\n\n</details>\n'
+          } >> ../release-notes.md
+          gh release edit "$RELEASE_TAG" --notes-file ../release-notes.md

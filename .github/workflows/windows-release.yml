@@ -219,3 +219,12 @@ jobs:
             --repo "${{ github.repository }}" \
             --verify-tag \
             --generate-notes
+          gh release view "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" --json body --jq '.body' > release-notes.md
+          {
+            printf '\n<details>\n<summary>Windows and examples SHA-256</summary>\n\n```text\n'
+            cat release/SHA256SUMS
+            printf '```\n\n</details>\n'
+          } >> release-notes.md
+          gh release edit "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" --notes-file release-notes.md

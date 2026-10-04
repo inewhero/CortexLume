@@ -78,7 +78,8 @@ exists, dispatch **Publish verified Linux release** with the tag and Linux CI
 run ID. It checks that the successful run matches the tagged commit, wraps its
 portable ZIP as a Debian package, and tests installation, planning, exports,
 screenshots, GUI, and removal on Ubuntu 22.04 and 24.04. Only then does it upload
-both formats and SHA-256 checksums directly from GitHub Actions:
+both formats directly from GitHub Actions and adds SHA-256 checksums to a
+collapsible section in the release notes. Checksums are not separate release attachments:
 
 ```sh
 gh workflow run publish-linux-release.yml -f tag=v1.3.9 -f run_id=<successful-linux-ci-run-id>
