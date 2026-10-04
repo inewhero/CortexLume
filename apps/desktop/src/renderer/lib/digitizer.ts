@@ -27,6 +27,49 @@ function centroid(points: Vec3[]): Vec3 {
   return multiply(points.reduce(add, [0, 0, 0] as Vec3), 1 / points.length);
 }
 
+function largestEigenvector(matrix: number[][]): number[] {
+  // Jacobi diagonalization of the symmetric 4x4 Horn matrix. A single-seed
+  // power iteration can miss the largest eigenvector entirely at a half-turn.
+  const magnitude = Math.max(...matrix.flat().map(Math.abs)) || 1;
+  const a = matrix.map((row) => row.map((value) => value / magnitude));
+  const vectors = Array.from({ length: 4 }, (_, row) =>
+    Array.from({ length: 4 }, (_, column) => row === column ? 1 : 0) as number[]);
+  for (let iteration = 0; iteration < 64; iteration += 1) {
+    let p = 0; let q = 1;
+    for (let row = 0; row < 4; row += 1) {
+      for (let column = row + 1; column < 4; column += 1) {
+        if (Math.abs(a[row]![column]!) > Math.abs(a[p]![q]!)) { p = row; q = column; }
+      }
+    }
+    if (Math.abs(a[p]![q]!) <= 8 * Number.EPSILON) break;
+    const app = a[p]![p]!; const aqq = a[q]![q]!; const apq = a[p]![q]!;
+    const tau = (aqq - app) / (2 * apq);
+    const tangent = (tau >= 0 ? 1 : -1) / (Math.abs(tau) + Math.hypot(1, tau));
+    const cosine = 1 / Math.hypot(1, tangent);
+    const sine = tangent * cosine;
+    for (let row = 0; row < 4; row += 1) {
+      if (row !== p && row !== q) {
+        const arp = a[row]![p]!; const arq = a[row]![q]!;
+        a[row]![p] = a[p]![row] = cosine * arp - sine * arq;
+        a[row]![q] = a[q]![row] = sine * arp + cosine * arq;
+      }
+      const vrp = vectors[row]![p]!; const vrq = vectors[row]![q]!;
+      vectors[row]![p] = cosine * vrp - sine * vrq;
+      vectors[row]![q] = sine * vrp + cosine * vrq;
+    }
+    a[p]![p] = app - tangent * apq;
+    a[q]![q] = aqq + tangent * apq;
+    a[p]![q] = a[q]![p] = 0;
+  }
+  let largest = 0;
+  for (let index = 1; index < 4; index += 1) {
+    if (a[index]![index]! > a[largest]![largest]!) largest = index;
+  }
+  const vector = vectors.map((row) => row[largest]!);
+  const length = Math.hypot(...vector);
+  return vector.map((value) => value / length);
+}
+
 function quaternionRotation(source: Vec3[], target: Vec3[]): number[] {
   const s: [Vec3, Vec3, Vec3] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   for (let i = 0; i < source.length; i += 1) {
@@ -44,13 +87,7 @@ function quaternionRotation(source: Vec3[], target: Vec3[]): number[] {
     [szx - sxz, sxy + syx, -sxx + syy - szz, syz + szy],
     [sxy - syx, szx + sxz, syz + szy, -sxx - syy + szz],
   ];
-  const shift = Math.max(...n.map((row) => row.reduce((sum, value) => sum + Math.abs(value), 0))) + 1;
-  let q = [1, 0, 0, 0];
-  for (let iteration = 0; iteration < 80; iteration += 1) {
-    const next = n.map((row, index) => row.reduce((sum, value, column) => sum + value * q[column]!, shift * q[index]!));
-    const length = Math.hypot(...next);
-    q = next.map((value) => value / length);
-  }
+  const q = largestEigenvector(n);
   const w = q[0]!; const x = q[1]!; const y = q[2]!; const z = q[3]!;
   return [
     1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),

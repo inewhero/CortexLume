@@ -1,8 +1,61 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '@cortexlume/contracts';
-import { applySimilarityTransform, fitSimilarityTransform, landmarkAlias, nearestOptodeMappings } from './digitizer';
+import { applySimilarityTransform, calibrateDigitizer, fitSimilarityTransform, FIVE_POINT_LABELS, landmarkAlias, nearestOptodeMappings } from './digitizer';
 
 describe('digitizer five-point calibration', () => {
+  it.each<Vec3>([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1 / 3, 2 / 3, 2 / 3]])(
+    'recovers an exact half-turn about axis (%s, %s, %s)',
+    (ax, ay, az) => {
+      const source: Vec3[] = [[0, 90, 0], [0, -90, 0], [-70, 0, 0], [70, 0, 0], [0, 0, 100]];
+      // R = 2 aa^T - I gives an exact half-turn without sin(pi) roundoff.
+      const target: Vec3[] = source.map(([x, y, z]) => {
+        const projection = ax * x + ay * y + az * z;
+        return [12 + 1.7 * (2 * ax * projection - x), -34 + 1.7 * (2 * ay * projection - y), 56 + 1.7 * (2 * az * projection - z)];
+      });
+      const transform = fitSimilarityTransform(source, target);
+      expect(transform.scale).toBeCloseTo(1.7, 10);
+      source.forEach((point, index) => {
+        const actual = applySimilarityTransform(transform.matrix, point);
+        actual.forEach((value, coordinate) => expect(value).toBeCloseTo(target[index]![coordinate]!, 8));
+      });
+    },
+  );
+
+  it.each([0, 179.999999, 180.000001])('recovers a %s degree rotation about an oblique axis', (degrees) => {
+    const source: Vec3[] = [[3, 7, 11], [81, -2, 4], [-5, 63, 9], [6, -8, 95], [-31, -27, -18]];
+    const axis: Vec3 = [1 / 3, 2 / 3, 2 / 3];
+    const angle = degrees * Math.PI / 180;
+    const c = Math.cos(angle); const s = Math.sin(angle);
+    const target = source.map((point): Vec3 => {
+      const projection = point.reduce((sum, value, index) => sum + value * axis[index]!, 0);
+      const cross: Vec3 = [axis[1] * point[2] - axis[2] * point[1], axis[2] * point[0] - axis[0] * point[2], axis[0] * point[1] - axis[1] * point[0]];
+      return point.map((value, index) => 17 + 0.6 * (c * value + s * cross[index]! + (1 - c) * projection * axis[index]!)) as Vec3;
+    });
+    const transform = fitSimilarityTransform(source, target);
+    expect(transform.scale).toBeCloseTo(0.6, 10);
+    source.forEach((point, index) => {
+      applySimilarityTransform(transform.matrix, point).forEach((value, coordinate) =>
+        expect(value).toBeCloseTo(target[index]![coordinate]!, 8));
+    });
+  });
+
+  it('calibrates a half-turn session including unit conversion and an extra optode', () => {
+    const landmarks: Vec3[] = [[0, 9, 0], [0, -9, 0], [-7, 0, 0], [7, 0, 0], [0, 0, 10]];
+    const expected = ([x, y, z]: Vec3): Vec3 => [12 - 10 * x, -34 - 10 * y, 56 + 10 * z];
+    const points = [...landmarks, [2, 3, 4] as Vec3].map((rawPosition, index) => ({
+      id: crypto.randomUUID(), label: FIVE_POINT_LABELS[index] ?? 'S1', kind: 'source' as const, rawPosition,
+    }));
+    const session = calibrateDigitizer({ name: 'Half-turn', source: { format: 'MANUAL', fileName: null, sha256: null }, points },
+      { Nz: points[0]!.id, Iz: points[1]!.id, LPA: points[2]!.id, RPA: points[3]!.id, Cz: points[4]!.id },
+      { Nz: expected(landmarks[0]!), Iz: expected(landmarks[1]!), LPA: expected(landmarks[2]!), RPA: expected(landmarks[3]!), Cz: expected(landmarks[4]!) }, 'cm');
+    expect(session.calibration.scale).toBeCloseTo(1, 10);
+    expect(session.calibration.rmsResidualMm).toBeLessThan(1e-8);
+    expect(session.calibration.maxResidualMm).toBeLessThan(1e-8);
+    session.calibratedPoints.forEach((point, index) => {
+      point.rasMm.forEach((value, coordinate) => expect(value).toBeCloseTo(expected(points[index]!.rawPosition)[coordinate]!, 8));
+    });
+  });
+
   it('recovers a rotated, scaled and translated point set', () => {
     const source: Vec3[] = [[0, 0, 0], [10, 0, 0], [0, 20, 0], [0, 0, 30], [5, 8, 13]];
     const target: Vec3[] = source.map(([x, y, z]) => [100 - 2 * y, -40 + 2 * x, 25 + 2 * z]);
