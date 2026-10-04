@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BidsSettingsSchema,
+  ChannelSensitivityKernelSchema,
   AnatomicalCoverageAnalysisSchema,
   ANATOMICAL_COVERAGE_LIMITS,
   AnatomicalCoverageRequestSchema,
@@ -9,6 +10,14 @@ import {
   LayoutDefinitionSchema,
   ProjectionSettingsSchema,
 } from './index';
+
+const adaptiveKernelFixture = {
+  model: 'sd-adaptive-geometric-v1', centerRasMm: [0, 0, 0],
+  longitudinalAxis: [1, 0, 0], lateralAxis: [0, 1, 0], depthAxis: [0, 0, 1],
+  sourceDetectorDistanceMm: 30, scalpCortexGapMm: 10, effectiveDepthMm: 15,
+  longitudinalSigmaMm: 10.5, lateralSigmaMm: 6, depthSigmaMm: 11,
+  amplitude: 0.8, supportSigma: 4,
+};
 
 function budgetChannel(index: number, pointCount = 2, coordinate?: number) {
   const id = (offset: number) => `00000000-0000-4000-8000-${(offset + index).toString(16).padStart(12, '0')}`;
@@ -20,6 +29,22 @@ function budgetChannel(index: number, pointCount = 2, coordinate?: number) {
     )),
   };
 }
+
+describe('adaptive kernel versions', () => {
+  it('accepts v1 and v2 descriptors and rejects mixed request versions', () => {
+    for (const model of ['sd-adaptive-geometric-v1', 'sd-adaptive-geometric-v2']) {
+      const kernel = { ...adaptiveKernelFixture, model };
+      expect(ChannelSensitivityKernelSchema.parse(kernel).model).toBe(model);
+      expect(AnatomicalCoverageRequestSchema.safeParse({ channels: [{
+        ...budgetChannel(1), sensitivityKernel: kernel,
+      }] }).success).toBe(true);
+    }
+    expect(AnatomicalCoverageRequestSchema.safeParse({ channels: [
+      { ...budgetChannel(1), sensitivityKernel: adaptiveKernelFixture },
+      { ...budgetChannel(2), sensitivityKernel: { ...adaptiveKernelFixture, model: 'sd-adaptive-geometric-v2' } },
+    ] }).success).toBe(false);
+  });
+});
 
 describe('LayoutDefinitionSchema', () => {
   it('rejects non-UUID optode identifiers', () => {
@@ -155,6 +180,18 @@ describe('LayoutDefinitionSchema', () => {
         interpretation: 'Geometric anatomical coverage prior; not photon sensitivity, fluence, or Jacobian.',
       },
     };
+    for (const model of ['sd-adaptive-geometric-v1', 'sd-adaptive-geometric-v2']) {
+      const adaptive = {
+        ...base,
+        channels: [{ ...base.channels[0], sensitivityKernel: { ...adaptiveKernelFixture, model }, kernelSha256: 'f'.repeat(64) }],
+        parameters: { ...base.parameters, kernel: model, distanceMetric: 'channel-local-anisotropic-distance' },
+      };
+      expect(AnatomicalCoverageAnalysisSchema.parse(adaptive).parameters.kernel).toBe(model);
+      expect(AnatomicalCoverageAnalysisSchema.safeParse({
+        ...adaptive, parameters: { ...adaptive.parameters,
+          kernel: model === 'sd-adaptive-geometric-v1' ? 'sd-adaptive-geometric-v2' : 'sd-adaptive-geometric-v1' },
+      }).success).toBe(false);
+    }
     const parsed = AnatomicalCoverageAnalysisSchema.parse(base);
     expect(parsed.mosaic.vertexIndices).toEqual([4, 17]);
     expect(parsed.mosaic.geometricVertexIndices).toEqual([4, 17]);

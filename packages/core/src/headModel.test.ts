@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { loadHeadModelFromAssets } from './nodeAssets.js';
 import { HeadModel, threeFromRas } from './headModel.js';
 import { channelSensitivityPath, distance3 } from './geometry.js';
+import { channelSensitivityProjection } from './sensitivity.js';
 import type { Vec3 } from '@cortexlume/contracts';
 
 let head: HeadModel;
@@ -38,6 +39,20 @@ describe('local cortical projection', () => {
       expect(distance3(center, contact)).toBeCloseTo(3.6, 6);
       expect(distance3(scalp, center)).toBeLessThan(distance3(scalp, contact));
     }
+  });
+
+  it('keeps the adaptive posterior field and representative path near local cortex', () => {
+    const source = head.projectScalp([-15, -110, 0]);
+    const detector = head.projectScalp([15, -110, 0]);
+    const channel = channelSensitivityProjection(head, source, detector);
+    expect(channel.corticalContact[1]).toBeLessThan(-70);
+    expect(channel.target[1]).toBeLessThan(-60);
+    expect(distance3(channel.kernel.centerRasMm, channel.corticalContact)).toBe(0);
+    expect(channel.kernel.sourceDetectorDistanceMm).toBeCloseTo(distance3(source, detector), 6);
+    expect(channel.kernel.scalpCortexGapMm).toBeLessThan(20);
+    const largeDisplaySpheres = channelSensitivityProjection(head, source, detector, 12);
+    expect(largeDisplaySpheres).toEqual(channel);
+    channel.points[16]!.forEach((value, index) => expect(value).toBeCloseTo(channel.target[index]!, 8));
   });
 
   it('directs channel depth along the local cortical contact, independent of coordinate origin', () => {

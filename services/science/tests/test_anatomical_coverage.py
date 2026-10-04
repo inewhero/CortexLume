@@ -13,6 +13,7 @@ from cortexlume_science.anatomical_coverage import (
     AnatomicalCoverageError,
     SurfaceAtlasData,
     _channel_kernel,
+    _adaptive_channel_kernel,
     _canonical_path_sha256,
     _path_length_mm,
     _stable_id,
@@ -25,6 +26,8 @@ from cortexlume_science.models import (
     AnatomicalCoverageChannel,
     AnatomicalCoverageRequest,
     AnatomicalCoverageSettings,
+    ChannelSensitivityKernel,
+    AnatomicalCoverageAnalysis,
 )
 
 
@@ -70,6 +73,95 @@ def settings() -> AnatomicalCoverageSettings:
         supportRadiusMm=4.0,
         minimumAtlasMembership=0.05,
     )
+
+
+def adaptive_kernel(separation=30.0, gap=10.0):
+    depth = max(2.0, min(40.0, separation / 2))
+    return ChannelSensitivityKernel(
+        model="sd-adaptive-geometric-v1", centerRasMm=[4, 0, 0],
+        longitudinalAxis=[1, 0, 0], lateralAxis=[0, 1, 0], depthAxis=[0, 0, 1],
+        sourceDetectorDistanceMm=separation, scalpCortexGapMm=gap, effectiveDepthMm=depth,
+        longitudinalSigmaMm=max(3, min(30, .35 * separation)),
+        lateralSigmaMm=max(2, min(20, .2 * separation)) / np.sqrt(1 + (gap / depth) ** 2),
+        depthSigmaMm=max(2, .5 * np.sqrt(max(0, depth ** 2 - gap ** 2))),
+        amplitude=np.exp(-.5 * (gap / depth) ** 2), supportSigma=2,
+    )
+
+
+def test_adaptive_same_center_has_different_coverage_and_gap_attenuation():
+    vertices = np.asarray([[4, 0, 0], [4, 8, 0], [18, 0, 0], [4, 0, 6]], dtype=float)
+    short = _adaptive_channel_kernel(vertices, adaptive_kernel(20))
+    long = _adaptive_channel_kernel(vertices, adaptive_kernel(40))
+    thick = _adaptive_channel_kernel(vertices, adaptive_kernel(40, 20))
+    assert np.all(long > short)
+    assert np.all(thick <= long)
+    assert all(np.all(np.isfinite(weights)) and np.all((weights >= 0) & (weights <= 1))
+               for weights in (short, long, thick))
+
+
+def test_adaptive_engine_echoes_kernel_and_uses_descriptor_instead_of_path():
+    kernel = adaptive_kernel()
+    a = channel(INSTANCE_A, PAIR_A, 999).model_copy(update={"sensitivity_kernel": kernel})
+    engine = AnatomicalCoverageEngine(fixture_surface())
+    result = engine.compute(AnatomicalCoverageRequest(channels=[a]))
+    assert result.mosaic.geometric_vertex_indices
+    assert result.parameters.kernel == "sd-adaptive-geometric-v1"
+    assert result.parameters.distance_metric == "channel-local-anisotropic-distance"
+    assert result.channels[0].sensitivity_kernel == kernel
+    changed = a.model_copy(update={"sensitivity_kernel": adaptive_kernel(40)})
+    changed_result = engine.compute(AnatomicalCoverageRequest(channels=[changed]))
+    assert changed_result.channels[0].kernel_sha256 != result.channels[0].kernel_sha256
+    assert changed_result.channels[0].path_sha256 == result.channels[0].path_sha256
+
+
+def test_adaptive_validation_rejects_mixed_models_and_invalid_axes():
+    a = channel(INSTANCE_A, PAIR_A, 0).model_copy(update={"sensitivity_kernel": adaptive_kernel()})
+    b = channel(INSTANCE_B, PAIR_B, 3)
+    with pytest.raises(ValidationError, match="coverage_mixed_kernel_models"):
+        AnatomicalCoverageRequest(channels=[a, b])
+    with pytest.raises(AnatomicalCoverageError, match="coverage_mixed_kernel_models"):
+        AnatomicalCoverageEngine(fixture_surface()).compute(
+            AnatomicalCoverageRequest.model_construct(channels=[a, b], settings=settings()))
+    invalid = adaptive_kernel().model_dump(by_alias=True)
+    invalid["depthAxis"] = [1, 0, 0]
+    with pytest.raises(ValidationError, match="orthonormal"):
+        ChannelSensitivityKernel.model_validate(invalid)
+    with pytest.raises(ValidationError, match="orthonormal"):
+        _adaptive_channel_kernel(np.zeros((1, 3)), adaptive_kernel().model_copy(update={"depth_axis": (0, 0, 0)}))
+
+
+def test_v2_descriptor_controls_field_and_preserves_exact_version_provenance():
+    v1 = adaptive_kernel()
+    v2_data = v1.model_dump(by_alias=True)
+    v2_data.update(model="sd-adaptive-geometric-v2", lateralSigmaMm=6, depthSigmaMm=2 * v1.depth_sigma_mm,
+                   supportSigma=4)
+    v2 = ChannelSensitivityKernel.model_validate(v2_data)
+    a = channel(INSTANCE_A, PAIR_A, 999).model_copy(update={"sensitivity_kernel": v2})
+    engine = AnatomicalCoverageEngine(fixture_surface())
+    result = engine.compute(AnatomicalCoverageRequest(channels=[a]))
+    assert result.parameters.kernel == "sd-adaptive-geometric-v2"
+    assert result.channels[0].sensitivity_kernel == v2
+    assert result.parameters.distance_metric == "channel-local-anisotropic-distance"
+    same_coefficients_v1 = v2.model_copy(update={"model": "sd-adaptive-geometric-v1"})
+    result_v1 = engine.compute(AnatomicalCoverageRequest(channels=[
+        a.model_copy(update={"sensitivity_kernel": same_coefficients_v1})]))
+    assert result_v1.mosaic == result.mosaic
+    assert result_v1.channels[0].kernel_sha256 != result.channels[0].kernel_sha256
+    mismatch = result.model_dump(by_alias=True)
+    mismatch["parameters"]["kernel"] = "sd-adaptive-geometric-v1"
+    with pytest.raises(ValidationError, match="coverage_kernel_provenance_mismatch"):
+        AnatomicalCoverageAnalysis.model_validate(mismatch)
+
+
+def test_v1_v2_mixture_rejected_at_model_and_computation_boundaries():
+    a = channel(INSTANCE_A, PAIR_A, 0).model_copy(update={"sensitivity_kernel": adaptive_kernel()})
+    b = channel(INSTANCE_B, PAIR_B, 3).model_copy(update={
+        "sensitivity_kernel": adaptive_kernel().model_copy(update={"model": "sd-adaptive-geometric-v2"})})
+    with pytest.raises(ValidationError, match="coverage_mixed_kernel_models"):
+        AnatomicalCoverageRequest(channels=[a, b])
+    with pytest.raises(AnatomicalCoverageError, match="coverage_mixed_kernel_models"):
+        AnatomicalCoverageEngine(fixture_surface()).compute(
+            AnatomicalCoverageRequest.model_construct(channels=[a, b], settings=settings()))
 
 
 def test_mosaic_is_permutation_invariant_and_uses_stable_multi_patch_ids() -> None:

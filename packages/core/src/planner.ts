@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type {
+  ChannelSensitivityKernel,
   FunctionalTargetMap,
   LayoutDefinition,
   LayoutInstance,
@@ -7,7 +8,8 @@ import type {
   PlanningCandidateSummary,
   Vec3,
 } from '@cortexlume/contracts';
-import { channelSensitivityPath, distance3 } from './geometry.js';
+import { distance3 } from './geometry.js';
+import { createChannelSensitivityKernel, DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM, evaluateChannelSensitivityKernel } from './sensitivity.js';
 import { HeadModel } from './headModel.js';
 import { createGridLayout, deterministicUuid, type GridPatchSpec } from './layout.js';
 import {
@@ -29,6 +31,7 @@ export interface PlannerRequest {
   patches?: PlannerPatchSpec[];
   longChannelRangeMm?: [number, number];
   optodeRadiusMm?: number;
+  /** Compatibility setting: upper cap for automatic depth, not a fixed channel depth. */
   transmissionDepthMm?: number;
   kernelSigmaMm?: number;
   supportRadiusMm?: number;
@@ -94,18 +97,8 @@ function stableTargetSamples(target: FunctionalTargetMap, areas: Float32Array, m
   return result;
 }
 
-interface CoverageSegment {
-  start: Vec3;
-  dx: number;
-  dy: number;
-  dz: number;
-  lengthSquared: number;
-  minimum: Vec3;
-  maximum: Vec3;
-}
-
 interface CoveragePath {
-  segments: CoverageSegment[];
+  kernel: ChannelSensitivityKernel;
 }
 
 type TargetSampleCache = Map<number, Array<{ vertex: number; mass: number }>>;
@@ -123,67 +116,27 @@ function cachedTargetSamples(
   return samples;
 }
 
-function prepareCoveragePath(points: Vec3[]): CoveragePath {
-  const segments: CoverageSegment[] = [];
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const start = points[index]!;
-    const end = points[index + 1]!;
-    const dx = end[0] - start[0];
-    const dy = end[1] - start[1];
-    const dz = end[2] - start[2];
-    segments.push({
-      start,
-      dx,
-      dy,
-      dz,
-      lengthSquared: dx * dx + dy * dy + dz * dz,
-      minimum: [Math.min(start[0], end[0]), Math.min(start[1], end[1]), Math.min(start[2], end[2])],
-      maximum: [Math.max(start[0], end[0]), Math.max(start[1], end[1]), Math.max(start[2], end[2])],
-    });
-  }
-  return { segments };
-}
-
-function pointSegmentDistanceSquared(point: Vec3, segment: CoverageSegment): number {
-  const px = point[0] - segment.start[0];
-  const py = point[1] - segment.start[1];
-  const pz = point[2] - segment.start[2];
-  const t = segment.lengthSquared <= 1e-12 ? 0 : Math.max(0, Math.min(1, (
-    px * segment.dx + py * segment.dy + pz * segment.dz
-  ) / segment.lengthSquared));
-  return (px - t * segment.dx) ** 2 + (py - t * segment.dy) ** 2 + (pz - t * segment.dz) ** 2;
-}
-
-function pointBoundsDistanceSquared(point: Vec3, segment: CoverageSegment): number {
-  const dx = point[0] < segment.minimum[0] ? segment.minimum[0] - point[0]
-    : point[0] > segment.maximum[0] ? point[0] - segment.maximum[0] : 0;
-  const dy = point[1] < segment.minimum[1] ? segment.minimum[1] - point[1]
-    : point[1] > segment.maximum[1] ? point[1] - segment.maximum[1] : 0;
-  const dz = point[2] < segment.minimum[2] ? segment.minimum[2] - point[2]
-    : point[2] > segment.maximum[2] ? point[2] - segment.maximum[2] : 0;
-  return dx * dx + dy * dy + dz * dz;
-}
-
 function candidatePaths(
   head: HeadModel,
   layouts: LayoutDefinition[],
   instances: LayoutInstance[],
-  radius: number,
+  _radius: number,
   depth: number,
-  sampleCount = 33,
+  _sampleCount = 33,
   positionGroups?: Map<string, Vec3>[],
+  sigma = 12,
+  support = 24,
 ): CoveragePath[] {
   return instances.flatMap((instance, index) => {
     const layout = layouts[index]!;
     const positions = positionGroups?.[index] ?? head.fittedOptodePositions(layout, instance);
-    // Pair endpoints share fitted Vec3 objects. Cache their mesh projections
-    // within this instance while leaving each pair midpoint fail-closed.
-    const projectionCache = new Map<Vec3, { corticalContact: Vec3; sphereCenter: Vec3 }>();
     return layout.pairs.flatMap((pair) => {
       const source = positions.get(pair.sourceId); const detector = positions.get(pair.detectorId);
-      return source && detector ? [prepareCoveragePath(channelSensitivityPath(
-        head, source, detector, radius, depth, sampleCount, projectionCache,
-      ).points)] : [];
+      return source && detector ? [{ kernel: createChannelSensitivityKernel(head, source, detector, {
+        maximumDepthMm: depth,
+        kernelSigmaMm: sigma, supportRadiusMm: support,
+        transmissionDepthMm: instance.pairDepthOverridesMm?.[pair.id],
+      }) }] : [];
     });
   });
 }
@@ -192,42 +145,29 @@ function targetMassCoverage(
   head: HeadModel,
   target: FunctionalTargetMap,
   paths: CoveragePath[],
-  sigma: number,
-  support: number,
+  _sigma: number,
+  _support: number,
   maximumVertices: number,
   targetSamples: TargetSampleCache,
 ): number {
   const samples = cachedTargetSamples(head, target, maximumVertices, targetSamples);
+  const kernels = paths.map((path) => path.kernel);
   let total = 0; let covered = 0;
-  const supportSquared = support ** 2;
   for (const sample of samples) {
     const point = head.surfaceVerticesRasMm[sample.vertex]!;
-    let minimum = Number.POSITIVE_INFINITY;
-    for (const path of paths) for (const segment of path.segments) {
-      // The segment lies inside its endpoint AABB, so this conservative bound
-      // can only reject distances that cannot affect the supported minimum.
-      if (pointBoundsDistanceSquared(point, segment) > Math.min(minimum, supportSquared) + 1e-9) continue;
-      minimum = Math.min(minimum, pointSegmentDistanceSquared(point, segment));
-      if (minimum <= 1e-8) break;
-    }
-    const weight = minimum <= supportSquared ? Math.exp(-0.5 * minimum / sigma ** 2) : 0;
+    let weight = 0;
+    for (const kernel of kernels) weight = Math.max(weight, evaluateChannelSensitivityKernel(kernel, point));
     total += sample.mass; covered += sample.mass * weight;
   }
   return total > 0 ? covered / total : 0;
 }
 
-function surfaceCoverageWeights(head: HeadModel, paths: CoveragePath[], sigma: number, support: number): Float32Array {
+function surfaceCoverageWeights(head: HeadModel, paths: CoveragePath[], _sigma: number, _support: number): Float32Array {
   const result = new Float32Array(head.surfaceVerticesRasMm.length);
-  const supportSquared = support ** 2;
+  const kernels = paths.map((path) => path.kernel);
   for (let vertex = 0; vertex < head.surfaceVerticesRasMm.length; vertex += 1) {
     const point = head.surfaceVerticesRasMm[vertex]!;
-    let minimum = Number.POSITIVE_INFINITY;
-    for (const path of paths) for (const segment of path.segments) {
-      if (pointBoundsDistanceSquared(point, segment) > Math.min(minimum, supportSquared) + 1e-9) continue;
-      minimum = Math.min(minimum, pointSegmentDistanceSquared(point, segment));
-      if (minimum <= 1e-8) break;
-    }
-    result[vertex] = minimum <= supportSquared ? Math.exp(-0.5 * minimum / sigma ** 2) : 0;
+    for (const kernel of kernels) result[vertex] = Math.max(result[vertex]!, evaluateChannelSensitivityKernel(kernel, point));
   }
   return result;
 }
@@ -369,7 +309,7 @@ function bestRotation(head: HeadModel, target: FunctionalTargetMap, layout: Layo
       geometry = {
         valid: positionsDistancesValid(layout, positions, range)
           && positionsCranialMetrics(head, positions).fraction === 1,
-        paths: candidatePaths(head, [layout], [instance], radius, depth, 11, [positions]),
+        paths: candidatePaths(head, [layout], [instance], radius, depth, 11, [positions], sigma, support),
       };
       geometryCache.set(degrees, geometry);
     }
@@ -513,7 +453,7 @@ function placementBeam(
         instance,
         positions,
         paths: distanceValid && cranialValid ? candidatePaths(
-          head, [layout], [instance], request.optodeRadiusMm, request.transmissionDepthMm, 11, [positions],
+          head, [layout], [instance], request.optodeRadiusMm, request.transmissionDepthMm, 11, [positions], request.kernelSigmaMm, request.supportRadiusMm,
         ) : [],
         distanceValid,
         cranialValid,
@@ -612,6 +552,7 @@ function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerReques
     request.transmissionDepthMm,
     33,
     [positions[index]!],
+    request.kernelSigmaMm, request.supportRadiusMm,
   ));
   const paths = pathsByPatch.flat();
   const nominal = targetMassCoverage(
@@ -621,7 +562,7 @@ function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerReques
   const coverageWeights = surfaceCoverageWeights(head, paths, request.kernelSigmaMm, request.supportRadiusMm);
   const specificity = targetSupportSpecificity(head, request.target, coverageWeights);
   // Only the selected patch changes in each robustness trial. The other
-  // sample-17 paths are immutable and retain their original patch ordering.
+  // adaptive channel fields remain immutable in their original patch ordering.
   const robustPathsByPatch = instances.length > 1 ? instances.map((instance, index) => candidatePaths(
     head,
     [layouts[index]!],
@@ -630,6 +571,7 @@ function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerReques
     request.transmissionDepthMm,
     17,
     [positions[index]!],
+    request.kernelSigmaMm, request.supportRadiusMm,
   )) : [];
   const robust: number[] = [];
   let cranialRobustPasses = 0;
@@ -657,6 +599,7 @@ function evaluateCandidate(head: HeadModel, request: Required<Omit<PlannerReques
         request.transmissionDepthMm,
         17,
         [perturbedPositions],
+        request.kernelSigmaMm, request.supportRadiusMm,
       );
       const perturbedPaths = instances.length === 1 ? perturbedPatchPaths : robustPathsByPatch.flatMap(
         (patchPaths, index) => index === patchIndex ? perturbedPatchPaths : patchPaths,
@@ -697,7 +640,7 @@ export function planLayouts(head: HeadModel, input: PlannerRequest): PlannerResu
     optodeRadiusMm: input.optodeRadiusMm ?? 3.6,
     transmissionDepthMm: input.transmissionDepthMm ?? 25,
     kernelSigmaMm: input.kernelSigmaMm ?? 12,
-    supportRadiusMm: input.supportRadiusMm ?? 24,
+    supportRadiusMm: input.supportRadiusMm ?? DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM,
   };
   if (request.supportRadiusMm < request.kernelSigmaMm) throw new Error('Coverage support radius must be at least one sigma.');
   const namespace = createHash('sha256').update(`${request.seed}\0placement-beam`).digest('hex');

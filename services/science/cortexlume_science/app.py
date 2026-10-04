@@ -577,6 +577,7 @@ def atlas_query_path_batch(
     "/v1/coverage/anatomical",
     response_model=AnatomicalCoverageAnalysis,
     response_model_by_alias=True,
+    response_model_exclude_none=True,
 )
 def anatomical_coverage(
     request: AnatomicalCoverageRequest,

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  channelSensitivityPath,
+  channelProjection,
   distance3,
   fittedOptodePositions,
   formatRas,
@@ -72,10 +72,8 @@ export function Inspector() {
     ? fittedOptodePositions(layout, instance)
     : new Map(), [layout, instance, surfaceVerified]);
   const radiusMm = project.projectionSettings.optodeRadiusMm ?? 3.6;
-  const transmissionDepthMm = pair
-    ? instance?.pairDepthOverridesMm?.[pair.id]
-      ?? project.projectionSettings.defaultDepthMm ?? 25
-    : project.projectionSettings.defaultDepthMm ?? 25;
+  const maximumDepthMm = project.projectionSettings.defaultDepthMm ?? 25;
+  const overrideDepthMm = pair ? instance?.pairDepthOverridesMm?.[pair.id] : undefined;
   const pairSource = pair ? positions.get(pair.sourceId) : undefined;
   const pairDetector = pair ? positions.get(pair.detectorId) : undefined;
   const scalp = selectedHeadOptodeId
@@ -88,9 +86,13 @@ export function Inspector() {
         ] as [number, number, number]
       : undefined;
   const channelPath = pairSource && pairDetector
-    ? channelSensitivityPath(pairSource, pairDetector, radiusMm, transmissionDepthMm)
+    ? channelProjection(pairSource, pairDetector, radiusMm, maximumDepthMm, overrideDepthMm)
     : undefined;
-  // Optodes retain a single-ray reference; channel labels summarize the sampled path.
+  const transmissionDepthMm = pair
+    ? channelPath?.kernel.effectiveDepthMm ?? overrideDepthMm ?? maximumDepthMm
+    : maximumDepthMm;
+  const atlasPathKey = JSON.stringify(channelPath?.points ?? null);
+  // Atlas labels sample the centerline; adaptive spatial coverage is computed separately.
   const cortical = channelPath?.corticalContact ?? (scalp ? projectToCorticalContact(scalp) : undefined);
   const depthTarget = channelPath?.target;
   const scalpMni = scalp ? projectScalpSphereCenter(scalp, radiusMm) : undefined;
@@ -164,7 +166,7 @@ export function Inspector() {
         if (current) setCorticalRegions([]);
       });
     return () => { current = false; };
-  }, [cortical?.[0], cortical?.[1], cortical?.[2], pair?.id, transmissionDepthMm, project.projectionSettings.atlasProbabilityThreshold]);
+  }, [cortical?.[0], cortical?.[1], cortical?.[2], pair?.id, atlasPathKey, project.projectionSettings.atlasProbabilityThreshold]);
 
   useEffect(() => {
     const closeMaterialPopup = (event: PointerEvent) => {
@@ -476,11 +478,11 @@ export function Inspector() {
           <button className={project.projectionSettings.mode === 'cortex' ? 'active' : ''} onClick={() => setProjectionMode('cortex')}>CORTEX</button>
         </div>
         <label className="parameter-field">
-          <span>TRANSMISSION DEPTH FROM SCALP</span>
+          <span>{pair ? (overrideDepthMm == null ? 'AUTO CHANNEL DEPTH' : 'CHANNEL DEPTH OVERRIDE') : 'AUTO DEPTH LIMIT FROM SCALP'}</span>
           <div>
             <input
               type="range"
-              min="5"
+              min="1"
               max="40"
               step="1"
               value={transmissionDepthMm}
@@ -492,9 +494,16 @@ export function Inspector() {
                 });
               }}
             />
-            <code>{transmissionDepthMm} mm</code>
+            <code>{Number(transmissionDepthMm.toFixed(1))} mm</code>
           </div>
         </label>
+        {pair && instance && overrideDepthMm != null && <button
+          onClick={() => setPairDepthOverride(instance.id, pair.id, null)}
+        >USE AUTO DEPTH</button>}
+        {channelPath && <div className="empty-probability">
+          S–D {channelPath.kernel.sourceDetectorDistanceMm.toFixed(1)} mm · scalp–cortex {channelPath.kernel.scalpCortexGapMm.toFixed(1)} mm
+          <br />Geometric kernel · length / width / depth (σ): {channelPath.kernel.longitudinalSigmaMm.toFixed(1)} / {channelPath.kernel.lateralSigmaMm.toFixed(1)} / {channelPath.kernel.depthSigmaMm.toFixed(1)} mm
+        </div>}
       </section>
 
       <section className={`control-block anatomical-coverage-control ${visibleChannelCount === 0 ? 'is-disabled' : ''}`}>
@@ -580,7 +589,7 @@ export function Inspector() {
               <dt>SCALP MNI</dt><dd>{formatRas(scalpMni)}</dd>
               <dt>CORTICAL CONTACT MNI</dt><dd>{formatRas(cortical)}</dd>
               <dt>DEPTH TARGET MNI</dt><dd>{formatRas(depthTarget)}</dd>
-              <dt>PATH REGIONS</dt><dd><ProbabilityList values={corticalRegions} /></dd>
+              <dt>CENTERLINE REGIONS</dt><dd><ProbabilityList values={corticalRegions} /></dd>
             </dl>
           </>
         )}

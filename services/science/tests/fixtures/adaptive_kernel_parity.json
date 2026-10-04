@@ -1,0 +1,29 @@
+{
+  "kernel": {
+    "model": "sd-adaptive-geometric-v1",
+    "centerRasMm": [10, -20, 30],
+    "longitudinalAxis": [0.6, 0.8, 0],
+    "lateralAxis": [-0.8, 0.6, 0],
+    "depthAxis": [0, 0, -1],
+    "sourceDetectorDistanceMm": 30,
+    "scalpCortexGapMm": 10,
+    "effectiveDepthMm": 15,
+    "depthMode": "automatic",
+    "maximumDepthMm": 25,
+    "longitudinalSigmaMm": 7,
+    "lateralSigmaMm": 3,
+    "depthSigmaMm": 5,
+    "amplitude": 0.4,
+    "supportSigma": 2
+  },
+  "cases": [
+    { "point": [10, -20, 30], "weight": 0.4 },
+    { "point": [14.2, -14.4, 30], "weight": 0.2426122638850534 },
+    { "point": [7.6, -18.2, 30], "weight": 0.2426122638850534 },
+    { "point": [10, -20, 25], "weight": 0.2426122638850534 },
+    { "point": [11.8, -12.6, 30], "weight": 0.14715177646857694 },
+    { "point": [10, -20, 20], "weight": 0.05413411329464508 },
+    { "point": [10, -20, 19.999], "weight": 0 },
+    { "point": [100, 100, 100], "weight": 0 }
+  ]
+}

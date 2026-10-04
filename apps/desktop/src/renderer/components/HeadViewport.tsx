@@ -8,7 +8,7 @@ import type { AnatomicalCoverageAnalysis, CortexLumeProject, DigitizerSession, L
 import { useProjectStore } from '../store/projectStore';
 import {
   add3,
-  channelSensitivityPath,
+  channelProjection,
   effectiveUv,
   findLayoutOverlaps,
   fittedOptodePositions,
@@ -203,14 +203,17 @@ const coverageFragmentShader = `
   uniform float uOpacity;
   uniform float uOverlayOnly;
   uniform float uCoverageEdgeWeight;
+  uniform float uAdaptiveKernel;
   varying float vCoverageWeight;
   varying vec3 vCoverageColor;
   varying vec3 vNormal;
   void main() {
     float edgeStart = max(0.0001, uCoverageEdgeWeight * 0.90);
     float edgeEnd = max(edgeStart + 0.0001, min(0.95, uCoverageEdgeWeight * 2.25));
-    float edgeAlpha = smoothstep(edgeStart, edgeEnd, vCoverageWeight);
-    if (uOverlayOnly > 0.5 && edgeAlpha <= 0.002) discard;
+    float edgeAlpha = uAdaptiveKernel > 0.5
+      ? clamp(vCoverageWeight, 0.0, 1.0)
+      : smoothstep(edgeStart, edgeEnd, vCoverageWeight);
+    if (uOverlayOnly > 0.5 && edgeAlpha <= 0.00000001) discard;
     vec3 lightDirection = normalize(vec3(-0.35, 0.72, 0.58));
     float diffuse = 0.42 + 0.58 * abs(dot(normalize(vNormal), lightDirection));
     vec3 anatomy = uColor * diffuse;
@@ -440,10 +443,11 @@ function AnatomicalCoverageSurface({
     uColor: { value: new THREE.Color(color) },
     uOpacity: { value: opacity },
     uOverlayOnly: { value: overlayOnly ? 1 : 0 },
+    uAdaptiveKernel: { value: analysis.parameters.kernel !== 'truncated-gaussian' ? 1 : 0 },
     uCoverageEdgeWeight: { value: Math.exp(
       -0.5 * (analysis.parameters.supportRadiusMm / analysis.parameters.kernelSigmaMm) ** 2,
     ) },
-  }), [analysis.parameters.kernelSigmaMm, analysis.parameters.supportRadiusMm, color, opacity, overlayOnly]);
+  }), [analysis.parameters.kernel, analysis.parameters.kernelSigmaMm, analysis.parameters.supportRadiusMm, color, opacity, overlayOnly]);
   const weightedGeometry = useMemo(() => {
     if (analysis.vertexCount !== 25_000
       || geometry.getAttribute('position').count !== scientificVertexMap.indices.length) return null;
@@ -761,9 +765,9 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
         const midpoint: Vec3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
         const sourceScalp = scalpPositions.get(pair.sourceId);
         const detectorScalp = scalpPositions.get(pair.detectorId);
-        const transmissionDepthMm = instance.pairDepthOverridesMm?.[pair.id] ?? defaultDepthMm;
+        const overrideDepthMm = instance.pairDepthOverridesMm?.[pair.id];
         const sensitivity = sourceScalp && detectorScalp
-          ? channelSensitivityPath(sourceScalp, detectorScalp, optodeRadiusMm, transmissionDepthMm)
+          ? channelProjection(sourceScalp, detectorScalp, optodeRadiusMm, defaultDepthMm, overrideDepthMm)
           : undefined;
         const channelScalp = sourceScalp && detectorScalp
           ? midpoint3(projectScalpSphereCenter(sourceScalp, optodeRadiusMm), projectScalpSphereCenter(detectorScalp, optodeRadiusMm))
@@ -799,6 +803,7 @@ function OptodePatch({ layout, instance, patchIndex, surfaceRevision }: {
               <span>SCALP MNI: {formatRas(channelScalp)}</span>
               <span>CORTICAL CONTACT MNI: {formatRas(sensitivity.corticalContact)}</span>
               <span>DEPTH TARGET MNI: {formatRas(sensitivity.target)}</span>
+              <span>S–D: {sensitivity.kernel.sourceDetectorDistanceMm.toFixed(1)} mm · EFFECTIVE DEPTH: {sensitivity.kernel.effectiveDepthMm.toFixed(1)} mm</span>
               <AtlasTopRegion path={sensitivity.points} />
             </div>
           </Html>}

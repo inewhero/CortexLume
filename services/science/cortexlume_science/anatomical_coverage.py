@@ -1,7 +1,7 @@
 """Geometric anatomical coverage on the locked Cedalion 25k surface.
 
-This module deliberately does not model photon transport. It turns sampled
-channel polylines into a bounded geometric kernel, then combines that kernel
+This module deliberately does not model photon transport. It evaluates bounded
+per-channel adaptive geometric kernels (or legacy fixed polyline kernels), then combines each kernel
 with the original Harvard-Oxford cortical atlas memberships. The result is a
 surface mosaic for visual placement review, not sensitivity, fluence, a
 Jacobian, or a measurement probability.
@@ -32,6 +32,7 @@ from .models import (
     AnatomicalCoverageQc,
     AnatomicalCoverageRegion,
     AnatomicalCoverageRequest,
+    ChannelSensitivityKernel,
 )
 from .template_gate import inspect_template_gate, sha256_file, template_directory
 
@@ -318,6 +319,35 @@ def _channel_kernel(vertices: np.ndarray, points: np.ndarray, sigma_mm: float, r
     return weights
 
 
+def _adaptive_channel_kernel(vertices: np.ndarray, kernel: ChannelSensitivityKernel) -> np.ndarray:
+    # Revalidate at the computation boundary, including model_construct callers.
+    kernel = ChannelSensitivityKernel.model_validate(kernel.model_dump(by_alias=True))
+    delta = vertices - np.asarray(kernel.center_ras_mm, dtype=np.float64)
+    normalized_squared = np.zeros(len(vertices), dtype=np.float64)
+    for axis, sigma in (
+        (kernel.longitudinal_axis, kernel.longitudinal_sigma_mm),
+        (kernel.lateral_axis, kernel.lateral_sigma_mm),
+        (kernel.depth_axis, kernel.depth_sigma_mm),
+    ):
+        normalized_squared += np.square((delta @ np.asarray(axis)) / sigma)
+    weights = kernel.amplitude * np.exp(-0.5 * normalized_squared)
+    weights[normalized_squared > kernel.support_sigma ** 2] = 0.0
+    if not np.all(np.isfinite(weights)):
+        raise AnatomicalCoverageError("coverage_kernel_not_finite")
+    return weights
+
+
+def _coverage_channel_weights(vertices, channel, path, settings):
+    if channel.sensitivity_kernel is not None:
+        return _adaptive_channel_kernel(vertices, channel.sensitivity_kernel)
+    return _channel_kernel(vertices, path, settings.kernel_sigma_mm, settings.support_radius_mm)
+
+
+def _kernel_sha256(kernel: ChannelSensitivityKernel) -> str:
+    canonical = json.dumps(kernel.model_dump(by_alias=True), sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _stable_region_color(atlas_id: str, label: str) -> str:
     """Return a label-stable display hint; color carries no scientific meaning.
 
@@ -340,6 +370,11 @@ def _validate_coverage_resource_limits(request: AnatomicalCoverageRequest) -> No
     the scientific computation rather than just an HTTP endpoint.
     """
 
+    adaptive_count = sum(channel.sensitivity_kernel is not None for channel in request.channels)
+    kernel_models = {channel.sensitivity_kernel.model if channel.sensitivity_kernel else "truncated-gaussian"
+                     for channel in request.channels}
+    if adaptive_count not in (0, len(request.channels)) or len(kernel_models) != 1:
+        raise AnatomicalCoverageError("coverage_mixed_kernel_models")
     limits = ANATOMICAL_COVERAGE_LIMITS
     channel_count = len(request.channels)
     if channel_count > limits["maximumChannels"]:
@@ -419,13 +454,15 @@ class AnatomicalCoverageEngine:
                 path_point_count=len(path),
                 path_length_mm=path_length,
                 path_sha256=_canonical_path_sha256(path),
+                sensitivity_kernel=channel.sensitivity_kernel,
+                kernel_sha256=_kernel_sha256(channel.sensitivity_kernel) if channel.sensitivity_kernel is not None else None,
             ))
 
-            channel_weights = _channel_kernel(
+            channel_weights = _coverage_channel_weights(
                 self.surface_atlas.vertices_ras_mm,
+                channel,
                 path,
-                settings.kernel_sigma_mm,
-                settings.support_radius_mm,
+                settings,
             )
             better = channel_weights > combined_weights
             combined_weights[better] = channel_weights[better]
@@ -545,6 +582,8 @@ class AnatomicalCoverageEngine:
                 kernel_sigma_mm=settings.kernel_sigma_mm,
                 support_radius_mm=settings.support_radius_mm,
                 minimum_atlas_membership=settings.minimum_atlas_membership,
+                kernel=ordered_channels[0].sensitivity_kernel.model if ordered_channels[0].sensitivity_kernel is not None else "truncated-gaussian",
+                distance_metric="channel-local-anisotropic-distance" if ordered_channels[0].sensitivity_kernel is not None else "euclidean-distance-to-polyline",
             ),
             mosaic=AnatomicalCoverageMosaic(
                 geometric_vertex_indices=geometric_vertex_indices.tolist(),
@@ -636,11 +675,11 @@ def compute_anatomical_coverage_summary(request: AnatomicalCoverageRequest) -> d
             raise AnatomicalCoverageError(f"coverage_channel_path_degenerate:{stable_id}")
         np.maximum(
             combined_weights,
-            _channel_kernel(
+            _coverage_channel_weights(
                 surface_atlas.vertices_ras_mm,
+                channel,
                 path,
-                settings.kernel_sigma_mm,
-                settings.support_radius_mm,
+                settings,
             ),
             out=combined_weights,
         )

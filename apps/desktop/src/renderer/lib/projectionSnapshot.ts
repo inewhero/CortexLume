@@ -5,7 +5,7 @@ import type {
   Vec3,
 } from '@cortexlume/contracts';
 import {
-  channelSensitivityPath,
+  channelProjection,
   distance3,
   fittedOptodePositions,
   projectScalpSphereCenter,
@@ -138,13 +138,13 @@ export function materializeProjectionSnapshot(project: CortexLumeProject): Corte
 
       const scalp = midpoint(sourceScalp, detectorScalp);
       const display = midpoint(sourceDisplay, detectorDisplay);
-      const transmissionDepthMm = instance.pairDepthOverridesMm?.[pair.id]
-        ?? defaultDepthMm;
-      const sensitivity = channelSensitivityPath(
+      const overrideDepthMm = instance.pairDepthOverridesMm?.[pair.id];
+      const sensitivity = channelProjection(
         sourceContact,
         detectorContact,
         radiusMm,
-        transmissionDepthMm,
+        defaultDepthMm,
+        overrideDepthMm,
       );
       realizedScalpDistances.push(realizedScalp);
       nominalDistances.push(pair.nominalDistanceMm);

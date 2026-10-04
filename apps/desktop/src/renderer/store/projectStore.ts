@@ -18,6 +18,7 @@ import type {
 } from '@cortexlume/contracts';
 import {
   BUILTIN_PATCH_PRESETS,
+  DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM,
   instantiateBuiltinPatchLayout,
   type BuiltinPatchPresetId,
 } from '@cortexlume/core';
@@ -421,7 +422,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
     selectedCoverageRegionIndex: null,
     anatomicalCoverageSettings: {
       kernelSigmaMm: 12,
-      supportRadiusMm: 24,
+      supportRadiusMm: DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM,
       minimumAtlasMembership: 0.05,
     },
     anatomicalCoverageStatus: 'idle',

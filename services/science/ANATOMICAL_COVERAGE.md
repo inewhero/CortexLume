@@ -12,20 +12,48 @@ is not photon sensitivity, fluence, a Jacobian, or a measurement probability.
 The Harvard-Oxford values retain their original probabilistic-atlas meaning;
 the geometric channel kernel does not acquire that meaning by multiplication.
 
-For channel polyline `c` and surface vertex `v`, CortexLume computes the
-Euclidean distance to the closest polyline segment and applies a truncated
-Gaussian:
+New requests attach a versioned `sensitivityKernel` to every channel. The
+application default is `sd-adaptive-geometric-v2` (the combined recipe). It is
+an anisotropic Gaussian centered on the closest local cortical contact of
+the projected scalp midpoint. The source–detector scalp chord `d`, local
+scalp–cortex gap `h`, and effective scalp depth `D` determine its geometry:
 
 ```text
-g_c(v) = exp(-d(v,c)^2 / (2 sigma^2))  when d(v,c) <= radius
-         0                              otherwise
+D = min(max(1, configured maximum depth), clamp(d/2, 2, 40))
+longitudinalSigma = clamp(0.35*d, 3, 30) * widthScale
+lateralSigma = clamp(0.20*d, 2, 20) * widthScale
+depthSigma = min(500, 2*max(2, 0.5*sqrt(max(0,D^2-h^2))))
+amplitude = exp(-0.5*(h/D)^2)
+q = sum_axis (dot(v-center, axis)/sigma_axis)^2
+g_c(v) = amplitude*exp(-q/2) when q <= supportSigma^2, else 0
 ```
 
-Defaults are `sigma = 12 mm` and `radius = 24 mm`. They define a practical,
-bounded review footprint around the existing quadratic channel path; they are
-not optical tissue parameters. Multiple channels are combined with
+An explicit pair depth override replaces `D`. The historical sigma setting
+defines `widthScale = kernelSigmaMm/12`; the support setting defines
+`supportSigma = supportRadiusMm/kernelSigmaMm` (application default 48/12 = 4).
+Explicit historical settings of 24/12 retain two-sigma support; the service
+honors each serialized descriptor. The legacy path-only API keeps its original
+settings defaults. A two-sigma setting alone does not restore the v1 width
+formulas: explicitly select model `sd-adaptive-geometric-v1` to reproduce them.
+Version 1 divides lateral sigma by `sqrt(1+(h/D)^2)` and does not double depth
+sigma. Existing v1 descriptors retain their stored dimensions. Axes form an
+orthonormal local basis; all dimensions are bounded and finite. Degenerate
+source–detector tangents use equal tangential sigmas. When the gap is zero
+and supplies no local inward direction, the fallback is isotropic. These
+coefficients are a geometric heuristic and are not optical tissue parameters.
+Channels sharing a center can therefore have different spatial footprints.
+Multiple channels are combined with
 `G(v) = max_c g_c(v)`, which prevents dense or overlapping arrays from
 artificially increasing the displayed footprint.
+
+For backwards compatibility, requests with no channel descriptors use the
+legacy fixed Gaussian of Euclidean distance to the sampled polyline. Mixed
+legacy/adaptive requests are rejected. Response `parameters.kernel` and
+`distanceMetric` identify which calculation was used; each adaptive channel
+echoes its descriptor and a canonical descriptor SHA-256. The full heuristic
+and its numerical limits are documented in [adaptive projection kernel](../../docs/adaptive-projection-kernel.md).
+`pathSha256` hashes
+only the displayed path and must not be used as adaptive-kernel identity.
 
 At each covered vertex, the mosaic selects the Harvard-Oxford label with the
 largest retained membership at or above the default 5% threshold. The atlas
@@ -79,10 +107,10 @@ and aggregation rules.
 
 ## Performance gate
 
-The kernel is `O(channels * path segments * 25,000)` and retains one
-channel-by-vertex matrix, `O(channels * 25,000)`, for deterministic channel
-shares and tie handling. The default 22-channel, 33-point benchmark completed
-in approximately 1.26 seconds on the development Windows workstation. The
+The adaptive kernel is `O(channels * 25,000)`; the legacy kernel is
+`O(channels * path segments * 25,000)`. Both stream one channel at a time
+and retain `O(25,000)` kernel state plus sparse per-channel atlas totals for
+deterministic channel shares and tie handling. The
 test suite carries a deliberately generous 8-second ceiling so shared CI hosts
 catch algorithmic regressions without treating ordinary scheduler variation
 as a failure.

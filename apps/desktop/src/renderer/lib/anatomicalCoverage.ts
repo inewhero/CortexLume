@@ -4,11 +4,12 @@ import type {
   AnatomicalCoverageSettings,
   CortexLumeProject,
 } from '@cortexlume/contracts';
-import { channelSensitivityPath, fittedOptodePositions } from './geometry';
+import { channelProjection, fittedOptodePositions } from './geometry';
+import { DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM } from '@cortexlume/core';
 
 export const DEFAULT_ANATOMICAL_COVERAGE_SETTINGS: AnatomicalCoverageSettings = {
   kernelSigmaMm: 12,
-  supportRadiusMm: 24,
+  supportRadiusMm: DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM,
   minimumAtlasMembership: 0.05,
 };
 
@@ -38,18 +39,14 @@ export function buildAnatomicalCoverageRequest(
         const source = positions.get(pair.sourceId);
         const detector = positions.get(pair.detectorId);
         if (!source || !detector) return [];
-        const transmissionDepthMm = instance.pairDepthOverridesMm?.[pair.id]
-          ?? defaultDepthMm;
+        const projection = channelProjection(source, detector, radiusMm, defaultDepthMm,
+          instance.pairDepthOverridesMm?.[pair.id], settings);
         return [{
           instanceId: instance.id,
           pairId: pair.id,
           ...(pair.channelNumber == null ? {} : { channelNumber: pair.channelNumber }),
-          pointsRasMm: channelSensitivityPath(
-            source,
-            detector,
-            radiusMm,
-            transmissionDepthMm,
-          ).points,
+          pointsRasMm: projection.points,
+          sensitivityKernel: projection.kernel,
         }];
       });
     })

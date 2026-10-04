@@ -264,6 +264,8 @@ def test_anatomical_coverage_endpoint_returns_single_sparse_mosaic() -> None:
     assert len(body["mosaic"]["vertexIndices"]) == len(body["mosaic"]["regionIndices"])
     assert body["provenance"]["interpretation"].startswith("Geometric anatomical coverage prior")
     assert "sensitivity" not in body["sourceKind"]
+    assert "sensitivityKernel" not in body["channels"][0]
+    assert "kernelSha256" not in body["channels"][0]
 
     summary = client.post("/v1/coverage/anatomical-summary", headers=headers, json=payload)
     assert summary.status_code == 200, summary.text
@@ -276,6 +278,35 @@ def test_anatomical_coverage_endpoint_returns_single_sparse_mosaic() -> None:
         "massFraction": region["coveredAtlasMassFraction"],
     } for region in body["regions"]]
     assert "mosaic" not in compact
+
+
+def test_adaptive_coverage_endpoint_omits_absent_descriptor_metadata() -> None:
+    vertices = load_surface_atlas_data().vertices_ras_mm
+    payload = {"channels": [{
+        "instanceId": "00000000-0000-4000-8000-000000000001",
+        "pairId": "00000000-0000-4000-8000-000000000011",
+        "pointsRasMm": [vertices[0].tolist(), vertices[100].tolist()],
+        "sensitivityKernel": {
+            "model": "sd-adaptive-geometric-v1", "centerRasMm": vertices[0].tolist(),
+            "longitudinalAxis": [1, 0, 0], "lateralAxis": [0, 1, 0], "depthAxis": [0, 0, 1],
+            "sourceDetectorDistanceMm": 30, "scalpCortexGapMm": 10, "effectiveDepthMm": 15,
+            "longitudinalSigmaMm": 10.5, "lateralSigmaMm": 5, "depthSigmaMm": 5,
+            "amplitude": .8, "supportSigma": 2,
+        },
+    }]}
+    response = client.post("/v1/coverage/anatomical", headers=headers, json=payload)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["parameters"]["kernel"] == "sd-adaptive-geometric-v1"
+    result_channel = body["channels"][0]
+    assert "channelNumber" not in result_channel
+    assert "depthMode" not in result_channel["sensitivityKernel"]
+    assert "maximumDepthMm" not in result_channel["sensitivityKernel"]
+    assert result_channel["sensitivityKernel"] == payload["channels"][0]["sensitivityKernel"]
+    assert len(result_channel["kernelSha256"]) == 64
+    summary = client.post("/v1/coverage/anatomical-summary", headers=headers, json=payload)
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["atlasSupportFraction"] == body["qc"]["atlasSupportFraction"]
 
 
 def test_anatomical_coverage_limit_breach_is_compact_413() -> None:

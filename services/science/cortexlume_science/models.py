@@ -186,6 +186,34 @@ class AtlasPathQueryBatchRequest(ContractModel):
     probability_threshold: Annotated[FiniteFloat, Field(ge=0, le=1)] = 0.0
 
 
+class ChannelSensitivityKernel(ContractModel):
+    model: Literal["sd-adaptive-geometric-v1", "sd-adaptive-geometric-v2"]
+    center_ras_mm: FiniteVec3
+    longitudinal_axis: FiniteVec3
+    lateral_axis: FiniteVec3
+    depth_axis: FiniteVec3
+    source_detector_distance_mm: Annotated[FiniteFloat, Field(ge=0, le=1000)]
+    scalp_cortex_gap_mm: Annotated[FiniteFloat, Field(ge=0, le=1000)]
+    effective_depth_mm: Annotated[FiniteFloat, Field(ge=1, le=1000)]
+    depth_mode: Literal["automatic", "override"] | None = None
+    maximum_depth_mm: Annotated[FiniteFloat, Field(ge=1, le=40)] | None = None
+    longitudinal_sigma_mm: Annotated[FiniteFloat, Field(ge=0.000001, le=100)]
+    lateral_sigma_mm: Annotated[FiniteFloat, Field(ge=0.000001, le=100)]
+    depth_sigma_mm: Annotated[FiniteFloat, Field(ge=2, le=500)]
+    amplitude: Annotated[FiniteFloat, Field(ge=0, le=1)]
+    support_sigma: Annotated[FiniteFloat, Field(ge=0.05, le=80)]
+
+    @model_validator(mode="after")
+    def orthonormal_axes(self):
+        axes = [self.longitudinal_axis, self.lateral_axis, self.depth_axis]
+        dot = lambda a, b: sum(x * y for x, y in zip(a, b, strict=True))
+        if any(abs(dot(a, a) - 1) > 1e-5 for a in axes) or any(
+            abs(dot(axes[i], axes[j])) > 1e-5 for i in range(3) for j in range(i + 1, 3)
+        ):
+            raise ValueError("Kernel axes must be an orthonormal basis.")
+        return self
+
+
 class AnatomicalCoverageChannel(ContractModel):
     instance_id: UUID
     pair_id: UUID
@@ -194,6 +222,7 @@ class AnatomicalCoverageChannel(ContractModel):
         min_length=2,
         max_length=ANATOMICAL_COVERAGE_LIMITS["maximumPathPointsPerChannel"],
     )]
+    sensitivity_kernel: ChannelSensitivityKernel | None = None
 
 
 class AnatomicalCoverageSettings(ContractModel):
@@ -250,6 +279,11 @@ class AnatomicalCoverageRequest(ContractModel):
 
     @model_validator(mode="after")
     def resource_limits_are_respected(self):
+        adaptive_count = sum(channel.sensitivity_kernel is not None for channel in self.channels)
+        kernel_models = {channel.sensitivity_kernel.model if channel.sensitivity_kernel else "truncated-gaussian"
+                         for channel in self.channels}
+        if adaptive_count not in (0, len(self.channels)) or len(kernel_models) != 1:
+            raise ValueError("coverage_mixed_kernel_models")
         channel_count = len(self.channels)
         total_path_points = sum(len(channel.points_ras_mm) for channel in self.channels)
         total_segments = sum(len(channel.points_ras_mm) - 1 for channel in self.channels)
@@ -289,6 +323,8 @@ class AnatomicalCoverageChannelResult(ContractModel):
     )]
     path_length_mm: Annotated[FiniteFloat, Field(gt=0)]
     path_sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+    sensitivity_kernel: ChannelSensitivityKernel | None = None
+    kernel_sha256: Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")] | None = None
 
 
 class AnatomicalCoverageChannelShare(ContractModel):
@@ -355,8 +391,8 @@ class AnatomicalCoverageMosaic(ContractModel):
 
 
 class AnatomicalCoverageParameters(AnatomicalCoverageSettings):
-    distance_metric: Literal["euclidean-distance-to-polyline"] = "euclidean-distance-to-polyline"
-    kernel: Literal["truncated-gaussian"] = "truncated-gaussian"
+    distance_metric: Literal["euclidean-distance-to-polyline", "channel-local-anisotropic-distance"] = "euclidean-distance-to-polyline"
+    kernel: Literal["truncated-gaussian", "sd-adaptive-geometric-v1", "sd-adaptive-geometric-v2"] = "truncated-gaussian"
     channel_combination: Literal["maximum-kernel-weight"] = "maximum-kernel-weight"
     mosaic_assignment: Literal["maximum-harvard-oxford-membership"] = "maximum-harvard-oxford-membership"
     region_aggregation: Literal["coverage-weighted-atlas-membership"] = "coverage-weighted-atlas-membership"
@@ -407,6 +443,13 @@ class AnatomicalCoverageAnalysis(ContractModel):
 
     @model_validator(mode="after")
     def references_are_valid(self):
+        adaptive = self.parameters.kernel != "truncated-gaussian"
+        if any((channel.sensitivity_kernel is not None) != adaptive
+               or (adaptive and (channel.kernel_sha256 is None
+                                or channel.sensitivity_kernel.model != self.parameters.kernel)) for channel in self.channels) or (
+            (self.parameters.distance_metric == "channel-local-anisotropic-distance") != adaptive
+        ):
+            raise ValueError("coverage_kernel_provenance_mismatch")
         previous_stable_id: str | None = None
         for channel in self.channels:
             expected_stable_id = f"{channel.instance_id}:{channel.pair_id}"

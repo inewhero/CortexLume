@@ -21,7 +21,8 @@ import {
   BUILTIN_PATCH_CATALOG_VERSION,
   BUILTIN_PATCH_PRESET_IDS,
   BUILTIN_PATCH_PRESETS,
-  channelSensitivityPath,
+  DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM,
+  channelSensitivityProjection,
   deterministicUuid,
   distance3,
   loadHeadModelFromAssets,
@@ -384,7 +385,7 @@ function defaultDevice() {
 
 const PLANNING_COVERAGE_SETTINGS = {
   kernelSigmaMm: 12,
-  supportRadiusMm: 24,
+  supportRadiusMm: DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM,
   minimumAtlasMembership: 0.05,
 } as const;
 
@@ -401,11 +402,14 @@ function buildCandidateCoverageRequest(
       const source = positions.get(pair.sourceId);
       const detector = positions.get(pair.detectorId);
       if (!source || !detector) return [];
+      const projection = channelSensitivityProjection(head, source, detector, radiusMm, depthMm,
+        instance.pairDepthOverridesMm?.[pair.id], PLANNING_COVERAGE_SETTINGS);
       return [{
         instanceId: instance.id,
         pairId: pair.id,
         ...(pair.channelNumber == null ? {} : { channelNumber: pair.channelNumber }),
-        pointsRasMm: channelSensitivityPath(head, source, detector, radiusMm, depthMm).points,
+        pointsRasMm: projection.points,
+        sensitivityKernel: projection.kernel,
       }];
     });
   }).sort((left, right) => `${left.instanceId}:${left.pairId}`.localeCompare(`${right.instanceId}:${right.pairId}`));
@@ -464,7 +468,7 @@ function buildProjectionResults(head: LoadedHeadModel['headModel'], candidate: P
       const sourceDisplay = displayCenters.get(pair.sourceId)!; const detectorDisplay = displayCenters.get(pair.detectorId)!;
       const midpoint = (a: Vec3, b: Vec3): Vec3 => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
       const spacingError = Math.abs(distance3(sourceScalp, detectorScalp) - pair.nominalDistanceMm);
-      const sensitivity = channelSensitivityPath(head, source, detector, radiusMm, depthMm);
+      const sensitivity = channelSensitivityProjection(head, source, detector, radiusMm, depthMm, instance.pairDepthOverridesMm?.[pair.id]);
       results.push({
         instanceId: instance.id, subjectKind: 'pair', subjectId: pair.id,
         scalpRasMm: midpoint(sourceScalp, detectorScalp), displayRasMm: midpoint(sourceDisplay, detectorDisplay),
@@ -547,7 +551,7 @@ export class CortexLumeMcpRuntime {
           ruleCatalogVersion: BUILTIN_PATCH_CATALOG_VERSION,
           rulePresetIds: BUILTIN_PATCH_PRESET_IDS,
         },
-        defaults: { longChannelRangeMm: [25, 40], surfaceDistanceToleranceMm: 1.5, maximumScalpCortexGapMm: 40, kernelSigmaMm: 12, supportRadiusMm: 24, transmissionDepthMm: 25, candidateCount: 3, overlapThresholdMm: 12 },
+        defaults: { longChannelRangeMm: [25, 40], surfaceDistanceToleranceMm: 1.5, maximumScalpCortexGapMm: 40, kernelSigmaMm: 12, supportRadiusMm: DEFAULT_ADAPTIVE_KERNEL_SUPPORT_RADIUS_MM, transmissionDepthMm: 25, candidateCount: 3, overlapThresholdMm: 12 },
         quickTargetDiscovery: { firstTool: 'list_targets', thenTool: 'search_targets', catalogIsOffline: true },
         authorizedRoots: this.roots,
         screenshots: {
@@ -642,7 +646,7 @@ export class CortexLumeMcpRuntime {
           .refine(([minimum, maximum]) => minimum <= maximum, 'Long-channel minimum must not exceed maximum.')
           .default([25, 40]),
         optodeRadiusMm: z.number().min(1).max(15).default(3.6),
-        transmissionDepthMm: z.number().min(5).max(40).default(25),
+        transmissionDepthMm: z.number().min(5).max(40).default(25).describe('Upper limit for source-detector-driven automatic depth in mm; explicit per-channel depth overrides are retained.'),
         seed: z.string().min(1).max(200).default('cortexlume'),
         sourceProjectPath: z.string().min(1).optional(),
       },

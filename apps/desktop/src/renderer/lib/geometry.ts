@@ -1,5 +1,5 @@
 import type { LayoutDefinition, LayoutInstance, Vec2, Vec3 } from '@cortexlume/contracts';
-import { arcSurfaceSeed, channelSensitivityPath as buildChannelSensitivityPath } from '@cortexlume/core';
+import { arcSurfaceSeed, channelSensitivityPath as buildChannelSensitivityPath, channelSensitivityProjection, type ChannelSensitivityKernelOptions } from '@cortexlume/core';
 import * as THREE from 'three';
 
 export const SCALP_RADII: Vec3 = [86, 105, 100];
@@ -141,6 +141,22 @@ export function channelSensitivityPath(
     projectCorticalContact: projectToCorticalContact,
     projectScalpSphereCenter,
   }, sourceScalpPoint, detectorScalpPoint, optodeRadiusMm, transmissionDepthMm, sampleCount);
+}
+
+/** Physical adaptive projection; display radius does not alter kernel geometry. */
+export function channelProjection(
+  source: Vec3,
+  detector: Vec3,
+  radiusMm = 3.6,
+  maximumDepthMm = 25,
+  overrideDepthMm?: number,
+  settings?: Pick<ChannelSensitivityKernelOptions, 'model' | 'kernelSigmaMm' | 'supportRadiusMm'>,
+  sampleCount = 33,
+) {
+  return channelSensitivityProjection({
+    projectScalp: projectToScalpSurface,
+    projectCorticalContact: projectToCorticalContact,
+  }, source, detector, radiusMm, maximumDepthMm, overrideDepthMm, settings, sampleCount);
 }
 
 export function add3(a: Vec3, b: Vec3): Vec3 {

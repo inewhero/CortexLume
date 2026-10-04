@@ -436,11 +436,39 @@ export type TargetImportResult = z.infer<typeof TargetImportResultSchema>;
  * A sampled channel path used only to build a geometric anatomical-coverage
  * prior. The path is not a photon sensitivity, fluence, or Jacobian field.
  */
+export const ChannelSensitivityKernelSchema = z.object({
+  model: z.enum(['sd-adaptive-geometric-v1', 'sd-adaptive-geometric-v2']),
+  centerRasMm: Vec3Schema,
+  longitudinalAxis: Vec3Schema,
+  lateralAxis: Vec3Schema,
+  depthAxis: Vec3Schema,
+  sourceDetectorDistanceMm: z.number().finite().min(0).max(1000),
+  scalpCortexGapMm: z.number().finite().min(0).max(1000),
+  effectiveDepthMm: z.number().finite().min(1).max(1000),
+  depthMode: z.enum(['automatic', 'override']).optional(),
+  maximumDepthMm: z.number().finite().min(1).max(40).optional(),
+  longitudinalSigmaMm: z.number().finite().min(0.000001).max(100),
+  lateralSigmaMm: z.number().finite().min(0.000001).max(100),
+  depthSigmaMm: z.number().finite().min(2).max(500),
+  amplitude: z.number().finite().min(0).max(1),
+  supportSigma: z.number().finite().min(0.05).max(80),
+}).superRefine((value, context) => {
+  const axes = [value.longitudinalAxis, value.lateralAxis, value.depthAxis];
+  const dot = (a: number[], b: number[]) => a.reduce((sum, n, index) => sum + n * b[index]!, 0);
+  if (axes.some((axis) => Math.abs(dot(axis, axis) - 1) > 1e-5)
+    || axes.some((axis, i) => axes.slice(i + 1).some((other) => Math.abs(dot(axis, other)) > 1e-5))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Kernel axes must be an orthonormal basis.' });
+  }
+});
+/** A geometric placement approximation, not a validated photon transport model. */
+export type ChannelSensitivityKernel = z.infer<typeof ChannelSensitivityKernelSchema>;
+
 export const AnatomicalCoverageChannelSchema = z.object({
   instanceId: z.string().uuid(),
   pairId: z.string().uuid(),
   channelNumber: z.number().int().positive().optional(),
   pointsRasMm: z.array(Vec3Schema).min(2).max(ANATOMICAL_COVERAGE_LIMITS.maximumPathPointsPerChannel),
+  sensitivityKernel: ChannelSensitivityKernelSchema.optional(),
 });
 export type AnatomicalCoverageChannel = z.infer<typeof AnatomicalCoverageChannelSchema>;
 
@@ -461,6 +489,11 @@ export const AnatomicalCoverageRequestSchema = z.object({
     .max(ANATOMICAL_COVERAGE_LIMITS.maximumChannels),
   settings: AnatomicalCoverageSettingsSchema.default({}),
 }).superRefine((value, context) => {
+  const adaptiveCount = value.channels.filter((channel) => channel.sensitivityKernel != null).length;
+  const kernelModels = new Set(value.channels.map((channel) => channel.sensitivityKernel?.model ?? 'truncated-gaussian'));
+  if ((adaptiveCount !== 0 && adaptiveCount !== value.channels.length) || kernelModels.size !== 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'coverage_mixed_kernel_models', path: ['channels'] });
+  }
   const channels = value.channels.length;
   const totalPathPoints = value.channels.reduce((sum, channel) => sum + channel.pointsRasMm.length, 0);
   const totalSegments = value.channels.reduce((sum, channel) => sum + channel.pointsRasMm.length - 1, 0);
@@ -496,6 +529,8 @@ export const AnatomicalCoverageChannelResultSchema = z.object({
   pathPointCount: z.number().int().min(2).max(ANATOMICAL_COVERAGE_LIMITS.maximumPathPointsPerChannel),
   pathLengthMm: z.number().finite().positive(),
   pathSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  sensitivityKernel: ChannelSensitivityKernelSchema.optional(),
+  kernelSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 });
 export type AnatomicalCoverageChannelResult = z.infer<typeof AnatomicalCoverageChannelResultSchema>;
 
@@ -567,8 +602,8 @@ export const AnatomicalCoverageAnalysisSchema = z.object({
     .min(1)
     .max(ANATOMICAL_COVERAGE_LIMITS.maximumChannels),
   parameters: AnatomicalCoverageSettingsBaseSchema.extend({
-    distanceMetric: z.literal('euclidean-distance-to-polyline'),
-    kernel: z.literal('truncated-gaussian'),
+    distanceMetric: z.enum(['euclidean-distance-to-polyline', 'channel-local-anisotropic-distance']),
+    kernel: z.enum(['truncated-gaussian', 'sd-adaptive-geometric-v1', 'sd-adaptive-geometric-v2']),
     channelCombination: z.literal('maximum-kernel-weight'),
     mosaicAssignment: z.literal('maximum-harvard-oxford-membership'),
     regionAggregation: z.literal('coverage-weighted-atlas-membership'),
@@ -598,6 +633,12 @@ export const AnatomicalCoverageAnalysisSchema = z.object({
 }).superRefine((value, context) => {
   if (value.parameters.supportRadiusMm < value.parameters.kernelSigmaMm) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Coverage support radius must be at least one kernel sigma.' });
+  }
+  const adaptive = value.parameters.kernel !== 'truncated-gaussian';
+  if (value.channels.some((channel) => (channel.sensitivityKernel != null) !== adaptive
+    || (adaptive && (channel.kernelSha256 == null || channel.sensitivityKernel?.model !== value.parameters.kernel)))
+    || (value.parameters.distanceMetric === 'channel-local-anisotropic-distance') !== adaptive) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'coverage_kernel_provenance_mismatch' });
   }
   value.channels.forEach((channel, index) => {
     if (channel.stableId !== `${channel.instanceId}:${channel.pairId}`) {

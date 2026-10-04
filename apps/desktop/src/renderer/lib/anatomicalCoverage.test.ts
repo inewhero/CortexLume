@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AnatomicalCoverageAnalysis } from '@cortexlume/contracts';
+import { AnatomicalCoverageRequestSchema, type AnatomicalCoverageAnalysis } from '@cortexlume/contracts';
 import { useProjectStore } from '../store/projectStore';
 import {
   anatomicalCoverageRegionColors,
@@ -82,9 +82,49 @@ describe('anatomical coverage renderer data', () => {
     const request = buildAnatomicalCoverageRequest(useProjectStore.getState().project);
     expect(request?.channels).toHaveLength(22);
     expect(request?.channels.every((channel) => channel.pointsRasMm.length === 33)).toBe(true);
+    expect(request?.channels.every((channel) => channel.sensitivityKernel?.model === 'sd-adaptive-geometric-v2')).toBe(true);
+    expect(AnatomicalCoverageRequestSchema.safeParse(request).success).toBe(true);
     const instanceId = useProjectStore.getState().project.instances[0]!.id;
     useProjectStore.getState().toggleInstanceVisibility(instanceId);
     expect(buildAnatomicalCoverageRequest(useProjectStore.getState().project)).toBeNull();
+  });
+
+  it('uses separation-driven depth and makes explicit pair overrides part of the analysis key', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = structuredClone(useProjectStore.getState().project);
+    const original = buildAnatomicalCoverageRequest(project)!;
+    for (const channel of original.channels) {
+      const kernel = channel.sensitivityKernel!;
+      expect(kernel.effectiveDepthMm).toBeCloseTo(Math.min(Math.max(1,
+        project.projectionSettings.defaultDepthMm ?? 25), Math.max(2,
+        Math.min(40, kernel.sourceDetectorDistanceMm / 2))), 10);
+    }
+    const first = original.channels[0]!;
+    project.instances[0]!.pairDepthOverridesMm = { [first.pairId]: 32 };
+    const changed = buildAnatomicalCoverageRequest(project)!;
+    const changedChannel = changed.channels.find((channel) => channel.pairId === first.pairId)!;
+    expect(changedChannel.sensitivityKernel!.effectiveDepthMm).toBe(32);
+    expect(changedChannel.sensitivityKernel!.sourceDetectorDistanceMm).toBe(first.sensitivityKernel!.sourceDetectorDistanceMm);
+    expect(anatomicalCoverageRequestKey(changed)).not.toBe(anatomicalCoverageRequestKey(original));
+  });
+
+  it('uses four-sigma combined app defaults and honors explicit two-sigma support', () => {
+    useProjectStore.getState().newProject();
+    useProjectStore.getState().placeLayout(useProjectStore.getState().activeLayoutId);
+    const project = useProjectStore.getState().project;
+    const current = buildAnatomicalCoverageRequest(project)!;
+    const historical = buildAnatomicalCoverageRequest(project, {
+      kernelSigmaMm: 12, supportRadiusMm: 24, minimumAtlasMembership: 0.05,
+    })!;
+    expect(useProjectStore.getState().anatomicalCoverageSettings.supportRadiusMm).toBe(48);
+    expect(current.settings.supportRadiusMm).toBe(48);
+    for (let i = 0; i < current.channels.length; i++) {
+      expect(current.channels[i]!.sensitivityKernel!.supportSigma).toBe(4);
+      expect({ ...current.channels[i]!.sensitivityKernel, supportSigma: 2 })
+        .toEqual(historical.channels[i]!.sensitivityKernel);
+    }
+    expect(anatomicalCoverageRequestKey(current)).not.toBe(anatomicalCoverageRequestKey(historical));
   });
 
   it('keeps the analysis key stable across channel-selection lock state changes', () => {
