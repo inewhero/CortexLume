@@ -67,7 +67,9 @@ case "$1" in remove|purge)
 esac
 EOF
 chmod 755 "$stage/DEBIAN/postinst" "$stage/DEBIAN/postrm"
-chmod -R go-w "$stage"
+# Portable archives may preserve owner-only build-directory permissions.
+# System installations must remain readable/traversable by ordinary users.
+chmod -R a+rX,go-w "$stage"
 size=$(du -sk "$stage/opt" "$stage/usr" | awk '{sum += $1} END {print sum}')
 cat > "$stage/DEBIAN/control" <<EOF
 Package: cortexlume

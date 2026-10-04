@@ -95,6 +95,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y desktop-file-utils ./release/*.deb
+          set -x
           test "$(dpkg-query -W -f='${Version}' cortexlume)" = "${RELEASE_TAG#v}"
           test "$(readlink -f /usr/bin/cortexlume)" = /opt/CortexLume/CortexLume
           test -x /opt/CortexLume/resources/cortexlume-science/cortexlume-science
