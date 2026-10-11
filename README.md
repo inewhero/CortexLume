@@ -7,7 +7,7 @@
 [![Latest release](https://img.shields.io/github/v/release/inewhero/CortexLume?display_name=tag&sort=semver)](https://github.com/inewhero/CortexLume/releases/latest)
 [![PsyArXiv Preprint](https://img.shields.io/badge/PsyArXiv-Preprint-337ab7)](https://osf.io/preprints/psyarxiv/nx5st_v1)
 [![User Wiki](https://img.shields.io/badge/Wiki-User_Guide-2f6f8f?logo=github)](https://github.com/inewhero/CortexLume/wiki)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/inewhero/CortexLume)
+[![Ask DeepWiki](https://img.shields.io/badge/DeepWiki-Ask-5555ff)](https://deepwiki.com/inewhero/CortexLume)
 
 CortexLume is an offline workstation for designing fNIRS source–detector layouts, placing reusable patches on an anatomical head model, checking cortical targets, and exporting reproducible MNI-space results.
 
