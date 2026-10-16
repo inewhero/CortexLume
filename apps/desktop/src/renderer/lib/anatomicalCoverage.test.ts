@@ -69,9 +69,9 @@ describe('anatomical coverage renderer data', () => {
     registerVerifiedTestSurfaceProjectors();
   });
 
-  it('keeps coverage on its cortical surface when only WM anatomy is visible', () => {
+  it('uses the visible WM surface when GM anatomy is hidden', () => {
     expect(anatomicalCoverageDisplayLayer(true, true)).toBe('grayMatter');
-    expect(anatomicalCoverageDisplayLayer(false, true)).toBe('grayMatter');
+    expect(anatomicalCoverageDisplayLayer(false, true)).toBe('whiteMatter');
     expect(anatomicalCoverageDisplayLayer(false, false)).toBeNull();
   });
 

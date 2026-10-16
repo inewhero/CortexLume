@@ -26,6 +26,7 @@ import {
   tangentBasis,
   threeFromRas,
 } from '../lib/geometry';
+import { AnatomyCompositor } from './AnatomyCompositor';
 import { getSurfaceGraph, interpolateSurfaceLabels, interpolateSurfaceValues } from '../lib/surfaceInterpolation';
 import {
   anatomicalCoverageRegionColors,
@@ -138,15 +139,42 @@ const anatomyFragmentShader = `
   }
 `;
 
-function AnatomyMaterial({ color, opacity = 1, depthWrite = true }: { color: string; opacity?: number; depthWrite?: boolean }) {
+// Resolve the nearest fragment before blending a folded surface. Mesh sorting
+// cannot order individual triangles in the sulci, so they need a depth prepass.
+function SurfaceShader({ geometry, uniforms, vertexShader, fragmentShader, opacity,
+  renderOrder = 0, overlayOnly = false, side = THREE.DoubleSide,
+}: {
+  geometry: THREE.BufferGeometry;
+  uniforms: Record<string, THREE.IUniform>;
+  vertexShader: string;
+  fragmentShader: string;
+  opacity: number;
+  renderOrder?: number;
+  overlayOnly?: boolean;
+  side?: THREE.Side;
+}) {
+  const transparent = overlayOnly || opacity < 1;
+  const shader = { uniforms, vertexShader, fragmentShader, side };
+  return <>
+    {transparent && <mesh geometry={geometry} renderOrder={renderOrder} raycast={() => {}}>
+      <shaderMaterial {...shader} transparent colorWrite={false} depthWrite depthTest forceSinglePass />
+    </mesh>}
+    <mesh geometry={geometry} renderOrder={renderOrder + 0.1}>
+      <shaderMaterial {...shader} transparent={transparent} depthWrite={!transparent} depthTest forceSinglePass />
+    </mesh>
+  </>;
+}
+
+function AnatomySurface({ geometry, color, opacity = 1, renderOrder = 0 }: {
+  geometry: THREE.BufferGeometry; color: string; opacity?: number; renderOrder?: number;
+}) {
   const uniforms = useMemo(() => ({
     uColor: { value: new THREE.Color(color) },
     uOpacity: { value: opacity },
   }), [color, opacity]);
-  return <shaderMaterial
-    uniforms={uniforms} vertexShader={anatomyVertexShader} fragmentShader={anatomyFragmentShader}
-    transparent={opacity < 1} depthWrite={depthWrite} side={THREE.DoubleSide}
-  />;
+  return <SurfaceShader geometry={geometry} uniforms={uniforms}
+    vertexShader={anatomyVertexShader} fragmentShader={anatomyFragmentShader}
+    opacity={opacity} renderOrder={renderOrder} />;
 }
 
 const targetVertexShader = `
@@ -210,8 +238,10 @@ const coverageFragmentShader = `
   void main() {
     float edgeStart = max(0.0001, uCoverageEdgeWeight * 0.90);
     float edgeEnd = max(edgeStart + 0.0001, min(0.95, uCoverageEdgeWeight * 2.25));
+    // Categorical atlas colors need a display transfer, not raw kernel alpha.
+    // Keep the low-weight boundary soft without washing out supported regions.
     float edgeAlpha = uAdaptiveKernel > 0.5
-      ? clamp(vCoverageWeight, 0.0, 1.0)
+      ? smoothstep(0.0001, 0.08, vCoverageWeight)
       : smoothstep(edgeStart, edgeEnd, vCoverageWeight);
     if (uOverlayOnly > 0.5 && edgeAlpha <= 0.00000001) discard;
     vec3 lightDirection = normalize(vec3(-0.35, 0.72, 0.58));
@@ -219,7 +249,7 @@ const coverageFragmentShader = `
     vec3 anatomy = uColor * diffuse;
     float coverageMix = vCoverageWeight <= 0.0001
       ? 0.0
-      : 0.58 + 0.38 * smoothstep(0.02, 0.72, vCoverageWeight);
+      : 0.90 + 0.08 * smoothstep(0.02, 0.72, vCoverageWeight);
     if (uOverlayOnly > 0.5) {
       float overlayDiffuse = 0.68 + 0.32 * abs(dot(normalize(vNormal), lightDirection));
       gl_FragColor = vec4(vCoverageColor * overlayDiffuse, uOpacity * edgeAlpha);
@@ -357,7 +387,6 @@ function FunctionalTargetSurface({
   requireInterior,
   color,
   opacity,
-  depthWrite,
   renderOrder,
 }: {
   geometry: THREE.BufferGeometry;
@@ -366,7 +395,6 @@ function FunctionalTargetSurface({
   requireInterior: boolean;
   color: string;
   opacity: number;
-  depthWrite: boolean;
   renderOrder: number;
 }) {
   const target = useProjectStore((state) => state.functionalTarget);
@@ -403,19 +431,9 @@ function FunctionalTargetSurface({
 
   useEffect(() => () => weightedGeometry?.dispose(), [weightedGeometry]);
   if (!weightedGeometry) return null;
-  return (
-    <mesh geometry={weightedGeometry} renderOrder={renderOrder}>
-      <shaderMaterial
-        uniforms={uniforms}
-        vertexShader={targetVertexShader}
-        fragmentShader={targetFragmentShader}
-        transparent={opacity < 1}
-        depthWrite={depthWrite}
-        depthTest
-        side={THREE.DoubleSide}
-      />
-    </mesh>
-  );
+  return <SurfaceShader geometry={weightedGeometry} uniforms={uniforms}
+    vertexShader={targetVertexShader} fragmentShader={targetFragmentShader}
+    opacity={opacity} renderOrder={renderOrder} />;
 }
 
 function AnatomicalCoverageSurface({
@@ -426,17 +444,17 @@ function AnatomicalCoverageSurface({
   requireInterior,
   color,
   opacity,
-  depthWrite,
   overlayOnly = false,
+  renderOrder = 1,
 }: {
   geometry: THREE.BufferGeometry;
   analysis: AnatomicalCoverageAnalysis;
+  renderOrder?: number;
   scientificVertexMap: ScientificVertexMap;
   selectedRegionIndex: number | null;
   requireInterior: boolean;
   color: string;
   opacity: number;
-  depthWrite: boolean;
   overlayOnly?: boolean;
 }) {
   const uniforms = useMemo(() => ({
@@ -515,17 +533,10 @@ function AnatomicalCoverageSurface({
   }, [analysis, geometry, requireInterior, scientificVertexMap, selectedRegionIndex]);
   useEffect(() => () => weightedGeometry?.dispose(), [weightedGeometry]);
   if (!weightedGeometry) return null;
-  return <mesh geometry={weightedGeometry} renderOrder={1}>
-    <shaderMaterial
-      uniforms={uniforms}
-      vertexShader={coverageVertexShader}
-      fragmentShader={coverageFragmentShader}
-      transparent={overlayOnly || opacity < 1}
-      depthWrite={overlayOnly ? true : depthWrite}
-      depthTest
-      side={overlayOnly ? THREE.FrontSide : THREE.DoubleSide}
-    />
-  </mesh>;
+  return <SurfaceShader geometry={weightedGeometry} uniforms={uniforms}
+    vertexShader={coverageVertexShader} fragmentShader={coverageFragmentShader}
+    opacity={opacity} renderOrder={renderOrder} overlayOnly={overlayOnly}
+    side={overlayOnly ? THREE.FrontSide : THREE.DoubleSide} />;
 }
 
 function geometryFromScene(scene: THREE.Group): THREE.BufferGeometry {
@@ -619,7 +630,6 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
   const scalpBvh = headModel.scalpBvh;
   const scientificBrainBvh = headModel.cortexBvh;
   const coverageActive = anatomicalCoverageEnabled && anatomicalCoverageStatus === 'ready' && anatomicalCoverage;
-  const targetDisplayGeometry = visibility.grayMatter ? grayGeometry : visibility.whiteMatter ? whiteGeometry : null;
   const grayScientificVertexMap = useMemo(() => (
     coverageActive || (visibility.grayMatter && functionalTarget)
       ? nearestScientificVertexMap(
@@ -631,10 +641,10 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
       : null
   ), [Boolean(coverageActive), Boolean(functionalTarget), grayGeometry, scientificBrainBvh, scientificBrainGeometry, visibility.grayMatter]);
   const whiteScientificVertexMap = useMemo(() => (
-    functionalTarget && targetDisplayGeometry === whiteGeometry
+    visibility.whiteMatter && (coverageActive || functionalTarget)
       ? nearestScientificVertexMap(scientificBrainGeometry, whiteGeometry, scientificBrainBvh, true)
       : null
-  ), [Boolean(functionalTarget), scientificBrainBvh, scientificBrainGeometry, targetDisplayGeometry, whiteGeometry]);
+  ), [Boolean(coverageActive), Boolean(functionalTarget), scientificBrainBvh, scientificBrainGeometry, visibility.whiteMatter, whiteGeometry]);
 
   useEffect(() => {
     const warmMappings = () => {
@@ -662,8 +672,19 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
 
   return (
     <group onPointerDown={onBlank}>
-      {visibility.whiteMatter && (
-        functionalTarget && targetDisplayGeometry === whiteGeometry && whiteScientificVertexMap
+      <AnatomyCompositor white={visibility.whiteMatter && (
+        coverageActive && whiteScientificVertexMap
+          ? <AnatomicalCoverageSurface
+              geometry={whiteGeometry}
+              analysis={coverageActive}
+              scientificVertexMap={whiteScientificVertexMap}
+              selectedRegionIndex={anatomicalCoverageMode === 'region' ? selectedCoverageRegionIndex : null}
+              requireInterior
+              color={appearance.whiteMatter.color}
+              opacity={appearance.whiteMatter.opacity}
+              renderOrder={0}
+            />
+          : functionalTarget && whiteScientificVertexMap
           ? <FunctionalTargetSurface
               geometry={whiteGeometry}
               scientificVertexCount={scientificBrainGeometry.getAttribute('position').count}
@@ -671,31 +692,13 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
               requireInterior
               color={appearance.whiteMatter.color}
               opacity={appearance.whiteMatter.opacity}
-              depthWrite={appearance.whiteMatter.opacity >= 0.98}
               renderOrder={0}
             />
-          : <mesh geometry={whiteGeometry} renderOrder={0}>
-              <AnatomyMaterial
-                color={appearance.whiteMatter.color}
-                opacity={appearance.whiteMatter.opacity}
-                depthWrite={appearance.whiteMatter.opacity >= 0.98}
-              />
-            </mesh>
-      )}
-      {coverageActive && !visibility.grayMatter && visibility.whiteMatter && grayScientificVertexMap && (
-        <AnatomicalCoverageSurface
-          geometry={grayGeometry}
-          analysis={coverageActive}
-          scientificVertexMap={grayScientificVertexMap}
-          selectedRegionIndex={anatomicalCoverageMode === 'region' ? selectedCoverageRegionIndex : null}
-          requireInterior={false}
-          color={appearance.grayMatter.color}
-          opacity={appearance.grayMatter.opacity}
-          depthWrite={false}
-          overlayOnly
-        />
-      )}
-      {visibility.grayMatter && (
+          : <AnatomySurface geometry={whiteGeometry} renderOrder={0}
+              color={appearance.whiteMatter.color}
+              opacity={appearance.whiteMatter.opacity}
+            />
+      )} gray={visibility.grayMatter && (
         coverageActive && grayScientificVertexMap
           ? <AnatomicalCoverageSurface
               geometry={grayGeometry}
@@ -705,9 +708,8 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
               requireInterior={false}
               color={appearance.grayMatter.color}
               opacity={appearance.grayMatter.opacity}
-              depthWrite={appearance.grayMatter.opacity >= 0.98}
             />
-          : functionalTarget && targetDisplayGeometry === grayGeometry && grayScientificVertexMap
+          : functionalTarget && grayScientificVertexMap
           ? <FunctionalTargetSurface
               geometry={grayGeometry}
               scientificVertexCount={scientificBrainGeometry.getAttribute('position').count}
@@ -715,22 +717,15 @@ function AnatomicalHead({ landmarks, onReady, onBlank }: {
               requireInterior={false}
               color={appearance.grayMatter.color}
               opacity={appearance.grayMatter.opacity}
-              depthWrite={appearance.grayMatter.opacity >= 0.98}
               renderOrder={1}
             />
-          : <mesh geometry={grayGeometry} renderOrder={1}>
-              <AnatomyMaterial
-                color={appearance.grayMatter.color}
-                opacity={appearance.grayMatter.opacity}
-                depthWrite={appearance.grayMatter.opacity >= 0.98}
-              />
-            </mesh>
-      )}
-      {visibility.scalp && (
-        <mesh geometry={scalpGeometry} renderOrder={2}>
-          <AnatomyMaterial color="#cdb49b" opacity={0.16} depthWrite={false} />
-        </mesh>
-      )}
+          : <AnatomySurface geometry={grayGeometry} renderOrder={1}
+              color={appearance.grayMatter.color}
+              opacity={appearance.grayMatter.opacity}
+            />
+      )} scalp={visibility.scalp && (
+        <AnatomySurface geometry={scalpGeometry} renderOrder={2} color="#cdb49b" opacity={0.16} />
+      )} />
       <ReferenceMarkers landmarks={landmarks} />
     </group>
   );

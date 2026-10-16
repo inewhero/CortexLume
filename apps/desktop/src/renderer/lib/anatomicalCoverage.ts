@@ -13,14 +13,14 @@ export const DEFAULT_ANATOMICAL_COVERAGE_SETTINGS: AnatomicalCoverageSettings = 
   minimumAtlasMembership: 0.05,
 };
 
-export type AnatomicalCoverageDisplayLayer = 'grayMatter' | null;
+export type AnatomicalCoverageDisplayLayer = 'grayMatter' | 'whiteMatter' | null;
 
-/** Anatomical atlas coverage always belongs to the cortical (pial/GM) surface. */
+/** Prefer the pial display; transfer cortical coverage to visible WM when GM is hidden. */
 export function anatomicalCoverageDisplayLayer(
   grayMatterVisible: boolean,
   whiteMatterVisible: boolean,
 ): AnatomicalCoverageDisplayLayer {
-  return grayMatterVisible || whiteMatterVisible ? 'grayMatter' : null;
+  return grayMatterVisible ? 'grayMatter' : whiteMatterVisible ? 'whiteMatter' : null;
 }
 
 export function buildAnatomicalCoverageRequest(
