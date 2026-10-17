@@ -24,19 +24,30 @@ const fragmentShader = `
     return vec4(layer.rgb + under.rgb * (1.0 - layer.a),
                 layer.a + under.a * (1.0 - layer.a));
   }
+  // Sort actual surface fragments far-to-near, not whole anatomical layers.
+  // A sulcus can expose WM in front of a more distant GM fold.
+  void orderLayers(inout vec4 a, inout float da, inout vec4 b, inout float db) {
+    if (da < db) {
+      vec4 color = a; a = b; b = color;
+      float depth = da; da = db; db = depth;
+    }
+  }
   void main() {
     vec4 wm = texture2D(whiteColor, vUv);
     vec4 gm = texture2D(grayColor, vUv);
     vec4 scalp = texture2D(scalpColor, vUv);
+    float wd = wm.a > 0.0 ? texture2D(whiteDepth, vUv).r : 1.0;
+    float gd = gm.a > 0.0 ? texture2D(grayDepth, vUv).r : 1.0;
+    float sd = scalp.a > 0.0 ? texture2D(scalpDepth, vUv).r : 1.0;
+    float depth = min(wd, min(gd, sd));
+    orderLayers(wm, wd, gm, gd);
+    orderLayers(gm, gd, scalp, sd);
+    orderLayers(wm, wd, gm, gd);
     vec4 result = over(over(over(vec4(0.0), wm), gm), scalp);
     if (result.a <= 0.0) discard;
     gl_FragColor = vec4(result.rgb / result.a, result.a);
     // Keep scene objects (optodes, channels and landmarks) depth-tested against
     // the anatomy, while anatomical layers have independent depth buffers.
-    float depth = 1.0;
-    if (wm.a > 0.0) depth = min(depth, texture2D(whiteDepth, vUv).r);
-    if (gm.a > 0.0) depth = min(depth, texture2D(grayDepth, vUv).r);
-    if (scalp.a > 0.0) depth = min(depth, texture2D(scalpDepth, vUv).r);
     gl_FragDepth = depth;
   }
 `;
@@ -89,7 +100,7 @@ export function renderAnatomyLayers(
   }
 }
 
-/** Composite complete anatomy surfaces in anatomical order without cutting WM. */
+/** Composite anatomy per pixel in actual depth order without cutting geometry. */
 export function AnatomyCompositor({ white, gray, scalp }: {
   white: ReactNode; gray: ReactNode; scalp: ReactNode;
 }) {

@@ -134,7 +134,7 @@ jobs:
           }
 
           Copy-Item $setup.FullName `
-            "release/CortexLume-$version-win-x64-Setup.exe"
+            "release/CortexLume-$version-win-x64-setup.exe"
 
           Copy-Item $portable.FullName `
             "release/CortexLume-$version-win-x64-portable.zip"
@@ -163,9 +163,9 @@ jobs:
             $password = ConvertTo-SecureString $env:CORTEXLUME_CODESIGN_PASSWORD -AsPlainText -Force
             $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
             if (-not $certificate) { throw "The configured Authenticode certificate could not be imported." }
-            & $signtool.Source sign /fd SHA256 /f $pfxPath /p $env:CORTEXLUME_CODESIGN_PASSWORD /tr $timestamp /td SHA256 "release\CortexLume-$version-win-x64-Setup.exe"
+            & $signtool.Source sign /fd SHA256 /f $pfxPath /p $env:CORTEXLUME_CODESIGN_PASSWORD /tr $timestamp /td SHA256 "release\CortexLume-$version-win-x64-setup.exe"
             if ($LASTEXITCODE -ne 0) { throw "signtool failed to sign the Windows installer." }
-            & $signtool.Source verify /pa /all "release\CortexLume-$version-win-x64-Setup.exe"
+            & $signtool.Source verify /pa /all "release\CortexLume-$version-win-x64-setup.exe"
             if ($LASTEXITCODE -ne 0) { throw "Authenticode verification failed for the Windows installer." }
             "Authenticode: Valid" | Set-Content -Path "release\AUTHENTICODE.txt" -Encoding utf8
           } finally {
@@ -204,6 +204,8 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: Download Windows packages
         uses: actions/download-artifact@v8
         with:
@@ -218,13 +220,4 @@ jobs:
             release/CortexLume-* \
             --repo "${{ github.repository }}" \
             --verify-tag \
-            --generate-notes
-          gh release view "${{ github.ref_name }}" \
-            --repo "${{ github.repository }}" --json body --jq '.body' > release-notes.md
-          {
-            printf '\n<details>\n<summary>Windows and examples SHA-256</summary>\n\n```text\n'
-            cat release/SHA256SUMS
-            printf '```\n\n</details>\n'
-          } >> release-notes.md
-          gh release edit "${{ github.ref_name }}" \
-            --repo "${{ github.repository }}" --notes-file release-notes.md
+            --notes-file docs/release-notes.md

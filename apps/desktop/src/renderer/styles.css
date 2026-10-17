@@ -467,7 +467,16 @@ code { color: #4e585c; background: transparent; font: var(--text-meta)/1.2 var(-
 .material-color-field input[type="color"] { width: 42px; height: 25px; padding: 2px; border: 1px solid #929b99; background: #fff; }
 .material-color-field code { width: auto; text-align: right; }
 .material-opacity-field { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 7px; margin-top: 9px; }
-.material-opacity-field input[type="range"] { width: 100%; accent-color: #293235; }
+.material-opacity-field input[type="range"] {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  accent-color: #293235;
+}
 .anatomical-coverage-control { transition: opacity 140ms ease; }
 .anatomical-coverage-control.is-disabled { opacity: .68; }
 .coverage-mode { margin-top: 5px; }

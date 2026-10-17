@@ -8,11 +8,10 @@ const packageJson = JSON.parse(await readFile(path.join(root, 'package.json'), '
 const version = String(packageJson.version);
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const artifactNamePattern = new RegExp(
-  `^CortexLume-${escapeRegExp(version)}-(?:win-x64-(?:Setup\\.exe|portable\\.zip)|examples\\.zip)$`,
-  'i',
+  `^CortexLume-${escapeRegExp(version)}-(?:win-x64-(?:setup\\.exe|portable\\.zip)|examples\\.zip)$`,
 );
 const requiredArtifactNames = new Set([
-  `CortexLume-${version}-win-x64-Setup.exe`,
+  `CortexLume-${version}-win-x64-setup.exe`,
   `CortexLume-${version}-win-x64-portable.zip`,
 ]);
 const checksumText = await readFile(path.join(releaseDirectory, 'SHA256SUMS'), 'utf8');

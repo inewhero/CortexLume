@@ -61,7 +61,7 @@ xvfb-run -a pnpm smoke:packaged:mcp-screenshot
 Extract the entire ZIP and run `./CortexLume` from its directory. Keep the
 `resources` directory and sidecar together. No system Python is needed in the
 packaged app. Releases also provide an amd64 `.deb` built from this same tested
-portable runtime. Install it with `sudo apt install ./CortexLume-<version>-linux-amd64.deb`;
+portable runtime. Install it with `sudo apt install ./CortexLume-<version>-linux-x64-setup.deb`;
 launch CortexLume from the application menu or run `cortexlume`. Remove it with
 `sudo apt purge cortexlume`. The package installs under `/opt/CortexLume` and
 registers its system menu entry and icon. On AppArmor 4 systems, its maintainer

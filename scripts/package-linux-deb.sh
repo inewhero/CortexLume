@@ -84,4 +84,4 @@ Depends: libc6 (>= 2.35), libstdc++6, libgcc-s1, libgtk-3-0 | libgtk-3-0t64, lib
 Description: fNIRS layout design and anatomical projection
  CortexLume desktop workstation with a bundled scientific computation service.
 EOF
-dpkg-deb --root-owner-group -Zxz --build "$stage" "$output/CortexLume-$version-linux-amd64.deb"
+dpkg-deb --root-owner-group -Zxz --build "$stage" "$output/CortexLume-$version-linux-x64-setup.deb"

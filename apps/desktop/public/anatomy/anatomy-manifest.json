@@ -24,39 +24,50 @@
     },
     "grayMatter": {
       "file": "gray_matter.glb",
-      "sha256": "f812611bfc215c84c1bbfecc60b604e32abaa3fa803c482aaed7785e9bf7eb79",
-      "vertices": 75004,
-      "faces": 150000,
+      "sha256": "1defbe11d92df2025df5dc6220eab2df73d3d5f2e3d1d9be039105f3a01bf319",
+      "vertices": 320371,
+      "faces": 640734,
       "boundsThreeMm": [
         [
-          -71.9012,
+          -71.8433,
           -52.6287,
-          -74.822
+          -74.8659
         ],
         [
-          71.9215,
-          82.0106,
-          105.5043
+          71.9382,
+          82.0334,
+          105.5023
         ]
       ]
     },
     "whiteMatter": {
       "file": "white_matter.glb",
-      "sha256": "484cc77076651fae92056e579d073e6e0862be95ecf8d7041e99bd3cd0f6bf29",
-      "vertices": 44377,
-      "faces": 90000,
+      "sha256": "18ed5a69402e30f014dac5bef0e98669779aefa9ebdc6f1b28ba6308c74eebe2",
+      "vertices": 228970,
+      "faces": 458364,
       "boundsThreeMm": [
         [
-          -67.6429,
-          -65.5108,
-          -69.521
+          -67.8326,
+          -65.5006,
+          -69.0782
         ],
         [
-          68.6333,
-          80.8873,
-          105.5
+          68.345,
+          80.5249,
+          104.836
         ]
-      ]
+      ],
+      "displayNesting": {
+        "method": "closed-solid local intersection repair",
+        "clearanceMm": 0.35,
+        "localReachMm": 3.5,
+        "boundarySimplificationMm": 0.02,
+        "boundarySmoothingLimitMm": 0.1,
+        "repairedLocalComponents": 57,
+        "preservedNonCorticalComponents": 1,
+        "removedVolumeMm3": 2305.842922307448,
+        "retainedVolumeFraction": 0.9962266783772166
+      }
     }
   },
   "scientificProjection": {
@@ -80,7 +91,7 @@
   },
   "landmarks": {
     "file": "landmarks.json",
-    "sha256": "e285eeaba04ce0ed6d335578f6791a8d2cb6ccb3e5be9b5ff24e98b094de0f16",
+    "sha256": "d0b96651be82c3eca94c19d323c2dfb1918bd76cf94dca93b49c27688d80599e",
     "count": 73
   }
 }

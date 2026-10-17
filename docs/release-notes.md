@@ -1,0 +1,3 @@
+- Fix gray/white matter intersections and transparency artifacts.
+- Correct opacity slider endpoints.
+- Standardize Windows and Linux download filenames.

@@ -29,14 +29,13 @@ if (artifactNames.length === 0) {
 }
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const artifactNamePattern = new RegExp(
-  `^CortexLume-${escapeRegExp(String(packageJson.version))}-(?:win-x64-(?:Setup\\.exe|portable\\.zip)|examples\\.zip)$`,
-  'i',
+  `^CortexLume-${escapeRegExp(String(packageJson.version))}-(?:win-x64-(?:setup\\.exe|portable\\.zip)|examples\\.zip)$`,
 );
 // The installer and portable package are required.  Same-version companion
 // assets (currently examples.zip) are optional but are included whenever they
 // are present in the release directory.
 const requiredArtifactNames = [
-  `CortexLume-${packageJson.version}-win-x64-Setup.exe`,
+  `CortexLume-${packageJson.version}-win-x64-setup.exe`,
   `CortexLume-${packageJson.version}-win-x64-portable.zip`,
 ];
 for (const name of artifactNames) {
